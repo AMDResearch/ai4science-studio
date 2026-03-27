@@ -22,7 +22,7 @@ Recipes are organized by **science domain**, then **model**, then **task-specifi
 | Protein folding | [`protein_folding/`](protein_folding/) | Structure, folding, protein LMs |
 | Healthcare | [`healthcare/`](healthcare/) | Healthcare-related ML (see disclaimers below) |
 
-**Model folders:** Prefer Hugging Face id `org/model` → directory `org__model` (replace `/` with `__`). Some models use a **public name** on disk; the Hub id still belongs in that model’s `README.md`. Example: [`earth_science/models/ORBIT-2/`](earth_science/models/ORBIT-2/) (`jychoi-hpc/ORBIT-2`). Details: each domain’s [`models/README.md`](earth_science/models/README.md).
+**Model folders:** Prefer Hugging Face id `org/model` → directory `org__model` (replace `/` with `__`). Some models use a **public name** on disk; the Hub id still belongs in that model’s `README.md`. Examples: [`earth_science/models/ORBIT-2/`](earth_science/models/ORBIT-2/) (`jychoi-hpc/ORBIT-2`), [`material_science/models/HydraGNN/`](material_science/models/HydraGNN/) (`mlupopa/HydraGNN_Predictive_GFM_2024`). Details: each domain’s `models/README.md` (for example [`earth_science/models/README.md`](earth_science/models/README.md), [`material_science/models/README.md`](material_science/models/README.md)).
 
 **Getting started:** Copy [`earth_science/models/_template/`](earth_science/models/_template/) when adding a new model folder.
 

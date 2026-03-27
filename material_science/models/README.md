@@ -10,6 +10,8 @@ Map the Hugging Face id `org/model` to a single directory name by replacing `/` 
 |-----------------|-------------|
 | `org/crystal-property-model` | `org__crystal-property-model` |
 
+Some folders use a **public model name** on disk (e.g. `HydraGNN`) instead of `org__model`. In those cases the **canonical Hugging Face id** must be stated clearly at the top of that model’s `README.md`.
+
 ## Adding a new model
 
 1. Create `models/<your-slug>/README.md` with HF model id, license, and upstream links (use [`../earth_science/models/_template/`](../../earth_science/models/_template/) as a structural reference, or duplicate that folder here).

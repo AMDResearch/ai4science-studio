@@ -10,7 +10,7 @@ Use this skill when adding or refactoring **train / fine-tune / inference / eval
 ## Steps
 
 1. **Identify the model** on Hugging Face (model card, license, intended use, dependencies). Record the full id `org/model` in the model folder `README.md`.
-2. **Map to a slug** for the filesystem: `org__model` under the correct domain’s `models/` directory.
+2. **Map to a folder name** under the correct domain’s `models/` directory. **Default:** replace `/` with `__` in the Hub id (`org__model`). **Alternative:** a **public model name** on disk (e.g. `HydraGNN`, `ORBIT-2`) is acceptable when that domain’s `models/README.md` allows it and the model `README.md` states the full **`org/model`** id at the top—do not rename those folders to `org__model` unless the user asks.
 3. **Align the task** with what the model card and upstream code support (inference-only vs fine-tuning vs training from scratch).
 4. **Reuse upstream** scripts or minimal wrappers: prefer calling official examples with pinned versions rather than reimplementing full training stacks unless necessary.
 5. **Document** Python/PyTorch (or other) versions, optional ROCm/CUDA notes if validated, and how to run from the repo root or from `recipes/` subfolders.

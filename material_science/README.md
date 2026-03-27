@@ -4,9 +4,10 @@ This domain holds recipes for **material science** and related open models on Hu
 
 ## Model directories
 
-All models live under [`models/`](models/):
+All models live under [`models/`](models/). Each subfolder is one HF model or family:
 
-- [`models/README.md`](models/README.md) — slug naming and how to add a model.
+- Example: [`models/HydraGNN/`](models/HydraGNN/) — **mlupopa/HydraGNN_Predictive_GFM_2024** on Hugging Face (atomistic graph foundation models); see its [`README.md`](models/HydraGNN/README.md).
+- [`models/README.md`](models/README.md) — folder naming (`org__model` or public model name) and how to add a model.
 
 For a file layout reference when adding a new model, use [`../earth_science/models/_template/`](../earth_science/models/_template/).
 
