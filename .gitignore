@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# ML / checkpoints (keep recipes; ignore large artifacts)
+*.ckpt
+*.pt
+*.pth
+*.safetensors
+*.bin
+checkpoints/
+wandb/
+mlruns/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Secrets — never commit
+.env
+.env.*
+*.pem
+secrets/
+
+# IDE
+.idea/
+.vscode/
