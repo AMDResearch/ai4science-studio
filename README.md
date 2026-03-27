@@ -1,8 +1,9 @@
 # AI4Science Studio
 
-Open playground for **recipes** around AI-for-science models: training, fine-tuning, inference, evaluation, and related workflows. Models are expected to be **open** and discoverable on [Hugging Face](https://huggingface.co/); upstream code and tests may live on Hugging Face or in separate GitHub repositories.
 
-Optional notes for **AMD** hardware (for example **ROCm** with PyTorch) can be added in individual recipes where maintainers have validated them—nothing here is a substitute for upstream documentation.
+**AI4Science Studio** is AMD's showcase for **leading open AI across the sciences**—from earth sciences to materials, protein modeling, and responsible healthcare research. This repository connects **open models** on the [Hugging Face](https://huggingface.co/) Hub with **clear, runnable recipes** so researchers and HPC teams can train, fine-tune, infer, and evaluate on **AMD Instinct** accelerators using the same **PyTorch** and **ROCm** stacks many upstream projects already target. You should see AMD as an active partner in **open science**—not only hardware, but **documentation, cluster patterns, and paths that scale** with the community.
+
+Under the hood, this is an open playground for **recipes** around those models—training, fine-tuning, inference, evaluation, and related workflows. Models are expected to be **open** and discoverable on Hugging Face; upstream code and tests may live on the Hub or in separate GitHub repositories. **Optional** notes for **AMD** hardware (for example **ROCm** with PyTorch) appear in individual recipes where maintainers have validated them—nothing here replaces upstream install matrices or official product documentation.
 
 ## Layout
 
