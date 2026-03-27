@@ -13,12 +13,13 @@ Training, inference, visualization, and SLURM examples are maintained in the **G
 - [`recipes/README.md`](recipes/README.md) — index  
 - [`recipes/inference-and-visualization.md`](recipes/inference-and-visualization.md) — checkpoints + visualization workflow (broad audience)  
 - [`recipes/training-hpc.md`](recipes/training-hpc.md) — large-scale / Frontier-oriented training summary  
-- [`recipes/data-access.md`](recipes/data-access.md) — Constellation / Globus / OLCF data context  
-- [`recipes/compute-and-alternatives.md`](recipes/compute-and-alternatives.md) — Frontier vs AMD cloud / HPC Fund / other GPUs  
+- [`recipes/local-cluster-amd.md`](recipes/local-cluster-amd.md) — SLURM/PBS-style runs on **your** AMD Instinct cluster  
+- [`recipes/data-access.md`](recipes/data-access.md) — Constellation / Globus / OLCF data context and staging  
+- [`recipes/compute-and-alternatives.md`](recipes/compute-and-alternatives.md) — Frontier, AMD cloud / HPC Fund, institutional clusters  
 
 ## Installation (reference)
 
-Follow the upstream README for **conda** setup. It documents separate instructions for **AMD (ROCm)** and **NVIDIA (CUDA)** stacks (including versions for Frontier-class AMD GPUs and DGX-style NVIDIA GPUs). Do not pin versions here; copy from upstream when you implement.
+Follow the upstream README for **conda** setup. The recipes here follow the **AMD Instinct** + **ROCm** path described there (PyTorch builds and versions as upstream states). Anything outside that path is best handled from the upstream install matrix. Do not pin versions here; copy from upstream when you implement.
 
 ## Datasets
 

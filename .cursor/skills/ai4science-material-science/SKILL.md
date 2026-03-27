@@ -21,6 +21,7 @@ The `material_science/` domain covers **materials**, **chemistry**, and related 
 - Keep recipes **explicit** about input representations (graphs, crystals, SMILES, etc.) and any **unit conventions** (including **energy** vs **force** targets and graph vs node outputs where relevant).
 - Prefer citing **benchmarks** and **baseline** numbers from literature or model cards when adding evaluation snippets.
 - Do not commit large **proprietary structure databases**; link to public sources or describe how users supply their own data.
+- **Institutional AMD** clusters and **staging** large artifacts (**Hugging Face CLI**, **Globus** / Constellation mirrors, OLCF copy-out when applicable) belong in `data-access.md`–style runbooks for **ADIOS** or similar scientific I/O when models use them.
 
 ## Safety and licensing
 

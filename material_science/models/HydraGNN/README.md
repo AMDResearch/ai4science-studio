@@ -13,8 +13,9 @@ Authoritative training, HPO, ensemble, and inference scripts live in **upstream 
 - [`recipes/README.md`](recipes/README.md) — index  
 - [`recipes/inference-and-visualization.md`](recipes/inference-and-visualization.md) — checkpoints from Hub + inference / ensemble workflows  
 - [`recipes/training-hpc.md`](recipes/training-hpc.md) — Frontier-scale pretraining / HPO summary  
-- [`recipes/data-access.md`](recipes/data-access.md) — Hub ADIOS bundles, Constellation, and data context  
-- [`recipes/compute-and-alternatives.md`](recipes/compute-and-alternatives.md) — OLCF vs smaller GPU options  
+- [`recipes/local-cluster-amd.md`](recipes/local-cluster-amd.md) — SLURM/PBS-style runs on **your** AMD Instinct cluster  
+- [`recipes/data-access.md`](recipes/data-access.md) — Hub ADIOS bundles, Constellation, staging, and data context  
+- [`recipes/compute-and-alternatives.md`](recipes/compute-and-alternatives.md) — OLCF, AMD cloud / HPC Fund, institutional clusters  
 
 ## Installation (reference)
 

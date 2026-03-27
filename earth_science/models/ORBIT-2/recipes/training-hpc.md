@@ -4,8 +4,8 @@ This recipe summarizes the **exascale-oriented** workflow documented in [`XiaoWa
 
 ## Who can run this
 
-- **Oak Ridge Leadership Computing Facility (OLCF)** users with an approved project and **compute hours on Frontier** (or a similarly sized system with the same software stack).  
-- **General public / casual cloud users:** you typically do **not** have this path. Use Hugging Face checkpoints and [inference-and-visualization.md](inference-and-visualization.md), or smaller-scale experiments on hardware you control—see [compute-and-alternatives.md](compute-and-alternatives.md).
+- **Oak Ridge Leadership Computing Facility (OLCF)** users with an approved project and **compute hours on Frontier** (or a similarly sized **AMD** system with a comparable **PyTorch + ROCm** stack).  
+- **General public / casual cloud users:** you typically do **not** have this path. Use Hugging Face checkpoints and [inference-and-visualization.md](inference-and-visualization.md), or smaller-scale experiments on hardware you control—see [compute-and-alternatives.md](compute-and-alternatives.md). For training or visualization on **institutional AMD clusters**, see [local-cluster-amd.md](local-cluster-amd.md).
 
 ## High-level steps (from upstream)
 

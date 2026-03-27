@@ -13,6 +13,7 @@ Examples of what to put there:
 - Shell or Python entrypoints for **inference** or **batch scoring**
 - **Fine-tuning** or **training** scripts with documented CLI arguments
 - Short **Markdown** runbooks if scripts live upstream and you only document the exact versions and commands
+- **Large-data** runbooks may describe **Globus** or **Hugging Face Hub CLI** staging onto a cluster’s **shared** filesystem (scratch or project space), not check-ins to git
 
 ## Domains
 

@@ -4,7 +4,7 @@ This is the most common **AI4Science Studio** entry point: use **published check
 
 ## Prerequisites
 
-1. Clone [`XiaoWang-Github/ORBIT-2`](https://github.com/XiaoWang-Github/ORBIT-2) and follow its **Installation** section for your GPU stack (**AMD ROCm** or **NVIDIA CUDA** as documented there).
+1. Clone [`XiaoWang-Github/ORBIT-2`](https://github.com/XiaoWang-Github/ORBIT-2) and follow its **Installation** section, using the upstream steps for **AMD Instinct** with **ROCm**.
 2. Download the checkpoint(s) and matching YAML you need from [`jychoi-hpc/ORBIT-2`](https://huggingface.co/jychoi-hpc/ORBIT-2) (see the live file tree under `pretrain/`, `us-finetune/`, `global-finetune/`, etc.).
 
 ## Point the code at a checkpoint

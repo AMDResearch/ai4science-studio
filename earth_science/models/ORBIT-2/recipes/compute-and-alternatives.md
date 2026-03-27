@@ -1,6 +1,6 @@
 # ORBIT-2: compute access and alternatives
 
-**Frontier** is an **OLCF** resource for approved projects—not a public cloud. Most readers will use **smaller AMD or NVIDIA systems**, Hugging Face **checkpoints**, and the **inference** path instead of full exascale training.
+**Frontier** is an **OLCF** resource for approved projects—not a public cloud. Most readers will use **smaller AMD Instinct** systems (institutional clusters or cloud), Hugging Face **checkpoints**, and the **inference** path instead of full exascale training.
 
 ## Frontier (OLCF)
 
@@ -26,11 +26,9 @@ These are **starting points**; eligibility, capacity, and pricing change over ti
 | **Application** | Form linked from the fund page for requests. | [HPC Fund application](https://www.amd.com/en/forms/registration/amd-hpc-fund-research-accelerator.html) |
 | **Cloud hub** | Index of AI/HPC cloud access options AMD lists. | [AI & HPC cloud access](https://www.amd.com/en/developer/resources/cloud-access.html) |
 
-After you have a node, follow the **AMD** installation path in the ORBIT-2 GitHub README (ROCm + PyTorch versions stated there) and scale **down** parallelism relative to Frontier.
+After you have a node, follow the **AMD ROCm** installation path in the ORBIT-2 GitHub README (ROCm + PyTorch versions stated there) and scale **down** parallelism relative to Frontier.
 
-## NVIDIA GPUs
-
-The ORBIT-2 repository documents a **DGX / CUDA** install line (`gpu_type: "nvidia"` in config). Use that path if your hardware is NVIDIA-based.
+For **your own SLURM (or similar) cluster** with AMD Instinct GPUs, see [local-cluster-amd.md](local-cluster-amd.md).
 
 ## Reality check
 

@@ -1,6 +1,6 @@
 # HydraGNN: compute access and alternatives
 
-**Frontier** is an **OLCF** resource for approved projects—not a public cloud. Most readers will use **smaller AMD or NVIDIA systems**, **Hugging Face checkpoints**, and **inference or small fine-tuning** instead of full multisource pretraining.
+**Frontier** is an **OLCF** resource for approved projects—not a public cloud. Most readers will use **smaller AMD Instinct** systems (institutional clusters or cloud), **Hugging Face checkpoints**, and **inference or small fine-tuning** instead of full multisource pretraining.
 
 ## Frontier (OLCF)
 
@@ -26,11 +26,9 @@ These are **starting points**; eligibility, capacity, and pricing change over ti
 | **Application** | Form linked from the fund page for requests. | [HPC Fund application](https://www.amd.com/en/forms/registration/amd-hpc-fund-research-accelerator.html) |
 | **Cloud hub** | Index of AI/HPC cloud access options AMD lists. | [AI & HPC cloud access](https://www.amd.com/en/developer/resources/cloud-access.html) |
 
-After you have a node, follow the **HydraGNN** install path on branch **`Predictive_GFM_2024`** for **ROCm** or **CUDA** as documented there, and scale **down** parallelism and batch size relative to Frontier-scale jobs.
+After you have a node, follow the **HydraGNN** install path on branch **`Predictive_GFM_2024`** for **ROCm** and **PyTorch** as documented there, and scale **down** parallelism and batch size relative to Frontier-scale jobs.
 
-## NVIDIA GPUs
-
-HydraGNN is **PyTorch-based**; use a **CUDA** build of PyTorch and dependencies compatible with the upstream README on **`Predictive_GFM_2024`** if your hardware is NVIDIA-based.
+For **your own SLURM (or similar) cluster** with AMD Instinct GPUs, see [local-cluster-amd.md](local-cluster-amd.md).
 
 ## Reality check
 
