@@ -20,6 +20,7 @@ Always align the **YAML config** with the **checkpoint** (matching model scale a
 
 - **Frontier (OLCF):** edit `examples/launch_visualize.sh` (allocation account, conda path, config path), then `sbatch launch_visualize.sh`. See the upstream “Tutorial Example → Frontier → Step 4: Visualize Results”.
 - **Other clusters / interactive nodes:** run the same `visualize.py` invocation the launch script uses, with your scheduler or `mpirun` layout as appropriate for that system.
+- **Studio examples (AI4Science Studio checkout):** in [`../examples/`](../examples/), **`run_visualize.py`** runs upstream `visualize.py` with `ORBIT2_ROOT` set to your clone; **`preflight_orbit2.py`** checks the environment without SLURM; **`sbatch_infer_mi2508x.sh`** is a sample SLURM job for an **`mi2508x`**-style partition. Details: [local-cluster-amd.md](local-cluster-amd.md).
 
 Outputs typically include low-resolution inputs, high-resolution predictions, and comparison plots as described upstream.
 

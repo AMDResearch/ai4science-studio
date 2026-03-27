@@ -20,6 +20,7 @@ This recipe is for users who have **SLURM**, **PBS**, or a similar scheduler on 
 - Replace **`#SBATCH`** (or PBS directives) with your **account**, **partition**, **time**, **GPUs per node**, and **node count**.
 - Point **`conda`** or **module** loads at paths valid on **your** cluster.
 - Keep **`low_res_dir`**, **`high_res_dir`**, and related fields consistent with [data-access.md](data-access.md).
+- **AI4Science Studio helpers** (this repo, same model folder): under [`../examples/`](../examples/) use **`preflight_orbit2.py`** on a login node (after `conda activate`) to verify paths, `climate_learn`, and optional config/checkpoint; submit **`sbatch_infer_mi2508x.sh`** for an AMD HPC Fund–style **`mi2508x`** partition template, or call **`run_visualize.py`** from your own `srun` line (it forwards to upstream `visualize.py` with the correct `cwd` and `PYTHONPATH`). Set **`ORBIT2_ROOT`** to your upstream clone.
 
 ## Visualization and inference
 

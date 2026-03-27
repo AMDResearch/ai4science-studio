@@ -25,7 +25,7 @@ Hugging Face id `org/model` → directory name `org__model` (replace `/` with do
 
 1. Pick the correct **domain** folder.
 2. Create or update `models/<model-slug>/README.md` (license, HF id, upstream).
-3. Place scripts or runbooks under `models/<model-slug>/recipes/`.
+3. Place runbooks under `models/<model-slug>/recipes/`. Optional **`models/<model-slug>/examples/`** for small **cluster launchers** (e.g. Python that invokes upstream `visualize.py`, or `#SBATCH` templates)—keep them thin; recipes should still be the primary narrative.
 4. Copy structure from [`earth_science/models/_template/`](../../../earth_science/models/_template/) when starting a new model folder.
 5. For **HPC-oriented** models, consider `recipes/local-cluster-amd.md` (institutional **AMD Instinct** + SLURM/PBS-style notes) and **`data-access.md`** sections on **staging** data (public **Globus** or **Hugging Face CLI** vs copy from **OLCF**/collaborator when public endpoints are not usable).
 6. Write recipes around **AMD Instinct** with **PyTorch ROCm** when that matches what upstream documents for supported paths (`gpu_type: "amd"` where configs expose it). Point readers to upstream for install options this repo does not spell out.
