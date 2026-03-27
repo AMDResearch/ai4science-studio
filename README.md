@@ -9,8 +9,8 @@ Optional notes for **AMD** hardware (for example **ROCm** with PyTorch) can be a
 Recipes are organized by **science domain**, then **model**, then **task-specific files**:
 
 ```text
-<domain>/models/<model-slug>/README.md   # HF id, license, links
-<domain>/models/<model-slug>/recipes/    # scripts, notebooks, or how-to docs
+<domain>/models/<model-folder>/README.md   # HF id, license, links
+<domain>/models/<model-folder>/recipes/    # scripts, notebooks, or how-to docs
 ```
 
 **Domains**
@@ -22,7 +22,7 @@ Recipes are organized by **science domain**, then **model**, then **task-specifi
 | Protein folding | [`protein_folding/`](protein_folding/) | Structure, folding, protein LMs |
 | Healthcare | [`healthcare/`](healthcare/) | Healthcare-related ML (see disclaimers below) |
 
-**Model slug:** Hugging Face id `org/model` → directory `org__model` (replace `/` with `__`). Details: each domain’s [`models/README.md`](earth_science/models/README.md).
+**Model folders:** Prefer Hugging Face id `org/model` → directory `org__model` (replace `/` with `__`). Some models use a **public name** on disk; the Hub id still belongs in that model’s `README.md`. Example: [`earth_science/models/ORBIT-2/`](earth_science/models/ORBIT-2/) (`jychoi-hpc/ORBIT-2`). Details: each domain’s [`models/README.md`](earth_science/models/README.md).
 
 **Getting started:** Copy [`earth_science/models/_template/`](earth_science/models/_template/) when adding a new model folder.
 
@@ -42,6 +42,6 @@ This repository includes **Cursor Agent Skills** under [`.cursor/skills/`](.curs
 
 ## Contributing a recipe
 
-1. Pick the domain and create `models/<model-slug>/` if it does not exist (use the template under `earth_science/models/_template/`).
+1. Pick the domain and create `models/<model-folder>/` if it does not exist (use the template under `earth_science/models/_template/`).
 2. Document the Hugging Face model id and license in that folder’s `README.md`.
 3. Add minimal, reproducible steps or scripts under `recipes/` and avoid committing secrets or large binary artifacts (see [`.gitignore`](.gitignore)).

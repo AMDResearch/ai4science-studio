@@ -13,11 +13,13 @@ Map the Hugging Face id `org/model` to a single directory name by replacing `/` 
 
 Use lowercase unless the org name on Hugging Face is case-sensitive; match the Hub id when in doubt.
 
+Some folders use a **public model name** on disk (e.g. `ORBIT-2`) instead of `org__model`. In those cases the **canonical Hugging Face id** must be stated clearly at the top of that model’s `README.md`.
+
 ## Adding a new model
 
-1. Copy `models/_template/` to `models/<your-slug>/`.
+1. Copy `models/_template/` to `models/<your-folder>/` (or pick a public model name; document the Hub id in `README.md`).
 2. Edit `README.md` with the real HF model id, license, and links.
-3. Add recipes under `models/<your-slug>/recipes/`.
+3. Add recipes under `models/<your-folder>/recipes/`.
 
 ## Template
 

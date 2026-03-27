@@ -5,7 +5,7 @@ In **AI4Science Studio**, recipes live **next to the model they target**, not in
 ## Where recipes live
 
 ```text
-<domain>/models/<model-slug>/recipes/
+<domain>/models/<model-folder>/recipes/
 ```
 
 Examples of what to put there:
@@ -25,7 +25,7 @@ Examples of what to put there:
 
 ## Conventions
 
-- One **Hugging Face model** (or one tightly coupled family) per `models/<model-slug>/` directory.
+- One **Hugging Face model** (or one tightly coupled family) per `models/<model-folder>/` directory.
 - Prefer **small** recipe repos: pin dependencies in comments or a local `requirements.txt` inside the model folder when needed.
 - Link to the **official** Hugging Face model card and any **GitHub** test or training repo maintained by the model authors.
 
