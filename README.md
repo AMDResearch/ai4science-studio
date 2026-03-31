@@ -44,7 +44,7 @@ Crystal structure generation, property prediction, and simulation surrogates.
 
 ### 🧬 Protein Folding
 
-[![OpenFold vs AlphaFold2 vs experimental structure](docs/images/openfold-banner.png)](protein_folding/)
+[![AlphaFold3 protein structure prediction](docs/images/alphafold3-header.jpg)](protein_folding/)
 
 Structure prediction, folding, and protein language models.
 
@@ -55,7 +55,7 @@ Structure prediction, folding, and protein language models.
 
 ### 🏥 Healthcare
 
-[![BiomedParse segmentation across imaging modalities](docs/images/biomedparse-preview.png)](healthcare/)
+[![AI in healthcare](docs/images/healthcare-ai.png)](healthcare/)
 
 Molecular design, medical imaging segmentation, and healthcare-adjacent ML.
 Models: **REINVENT4**, **SemlaFlow**, **SwinUNETR**, **GP-MoLFormer** and more.
