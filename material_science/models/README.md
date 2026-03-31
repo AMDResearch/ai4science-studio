@@ -14,5 +14,5 @@ Some folders use a **public model name** on disk (e.g. `HydraGNN`) instead of `o
 
 ## Adding a new model
 
-1. Create `models/<your-slug>/README.md` with HF model id, license, and upstream links (use [`../earth_science/models/_template/`](../../earth_science/models/_template/) as a structural reference, or duplicate that folder here).
+1. Create `models/<your-slug>/README.md` with HF model id, license, and upstream links (use [`../../_template/`](../../_template/) as a structural reference, or duplicate that folder here).
 2. Add recipes under `models/<your-slug>/recipes/`.

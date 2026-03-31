@@ -12,7 +12,7 @@ The `earth_science/` domain covers **climate**, **weather**, and broader **Earth
 ## Layout
 
 - Models: `earth_science/models/<model-slug>/`
-- Template: `earth_science/models/_template/`
+- Template: `_template/` (repo root)
 - Conventions: `earth_science/models/README.md`
 
 ## Agent guidance

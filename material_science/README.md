@@ -9,11 +9,11 @@ All models live under [`models/`](models/). Each subfolder is one HF model or fa
 - Example: [`models/HydraGNN/`](models/HydraGNN/) — **mlupopa/HydraGNN_Predictive_GFM_2024** on Hugging Face (atomistic graph foundation models); see its [`README.md`](models/HydraGNN/README.md).
 - [`models/README.md`](models/README.md) — folder naming (`org__model` or public model name) and how to add a model.
 
-For a file layout reference when adding a new model, use [`../earth_science/models/_template/`](../earth_science/models/_template/).
+For a file layout reference when adding a new model, use [`../_template/`](../_template/).
 
 ## Recipes
 
-Per-model recipes live in `models/<model-slug>/recipes/`. Index: [`../recipes/README.md`](../recipes/README.md).
+Per-model recipes live in `models/<model-slug>/recipes/`.
 
 ## Contributing
 

@@ -6,15 +6,15 @@ There are **no** separate top-level `climate/` or `weather/` trees; both belong 
 
 ## Model directories
 
-All models live under [`models/`](models/). Each subfolder (except `_template`) is one HF model or family:
+All models live under [`models/`](models/). Each subfolder is one HF model or family:
 
 - Example: [`models/ORBIT-2/`](models/ORBIT-2/) — **jychoi-hpc/ORBIT-2** on Hugging Face (weather and climate downscaling); see its [`README.md`](models/ORBIT-2/README.md).
 - [`models/README.md`](models/README.md) — folder naming (`org__model` or public model name) and how to add a model.
-- [`models/_template/`](models/_template/) — copy this when creating a new model folder.
+- [`../_template/`](../_template/) — copy this when creating a new model folder.
 
 ## Recipes
 
-Per-model recipes live in `models/<model-folder>/recipes/`. See the top-level recipes index: [`../recipes/README.md`](../recipes/README.md).
+Per-model recipes live in `models/<model-folder>/recipes/`.
 
 ## Contributing
 

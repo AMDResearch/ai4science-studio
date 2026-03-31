@@ -1,6 +1,6 @@
 # Model template (copy this folder)
 
-Rename the parent folder from `_template` to your **model slug** (see [`../README.md`](../README.md)).
+Rename the parent folder from `_template` to your **model slug** (see the domain's `models/README.md` for naming rules).
 
 ## Fields to fill in
 

@@ -11,7 +11,7 @@ Add a new model to this repository following all repo conventions.
    - If a well-known public name is used instead (e.g. `StormCast`, `NeuralGCM`), use that name and document the canonical HF id inside the model's `README.md`.
    - If weights are not on Hugging Face (e.g. GCS bucket, GitHub release, Google Drive), set the HF id field to `N/A` and add an "Obtaining model weights" section with a fetch snippet.
 
-3. **Create the model folder** by copying `earth_science/models/_template/` to `<domain>/models/<slug>/`.
+3. **Create the model folder** by copying `_template/` to `<domain>/models/<slug>/`.
 
 4. **Fill in `README.md`** with:
    - Hugging Face model id (or `N/A` with alternate source documented)

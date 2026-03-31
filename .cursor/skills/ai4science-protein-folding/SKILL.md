@@ -13,7 +13,7 @@ The `protein_folding/` domain covers **protein structure prediction**, **folding
 
 - Models: `protein_folding/models/<model-slug>/`
 - Slug rules: `protein_folding/models/README.md`
-- Structural template reference: `earth_science/models/_template/`
+- Structural template reference: `_template/` (repo root)
 
 ## Agent guidance
 

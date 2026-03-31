@@ -13,7 +13,7 @@ The `material_science/` domain covers **materials**, **chemistry**, and related 
 
 - Models: `material_science/models/<model-slug>/`
 - Slug rules: `material_science/models/README.md` (default `org__model`; public on-disk names such as `HydraGNN` are allowed when the model `README.md` states the canonical Hub id)
-- Structural template reference: `earth_science/models/_template/`
+- Structural template reference: `_template/` (repo root)
 - Example: [`material_science/models/HydraGNN/`](../../../material_science/models/HydraGNN/) — atomistic **graph** foundation models (**HydraGNN**), Hub id **`mlupopa/HydraGNN_Predictive_GFM_2024`**
 
 ## Agent guidance

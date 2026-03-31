@@ -13,7 +13,7 @@ The `healthcare/` domain holds recipes for **healthcare-oriented** open models (
 
 - Models: `healthcare/models/<model-slug>/`
 - Slug rules: `healthcare/models/README.md`
-- Structural template reference: `earth_science/models/_template/`
+- Structural template reference: `_template/` (repo root)
 
 ## Mandatory guardrails
 
