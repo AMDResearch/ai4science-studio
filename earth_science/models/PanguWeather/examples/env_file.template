@@ -1,0 +1,14 @@
+# Copy this file to env_file and fill in your credentials.
+#   cp env_file.template env_file
+#
+# Get a free API key at: https://cds.climate.copernicus.eu/
+# After logging in: Profile → API key
+
+CDSAPI_URL=https://cds.climate.copernicus.eu/api
+CDSAPI_KEY=YOUR_CDS_API_KEY_HERE
+
+# Optional: override the default data cache location (/tmp/earthkit-data-root)
+#EARTHKIT_DATA_USER_CACHE_DIRECTORY=/data/earthkit-cache
+
+# Optional: restrict to specific GPU indices (comma-separated, 0-based)
+#HIP_VISIBLE_DEVICES=0
