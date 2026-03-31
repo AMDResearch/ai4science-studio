@@ -55,7 +55,7 @@ Structure prediction, folding, and protein language models.
 
 ### 🏥 Healthcare
 
-[![AI in healthcare](docs/images/healthcare-ai.png)](healthcare/)
+[![DNA double helix](docs/images/healthcare-ai.png)](healthcare/)
 
 Molecular design, medical imaging segmentation, and healthcare-adjacent ML.
 Models: **REINVENT4**, **SemlaFlow**, **SwinUNETR**, **GP-MoLFormer** and more.
