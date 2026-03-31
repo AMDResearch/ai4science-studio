@@ -4,6 +4,11 @@ Run a multi-member probabilistic forecast using StormCast's diffusion residual s
 
 Source: [AMD ROCm blog — StormCast ensembles](https://rocm.blogs.amd.com/artificial-intelligence/stormcast-ensembles/README.html)
 
+> **Ready-to-run scripts** live in [`../../examples/`](../../examples/).
+> Use [`run_ensemble.py`](../../examples/run_ensemble.py) directly instead of
+> copying snippets from this doc.  The SLURM driver is
+> [`sbatch_ensemble_mi300x.sh`](../../examples/sbatch_ensemble_mi300x.sh).
+
 ## How this differs from deterministic inference
 
 | Aspect | Deterministic | Ensemble |

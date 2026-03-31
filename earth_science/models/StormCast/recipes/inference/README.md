@@ -4,6 +4,11 @@ Run a single-member 3 km convection-allowing forecast over the central US using 
 
 Source: [AMD ROCm blog — StormCast inference](https://rocm.blogs.amd.com/artificial-intelligence/stormcast-inference/README.html)
 
+> **Ready-to-run scripts** live in [`../../examples/`](../../examples/).
+> Use [`run_inference.py`](../../examples/run_inference.py) directly instead of
+> copying snippets from this doc.  The SLURM driver is
+> [`sbatch_inference_mi300x.sh`](../../examples/sbatch_inference_mi300x.sh).
+
 ## Environment
 
 ### Option A — with AMD Container Toolkit
