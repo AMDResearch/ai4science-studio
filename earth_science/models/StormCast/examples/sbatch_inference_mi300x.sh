@@ -53,7 +53,7 @@ if [[ -n "${SC_SIF}" ]]; then
     # --- Singularity / Apptainer path ---
     echo "  Runtime: Singularity/Apptainer (${SC_SIF})"
     singularity exec \
-        --nv \
+        --rocm \
         --bind "${SCRIPT_DIR}:/workspace" \
         "${SC_SIF}" \
         python /workspace/run_inference.py \
