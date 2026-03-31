@@ -126,7 +126,7 @@ No build step, no compiled code. The scripts pull public container images and mo
 ## Contributing
 
 1. Fork the repo and create a branch.
-2. Copy [`earth_science/models/_template/`](earth_science/models/_template/) to your domain and model folder.
+2. Copy [`_template/`](_template/) to your domain and model folder.
 3. Fill in the model README and add at minimum one runnable recipe.
 4. Open a pull request—or just use `/add-model` in Claude Code and let the agent do it.
 

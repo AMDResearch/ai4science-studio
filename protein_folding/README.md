@@ -8,7 +8,7 @@ All models live under [`models/`](models/):
 
 - [`models/README.md`](models/README.md) — slug naming and how to add a model.
 
-Layout reference: [`../earth_science/models/_template/`](../earth_science/models/_template/).
+Layout reference: [`../_template/`](../_template/).
 
 ## Recipes
 

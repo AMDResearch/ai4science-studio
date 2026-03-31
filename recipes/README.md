@@ -32,4 +32,4 @@ Examples of what to put there:
 
 ## Template
 
-Copy [`../earth_science/models/_template/`](../earth_science/models/_template/) when adding a new model directory in any domain.
+Copy [`../_template/`](../_template/) when adding a new model directory in any domain.

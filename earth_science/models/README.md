@@ -17,10 +17,10 @@ Some folders use a **public model name** on disk (e.g. `ORBIT-2`) instead of `or
 
 ## Adding a new model
 
-1. Copy `models/_template/` to `models/<your-folder>/` (or pick a public model name; document the Hub id in `README.md`).
+1. Copy [`../../_template/`](../../_template/) to `models/<your-folder>/` (or pick a public model name; document the Hub id in `README.md`).
 2. Edit `README.md` with the real HF model id, license, and links.
 3. Add recipes under `models/<your-folder>/recipes/`.
 
 ## Template
 
-- [`_template/`](_template/) — copy-paste starting point with stub `README.md` and empty `recipes/`.
+- [`../../_template/`](../../_template/) — copy-paste starting point with stub `README.md` and empty `recipes/`.

@@ -8,7 +8,7 @@ Map the Hugging Face id `org/model` to a single directory name by replacing `/` 
 
 ## Adding a new model
 
-1. Create `models/<your-slug>/README.md` with HF model id, license, intended use, and upstream links (see [`../earth_science/models/_template/`](../../earth_science/models/_template/) for layout).
+1. Create `models/<your-slug>/README.md` with HF model id, license, intended use, and upstream links (see [`../../_template/`](../../_template/) for layout).
 2. Add recipes under `models/<your-slug>/recipes/`.
 
 Do not commit protected health information (PHI) or patient-identifiable data. Recipes should use public benchmarks or synthetic examples unless run in a compliant environment.

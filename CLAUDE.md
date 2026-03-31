@@ -23,7 +23,7 @@ Hugging Face id `org/model` → directory name `org__model` (replace `/` with `_
 ## Adding a new model
 
 1. Pick the correct domain folder.
-2. Copy `earth_science/models/_template/` to `<domain>/models/<model-slug>/`.
+2. Copy `_template/` to `<domain>/models/<model-slug>/`.
 3. Fill in `README.md`: Hugging Face model id (or `N/A` with alternate source), task, license (SPDX id or link), upstream code/paper.
 4. Place how-to docs under `<model-slug>/recipes/`. Prefer one subfolder per task (`recipes/inference/`, `recipes/finetune/`, etc.), each with its own `README.md`.
 5. Place ready-to-run scripts under `<model-slug>/examples/`: `docker_run.sh`, `run_<task>.sh`/`.py`, `preflight_<slug>.py`, and `sbatch_<task>_mi300x.sh`. All scripts must be `chmod +x`.
