@@ -21,7 +21,7 @@ Models are sourced from [Hugging Face](https://huggingface.co/) and leading rese
 [![ORBIT-2 climate downscaling — input vs. prediction](docs/images/orbit2-figure1.png)](earth_science/)
 
 Weather forecasting, climate modeling, and Earth-system ML.
-**ORBIT-2** is AMD's flagship model here—a scalable vision foundation model for global weather and climate downscaling, developed with ORNL and validated on AMD Instinct. Also: **StormCast**, **NeuralGCM** and more.
+**[ORBIT-2](earth_science/models/ORBIT-2/)** — a scalable vision foundation model for global weather and climate downscaling, developed in collaboration with ORNL and validated on AMD Instinct. Also: **StormCast**, **NeuralGCM** and more.
 
 [Browse earth science recipes →](earth_science/)
 
@@ -30,10 +30,10 @@ Weather forecasting, climate modeling, and Earth-system ML.
 
 ### 🔬 Material Science
 
-[![MatterGen stability benchmark](docs/images/mattergen-sun.png)](material_science/)
+[![HydraGNN architecture overview](docs/images/hydragnn-overview.png)](material_science/)
 
 Crystal structure generation, property prediction, and simulation surrogates.
-Models: **MatterGen**, **HydraGNN** and more.
+**[HydraGNN](material_science/models/HydraGNN/)** — a multi-task graph neural network for materials property prediction, developed at ORNL. Also: **MatterGen** and more.
 
 [Browse material science recipes →](material_science/)
 
@@ -44,7 +44,7 @@ Models: **MatterGen**, **HydraGNN** and more.
 
 ### 🧬 Protein Folding
 
-[![ESM protein language model](docs/images/esm-atlas.png)](protein_folding/)
+[![OpenFold vs AlphaFold2 vs experimental structure](docs/images/openfold-banner.png)](protein_folding/)
 
 Structure prediction, folding, and protein language models.
 
@@ -55,7 +55,7 @@ Structure prediction, folding, and protein language models.
 
 ### 🏥 Healthcare
 
-[![GP-MoLFormer molecular design overview](docs/images/gp-molformer-overview.png)](healthcare/)
+[![BiomedParse segmentation across imaging modalities](docs/images/biomedparse-preview.png)](healthcare/)
 
 Molecular design, medical imaging segmentation, and healthcare-adjacent ML.
 Models: **REINVENT4**, **SemlaFlow**, **SwinUNETR**, **GP-MoLFormer** and more.
