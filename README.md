@@ -5,7 +5,7 @@
 
 ## What is this?
 
-AI4Science Studio connects **open AI models** with **clear, reproducible recipes** across four science domains. Whether you want to run a state-of-the-art weather forecast, generate novel crystal structures, fold a protein, or train a molecular design agent, you'll find working scripts, container setups, and AMD/ROCm notes here.
+AI4Science Studio connects **open AI models** with **clear, reproducible recipes** across science domains. Whether you want to run a state-of-the-art weather forecast, generate novel crystal structures, fold a protein, or train a molecular design agent, you'll find working scripts, container setups, and AMD/ROCm notes here.
 
 Models are sourced from [Hugging Face](https://huggingface.co/) and leading research groups. Each recipe folder is self-contained: a model card, runnable examples, and optional AMD-specific tuning notes validated on real hardware.
 
@@ -18,7 +18,7 @@ Models are sourced from [Hugging Face](https://huggingface.co/) and leading rese
 
 ### 🌍 Earth Science
 
-[![ORBIT-2 climate downscaling — input vs. prediction](https://www.amd.com/content/dam/amd/en/images/blogs/designs/projects/orbit-2-collaboration/orbit-2-figure-1.png)](earth_science/)
+[![ORBIT-2 climate downscaling — input vs. prediction](docs/images/orbit2-figure1.png)](earth_science/)
 
 Weather forecasting, climate modeling, and Earth-system ML.
 **ORBIT-2** is AMD's flagship model here—a scalable vision foundation model for global weather and climate downscaling, developed with ORNL and validated on AMD Instinct. Also: **StormCast**, **NeuralGCM** and more.
@@ -30,7 +30,7 @@ Weather forecasting, climate modeling, and Earth-system ML.
 
 ### 🔬 Material Science
 
-[![Crystal unit cell](https://upload.wikimedia.org/wikipedia/commons/thumb/a/a3/Fluorite-unit-cell-3D-balls.png/320px-Fluorite-unit-cell-3D-balls.png)](material_science/)
+[![MatterGen stability benchmark](docs/images/mattergen-sun.png)](material_science/)
 
 Crystal structure generation, property prediction, and simulation surrogates.
 Models: **MatterGen**, **HydraGNN** and more.
@@ -44,7 +44,7 @@ Models: **MatterGen**, **HydraGNN** and more.
 
 ### 🧬 Protein Folding
 
-[![Myoglobin ribbon diagram](https://upload.wikimedia.org/wikipedia/commons/thumb/6/60/Myoglobin.png/320px-Myoglobin.png)](protein_folding/)
+[![ESM protein language model](docs/images/esm-atlas.png)](protein_folding/)
 
 Structure prediction, folding, and protein language models.
 
@@ -55,7 +55,7 @@ Structure prediction, folding, and protein language models.
 
 ### 🏥 Healthcare
 
-[![Drug molecule structure](https://upload.wikimedia.org/wikipedia/commons/thumb/2/25/Ibuprofen_structure.svg/320px-Ibuprofen_structure.svg.png)](healthcare/)
+[![GP-MoLFormer molecular design overview](docs/images/gp-molformer-overview.png)](healthcare/)
 
 Molecular design, medical imaging segmentation, and healthcare-adjacent ML.
 Models: **REINVENT4**, **SemlaFlow**, **SwinUNETR**, **GP-MoLFormer** and more.
