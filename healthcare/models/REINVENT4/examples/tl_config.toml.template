@@ -1,0 +1,22 @@
+# Transfer Learning (TL) config template for REINVENT4
+# Copy to tl_config.toml and edit the paths below, then run:
+#   reinvent -l /workspace/results/tl_run.log /workspace/tl_config.toml
+#
+# USER EDITS:
+#   model_file          — path to a pretrained REINVENT prior (.prior file)
+#   input_smiles_file   — your focused SMILES set (.smi, one SMILES per line)
+#   output_model_file   — where to save the fine-tuned model
+
+[parameters]
+  mode = "TL"
+  model_file = "/workspace/REINVENT4/priors/reinvent.prior"
+  input_smiles_file = "/workspace/data/target_smiles.smi"
+  output_model_file = "/workspace/results/finetuned.model"
+  num_epochs = 10
+  batch_size = 128
+  learning_rate = 1.0e-4
+
+[learning_rate_scheduler]
+  type = "StepLR"
+  step = 1
+  gamma = 0.95
