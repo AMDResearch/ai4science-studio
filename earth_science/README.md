@@ -14,7 +14,7 @@ All models live under [`models/`](models/). Each subfolder is one HF model or fa
 
 ## Recipes
 
-Per-model recipes live in `models/<model-folder>/recipes/`. See the top-level recipes index: [`../recipes/README.md`](../recipes/README.md).
+Per-model recipes live in `models/<model-folder>/recipes/`.
 
 ## Contributing
 

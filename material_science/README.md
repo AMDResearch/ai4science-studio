@@ -13,7 +13,7 @@ For a file layout reference when adding a new model, use [`../_template/`](../_t
 
 ## Recipes
 
-Per-model recipes live in `models/<model-slug>/recipes/`. Index: [`../recipes/README.md`](../recipes/README.md).
+Per-model recipes live in `models/<model-slug>/recipes/`.
 
 ## Contributing
 

@@ -9,7 +9,7 @@ description: Applies when working in the AI4Science Studio repository. Describes
 
 - **Domains:** `earth_science/` (includes climate and weather), `material_science/`, `protein_folding/`, `healthcare/`.
 - **Models:** `<domain>/models/<model-slug>/` with a `README.md` per model and `recipes/` for that model only.
-- **Index:** Root [`README.md`](../../../README.md) and [`recipes/README.md`](../../../recipes/README.md).
+- **Index:** Root [`README.md`](../../../README.md).
 
 ## Model slug rule
 
