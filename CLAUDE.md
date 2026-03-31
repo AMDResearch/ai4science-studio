@@ -9,8 +9,9 @@ AI4Science Studio is a documentation-first recipe collection for open AI-for-sci
 ## Directory layout
 
 ```
-<domain>/models/<model-slug>/README.md    # HF id, license, upstream links
-<domain>/models/<model-slug>/recipes/     # scripts, notebooks, how-to docs
+<domain>/models/<model-slug>/README.md      # HF id, license, upstream links
+<domain>/models/<model-slug>/recipes/       # how-to docs, one subfolder per task
+<domain>/models/<model-slug>/examples/      # ready-to-run scripts
 ```
 
 **Domains:** `earth_science/`, `material_science/`, `protein_folding/`, `healthcare/`
@@ -23,14 +24,17 @@ Hugging Face id `org/model` → directory name `org__model` (replace `/` with `_
 
 1. Pick the correct domain folder.
 2. Copy `earth_science/models/_template/` to `<domain>/models/<model-slug>/`.
-3. Fill in `README.md`: Hugging Face model id, task, license (SPDX id or link), upstream code/paper.
-4. Place scripts or runbooks under `<model-slug>/recipes/`. Prefer one subfolder per task (`recipes/inference/`, `recipes/finetune/`, etc.).
-5. Do not commit large checkpoints or datasets—document how to obtain them instead.
+3. Fill in `README.md`: Hugging Face model id (or `N/A` with alternate source), task, license (SPDX id or link), upstream code/paper.
+4. Place how-to docs under `<model-slug>/recipes/`. Prefer one subfolder per task (`recipes/inference/`, `recipes/finetune/`, etc.), each with its own `README.md`.
+5. Place ready-to-run scripts under `<model-slug>/examples/`: `docker_run.sh`, `run_<task>.sh`/`.py`, `preflight_<slug>.py`, and `sbatch_<task>_mi300x.sh`. All scripts must be `chmod +x`.
+6. Do not commit large checkpoints or datasets—document how to obtain them instead.
 
 ## Conventions
 
 - **Link, don't vendor.** Prefer linking Hugging Face model cards and upstream GitHub repos rather than copying large codebases into this repo.
+- **Non-HF weights.** If weights are not on Hugging Face (e.g. GCS bucket, Google Drive, GitHub releases), set the HF id field to `N/A` and add an "Obtaining model weights" section with a fetch snippet.
 - **AMD/ROCm notes** are optional and go inside individual recipes only where a maintainer has actually validated them. They are not a substitute for upstream documentation.
+- **Example scripts** follow a standard pattern: `docker_run.sh` auto-detects AMD Container Toolkit vs device passthrough and checks for an existing container; `run_*.sh`/`.py` expose all key params as env vars with defaults; SLURM scripts use `--rocm` (not `--nv`) for AMD/Apptainer.
 - **Healthcare recipes** must include a research/engineering-only disclaimer and must not reference patient-identifiable data or PHI.
 - Large artifacts (checkpoints, datasets, `.env` files) are in `.gitignore`; do not add them.
 
@@ -44,7 +48,7 @@ Slash commands for Claude Code live in `.claude/commands/`:
 
 | Command | Purpose |
 |---|---|
-| `/add-model` | Walk through adding a new HF model (slug, folder, README, recipes) |
+| `/add-model` | Walk through adding a new model (slug, folder, README, recipes, examples) |
 | `/add-recipe` | Add or improve a recipe for an existing model |
 | `/check-model` | Audit a model folder for completeness and convention compliance |
 
