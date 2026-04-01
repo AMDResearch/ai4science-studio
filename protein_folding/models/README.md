@@ -1,5 +1,7 @@
 # Models (Protein folding)
 
+> **Coming soon.** No models have been added to this domain yet. Contributions welcome — see the [repo README](../../README.md) and [`../../_template/`](../../_template/) for how to add one.
+
 Each subdirectory under `models/` is one **Hugging Face model** (or family) for protein structure, folding, protein language models, etc.
 
 ## Slug convention

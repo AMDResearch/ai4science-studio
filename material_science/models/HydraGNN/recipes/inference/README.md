@@ -5,7 +5,7 @@ This is the usual **AI4Science Studio** entry point: use **published checkpoints
 ## Prerequisites
 
 1. Clone [`ORNL/HydraGNN`](https://github.com/ORNL/HydraGNN) and check out branch **`Predictive_GFM_2024`**.
-2. Install the package and dependencies per the upstream README (for example `pip install -e .` and the repository’s requirement files).
+2. Install the package and dependencies per the upstream README (for example `pip install -e .` and the repository's requirement files).
 3. Download the **ensemble** artifacts you need from [`mlupopa/HydraGNN_Predictive_GFM_2024`](https://huggingface.co/mlupopa/HydraGNN_Predictive_GFM_2024). Under `Ensemble_of_models/`, each trial folder (e.g. `gfm_0.229`) typically contains a **`config.json`** and checkpoint files named like **`gfm_0.<ID>_epoch_<N>.pk`** (see the live Hub tree for exact names).
 
 ## Align config with weights
@@ -28,5 +28,5 @@ Folder and file names on the Hub **can change**. Always verify paths against the
 
 ## See also
 
-- [data-access.md](data-access.md) — ADIOS training data and Constellation package.  
-- [compute-and-alternatives.md](compute-and-alternatives.md) — hardware expectations for multi-model inference vs training.
+- [../data/README.md](../data/README.md) — ADIOS training data and Constellation package.
+- [../compute/README.md](../compute/README.md) — hardware expectations for multi-model inference vs training.
