@@ -15,7 +15,7 @@ Always confirm paths against the [live Hub tree](https://huggingface.co/mlupopa/
 
 The full data and model parameter package is also registered with a **DOI** on **ORNL Data Constellation**:
 
-- **Landing page:** [HydraGNN_Predictive_GFM_2024 dataset](https://doi.ccs.ornl.gov/dataset/3a49c8df-83f7-5d32-84be-f81d289e7cdd)  
+- **Landing page:** [HydraGNN_Predictive_GFM_2024 dataset](https://doi.ccs.ornl.gov/dataset/3a49c8df-83f7-5d32-84be-f81d289e7cdd)
 - **DOI:** `10.13139/OLCF/2474799`
 
 Use that page for citation, provenance, and any **Globus** or site-specific download instructions Constellation provides.
@@ -36,7 +36,7 @@ Place **ADIOS** trees and **checkpoints** on a **shared** filesystem (project or
 
 **From Constellation** (Globus mirror of the registered package):
 
-- Use the [HydraGNN Constellation page](https://doi.ccs.ornl.gov/dataset/3a49c8df-83f7-5d32-84be-f81d289e7cdd) as the source of truth for Globus flow, same pattern as in the ORBIT-2 recipe: institutional or personal Globus endpoint → shared cluster path.
+- Use the [HydraGNN Constellation page](https://doi.ccs.ornl.gov/dataset/3a49c8df-83f7-5d32-84be-f81d289e7cdd) as the source of truth for Globus flow: institutional or personal Globus endpoint → shared cluster path.
 
 ### When you cannot use public endpoints but have OLCF or a collaborator who does
 

@@ -5,16 +5,16 @@ This recipe summarizes the **exascale-oriented** workflow described on the [Hugg
 ## Who can run this
 
 - **OLCF** users with an approved project and compute on **Frontier** (or comparable **AMD** systems with a supported **PyTorch + ROCm** stack and sufficient scale).
-- **General users:** prefer Hub checkpoints and [inference-and-visualization.md](inference-and-visualization.md), or smaller experiments on hardware you control—see [compute-and-alternatives.md](compute-and-alternatives.md). For **institutional AMD clusters**, see [local-cluster-amd.md](local-cluster-amd.md).
+- **General users:** prefer Hub checkpoints and [../inference/README.md](../inference/README.md), or smaller experiments on hardware you control—see [../compute/README.md](../compute/README.md). For **institutional AMD clusters**, see the cluster notes in [../compute/README.md](../compute/README.md).
 
 ## High-level steps (from upstream)
 
 1. **Environment** — Follow HydraGNN installation instructions on branch **`Predictive_GFM_2024`** for your target system (modules, PyTorch ROCm build, and optional distributed dependencies).
-2. **Data** — Preprocessed training data in **ADIOS** form are described under `ADIOS_files/` on the Hub and in the Constellation release (see [data-access.md](data-access.md)). Paths in your configs must point at **your** staged files.
+2. **Data** — Preprocessed training data in **ADIOS** form are described under `ADIOS_files/` on the Hub and in the Constellation release (see [../data/README.md](../data/README.md)). Paths in your configs must point at **your** staged files.
 3. **HPO and pretraining** — The model card describes **hyperparameter optimization** with [DeepHyper](https://github.com/deephyper/deephyper), short HPO training epochs with early stopping, selection of fifteen trials, and **continued pretraining** up to a capped epoch count. Entry points live under **`examples/multidataset_hpo`** on the **`Predictive_GFM_2024`** branch.
 4. **Distributed training** — Pretraining was performed with **distributed data parallelism (DDP)** at very large node counts (see the model card). Reproduce at smaller scale by reducing world size and batch settings per upstream guidance.
 5. **Energy accounting** — The publication references **omnistat** for training energy measurement on large runs; use that only if your site supports it.
 
 ## Disclaimer
 
-AI4Science Studio does **not** grant OLCF access, storage, or software support. For policies, queues, and project requests, use **official OLCF documentation** and the user assistance process linked from [compute-and-alternatives.md](compute-and-alternatives.md).
+AI4Science Studio does **not** grant OLCF access, storage, or software support. For policies, queues, and project requests, use **official OLCF documentation** and the user assistance process linked from [../compute/README.md](../compute/README.md).

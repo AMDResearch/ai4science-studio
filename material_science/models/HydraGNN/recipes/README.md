@@ -6,13 +6,12 @@ Studio runbooks for [HydraGNN (Predictive GFM 2024)](../README.md) (`mlupopa/Hyd
 
 | Doc | Audience | Summary |
 |-----|----------|---------|
-| [inference-and-visualization.md](inference-and-visualization.md) | Most users | Download ensemble checkpoints from Hub, align `config.json` with weights, run inference via HydraGNN; optional ensemble averaging and UQ via `examples/ensemble_learning`. |
-| [local-cluster-amd.md](local-cluster-amd.md) | Institutional AMD HPC | ROCm + PyTorch on **your** Instinct cluster; DDP scale-down, optional HPO; staging in [data-access.md](data-access.md). |
-| [training-hpc.md](training-hpc.md) | OLCF / large HPC | Frontier-scale distributed pretraining, DeepHyper HPO, and `examples/multidataset_hpo`—only where you have a suitable allocation. |
+| [inference/README.md](inference/README.md) | Most users | Download ensemble checkpoints from Hub, align `config.json` with weights, run inference via HydraGNN; optional ensemble averaging and UQ via `examples/ensemble_learning`. |
+| [train/README.md](train/README.md) | OLCF / large HPC | Frontier-scale distributed pretraining, DeepHyper HPO, and `examples/multidataset_hpo`—only where you have a suitable allocation. |
 
 ## Data and compute (read before large runs)
 
 | Doc | Summary |
 |-----|---------|
-| [data-access.md](data-access.md) | `ADIOS_files/` on Hub (CLI staging), Constellation / Globus mirror, OLCF copy-out notes; large downloads; energy/force preprocessing summarized on the model card. |
-| [compute-and-alternatives.md](compute-and-alternatives.md) | Frontier access is restricted; AMD cloud / HPC Fund, institutional AMD clusters ([local-cluster-amd.md](local-cluster-amd.md)); inference vs pretraining footprint. |
+| [data/README.md](data/README.md) | `ADIOS_files/` on Hub (CLI staging), Constellation / Globus mirror, OLCF copy-out notes; large downloads; energy/force preprocessing summarized on the model card. |
+| [compute/README.md](compute/README.md) | Frontier access is restricted; AMD cloud / HPC Fund, institutional AMD clusters; inference vs pretraining footprint. |
