@@ -48,7 +48,7 @@ Create or improve a recipe (inference, fine-tune, eval, etc.) for a model alread
 - `earth_science/`: document spatial/temporal resolution and data sources.
 - `material_science/`: document input representations and unit conventions.
 - `protein_folding/`: use public or synthetic structures; no confidential sequences.
-- `healthcare/`: include research/engineering-only disclaimer; no PHI.
+- `healthcare/` (Healthcare & Life Sciences): include research/engineering-only disclaimer; no PHI.
 - `physics_simulation/`: document physical domain, dataset format, and HPC requirements.
 
 ## Recipe to add

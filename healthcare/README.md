@@ -1,6 +1,6 @@
-# Healthcare
+# Healthcare & Life Sciences (HCLS)
 
-This domain holds recipes for **healthcare-related** open models on Hugging Face (imaging, clinical NLP, genomics helpers, etc.). Content here is for **research and engineering** workflows only.
+This domain holds recipes for **healthcare and life sciences** open models on Hugging Face (imaging, clinical NLP, genomics helpers, drug discovery, molecular design, etc.). Content here is for **research and engineering** workflows only.
 
 ## Model directories
 

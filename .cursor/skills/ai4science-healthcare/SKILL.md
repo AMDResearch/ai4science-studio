@@ -1,13 +1,13 @@
 ---
 name: ai4science-healthcare
-description: Applies to healthcare-related ML recipes under healthcare/models/ in AI4Science Studio, with privacy and non-clinical-use guardrails.
+description: Applies to healthcare and life sciences ML recipes under healthcare/models/ in AI4Science Studio, with privacy and non-clinical-use guardrails.
 ---
 
-# Healthcare domain
+# Healthcare & Life Sciences (HCLS) domain
 
 ## Scope
 
-The `healthcare/` domain holds recipes for **healthcare-oriented** open models (imaging, clinical NLP, genomics helpers, etc.) on Hugging Face. All content is for **research and engineering** support, not patient care decisions.
+The `healthcare/` domain holds recipes for **healthcare and life sciences** open models (imaging, clinical NLP, genomics helpers, drug discovery, molecular design, etc.) on Hugging Face. All content is for **research and engineering** support, not patient care decisions.
 
 ## Layout
 

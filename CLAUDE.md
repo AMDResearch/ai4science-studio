@@ -35,7 +35,7 @@ Hugging Face id `org/model` → directory name `org__model` (replace `/` with `_
 - **Non-HF weights.** If weights are not on Hugging Face (e.g. GCS bucket, Google Drive, GitHub releases), set the HF id field to `N/A` and add an "Obtaining model weights" section with a fetch snippet.
 - **AMD/ROCm notes** are optional and go inside individual recipes only where a maintainer has actually validated them. They are not a substitute for upstream documentation.
 - **Example scripts** follow a standard pattern: `docker_run.sh` auto-detects AMD Container Toolkit vs device passthrough and checks for an existing container; `run_*.sh`/`.py` expose all key params as env vars with defaults; SLURM scripts use `--rocm` (not `--nv`) for AMD/Apptainer.
-- **Healthcare recipes** must include a research/engineering-only disclaimer and must not reference patient-identifiable data or PHI.
+- **Healthcare & Life Sciences (HCLS) recipes** must include a research/engineering-only disclaimer and must not reference patient-identifiable data or PHI.
 - Large artifacts (checkpoints, datasets, `.env` files) are in `.gitignore`; do not add them.
 
 ## Cursor Agent Skills

@@ -38,7 +38,7 @@ Add a new model to this repository following all repo conventions.
    - `earth_science/`: state spatial/temporal resolution, coordinate conventions, data sources (ERA5, satellite, etc.).
    - `material_science/`: state input representations (graphs, SMILES, crystals) and unit conventions.
    - `protein_folding/`: surface license restrictions; avoid implying clinical/diagnostic use.
-   - `healthcare/`: add research/engineering-only disclaimer; no PHI; copy intended-use and limitations from the model card.
+   - `healthcare/` (Healthcare & Life Sciences): add research/engineering-only disclaimer; no PHI; copy intended-use and limitations from the model card.
    - `physics_simulation/`: state physical domain (fluid dynamics, plasma, etc.), dataset format (HDF5, NetCDF), and HPC/multi-node requirements.
 
 9. **Do not commit** large checkpoints, datasets, `.env` files, or tokens — document how users obtain them instead.

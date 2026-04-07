@@ -1,6 +1,6 @@
-# Models (Healthcare)
+# Models (Healthcare & Life Sciences)
 
-Each subdirectory under `models/` is one **Hugging Face model** (or family) for healthcare-related ML (imaging, clinical text, genomics helpers, etc.).
+Each subdirectory under `models/` is one **Hugging Face model** (or family) for healthcare and life sciences ML (imaging, clinical text, genomics helpers, drug discovery, molecular design, etc.).
 
 ## Slug convention
 

@@ -30,7 +30,7 @@ Audit an existing model entry in AI4Science Studio and report any issues.
 - `earth_science/`: spatial/temporal resolution stated in relevant recipes
 - `material_science/`: input representations and unit conventions documented
 - `protein_folding/`: license restrictions surfaced; no clinical/diagnostic implications
-- `healthcare/`: research/engineering-only disclaimer present; no PHI; intended use and limitations from the model card included
+- `healthcare/` (Healthcare & Life Sciences): research/engineering-only disclaimer present; no PHI; intended use and limitations from the model card included
 - `physics_simulation/`: physical domain stated; dataset format (HDF5, NetCDF) documented; HPC/multi-node requirements noted
 
 ### AMD/ROCm notes
