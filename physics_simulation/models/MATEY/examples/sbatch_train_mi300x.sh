@@ -6,17 +6,23 @@
 #
 # Prerequisites
 # -------------
-# 1. Build or pull a Singularity/Apptainer SIF from:
-#      rocm/pytorch:rocm6.4.1_ubuntu22.04_py3.10_pytorch_release_2.6.0
-#    Set MATEY_SIF below or export it before submitting.
-# 2. Install MATEY inside the container:
-#      pip install -e /matey
-# 3. Set MATEY_DATA_DIR to the location of your HDF5 training data.
+# 1. Run build_sif.sh once to create the SIF and writable overlay:
+#      ./build_sif.sh
+#    This pulls the ROCm image, converts it to a SIF, and installs MATEY
+#    into a writable ext3 overlay.  Set MATEY_SIF and MATEY_OVERLAY to
+#    non-default paths before running if needed.
+#
+# 2. Set MATEY_DATA_DIR to the location of your HDF5 training data.
 #    Set MATEY_YAML to your config file.
 #
 # Submit:
+#   export MATEY_SIF=/path/to/matey.sif
+#   export MATEY_OVERLAY=/path/to/matey_overlay.img   # optional, created by build_sif.sh
 #   sbatch sbatch_train_mi300x.sh
-#   MATEY_SIF=/path/to/matey.sif MATEY_YAML=/path/to/config.yaml sbatch sbatch_train_mi300x.sh
+#
+# Bare-metal fallback (no container):
+#   MATEY_BARE_METAL=1 sbatch sbatch_train_mi300x.sh
+#   (You must activate your ROCm environment before submitting.)
 
 #SBATCH --job-name=matey-train
 #SBATCH --partition=YOUR_PARTITION_HERE
@@ -35,6 +41,8 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 # --- Configuration (override by exporting before sbatch) ---
 MATEY_SIF="${MATEY_SIF:-}"
+MATEY_OVERLAY="${MATEY_OVERLAY:-}"           # writable overlay created by build_sif.sh
+MATEY_BARE_METAL="${MATEY_BARE_METAL:-0}"   # set to 1 to skip Apptainer entirely
 MATEY_YAML="${MATEY_YAML:-/matey/config/Demo_JHUTDB_TT.yaml}"
 MATEY_RUN_NAME="${MATEY_RUN_NAME:-matey_slurm_${SLURM_JOB_ID:-local}}"
 MATEY_CONFIG="${MATEY_CONFIG:-basic_config}"
@@ -47,6 +55,31 @@ export MIOPEN_USER_DB_PATH="${MIOPEN_CACHE}"
 export MIOPEN_CUSTOM_CACHE_DIR="${MIOPEN_CACHE}"
 mkdir -p "${MIOPEN_CACHE}"
 
+# ---------------------------------------------------------------------------
+# Validate inputs
+# ---------------------------------------------------------------------------
+if [[ "${MATEY_BARE_METAL}" != "1" && -z "${MATEY_SIF}" ]]; then
+    echo "error: MATEY_SIF is not set." >&2
+    echo "" >&2
+    echo "  Build the SIF first:" >&2
+    echo "    cd $(dirname "$0") && ./build_sif.sh" >&2
+    echo "" >&2
+    echo "  Then submit:" >&2
+    echo "    export MATEY_SIF=/path/to/matey.sif" >&2
+    echo "    export MATEY_OVERLAY=/path/to/matey_overlay.img  # if using overlay" >&2
+    echo "    sbatch sbatch_train_mi300x.sh" >&2
+    echo "" >&2
+    echo "  To skip Apptainer and use a bare-metal env instead:" >&2
+    echo "    MATEY_BARE_METAL=1 sbatch sbatch_train_mi300x.sh" >&2
+    exit 1
+fi
+
+if [[ "${MATEY_BARE_METAL}" != "1" && ! -f "${MATEY_SIF}" ]]; then
+    echo "error: SIF file not found: ${MATEY_SIF}" >&2
+    echo "  Run ./build_sif.sh to create it." >&2
+    exit 1
+fi
+
 echo "=== MATEY distributed training ==="
 echo "  Run name : ${MATEY_RUN_NAME}"
 echo "  YAML     : ${MATEY_YAML}"
@@ -55,28 +88,35 @@ echo "  Nodes    : ${SLURM_JOB_NUM_NODES:-2}"
 echo "  Tasks    : ${SLURM_NTASKS:-16}"
 echo "  Job      : ${SLURM_JOB_ID:-local}"
 
-TRAIN_CMD="python /matey/basic_usage.py \
+TRAIN_CMD="python /matey-src/basic_usage.py \
     --run_name ${MATEY_RUN_NAME} \
     --config   ${MATEY_CONFIG} \
     --yaml_config ${MATEY_YAML} \
     --use_ddp"
 
-if [[ -n "${MATEY_SIF}" ]]; then
+# Build optional overlay flag
+OVERLAY_FLAG=""
+if [[ -n "${MATEY_OVERLAY}" && -f "${MATEY_OVERLAY}" ]]; then
+    OVERLAY_FLAG="--overlay ${MATEY_OVERLAY}"
+fi
+
+if [[ "${MATEY_BARE_METAL}" == "1" ]]; then
+    echo "  Runtime: bare-metal"
+    echo "  WARNING: ensure your ROCm + MATEY environment is activated before submitting."
+    srun -c7 --gpu-bind=closest \
+        bash -c "${TRAIN_CMD}"
+else
     echo "  Runtime: Apptainer (${MATEY_SIF})"
+    [[ -n "${OVERLAY_FLAG}" ]] && echo "  Overlay: ${MATEY_OVERLAY}"
+    # shellcheck disable=SC2086
     srun -c7 --gpu-bind=closest \
         apptainer exec \
             --rocm \
+            ${OVERLAY_FLAG} \
             --bind "${SCRIPT_DIR}:/workspace" \
             --bind "${MATEY_DATA_DIR}:/data" \
             "${MATEY_SIF}" \
             bash -c "${TRAIN_CMD}"
-else
-    echo "  Runtime: bare-metal (activate your env before submitting)"
-    # Uncomment as appropriate for your site:
-    # source ~/miniconda3/etc/profile.d/conda.sh && conda activate matey
-    # module load rocm
-    srun -c7 --gpu-bind=closest \
-        bash -c "${TRAIN_CMD}"
 fi
 
 echo "=== Done ==="
