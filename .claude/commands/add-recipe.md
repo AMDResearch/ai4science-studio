@@ -35,12 +35,21 @@ Create or improve a recipe (inference, fine-tune, eval, etc.) for a model alread
 
 6. **Do not commit** secrets, Hub tokens, large binaries, or datasets — point users to documented download steps.
 
+7. **Git workflow** — always branch, never commit directly to `main`:
+   1. `git fetch origin && git checkout -b aaji/<model-slug> origin/main`
+   2. Create all files, set scripts `chmod +x`.
+   3. `git add <domain>/models/<slug>/` and commit.
+   4. `git push -u origin aaji/<model-slug>`
+   5. Open a PR with `gh pr create` targeting `main`.
+   6. After the PR is merged: `git checkout main && git pull origin main && git branch -D aaji/<model-slug>`.
+
 ## Domain-specific checks
 
 - `earth_science/`: document spatial/temporal resolution and data sources.
 - `material_science/`: document input representations and unit conventions.
 - `protein_folding/`: use public or synthetic structures; no confidential sequences.
 - `healthcare/`: include research/engineering-only disclaimer; no PHI.
+- `physics_simulation/`: document physical domain, dataset format, and HPC requirements.
 
 ## Recipe to add
 
