@@ -4,7 +4,7 @@ Add a new model to this repository following all repo conventions.
 
 ## Steps
 
-1. **Identify domain** — pick from `earth_science/`, `material_science/`, `protein_folding/`, or `healthcare/`.
+1. **Identify domain** — pick from `earth_science/`, `material_science/`, `protein_folding/`, `healthcare/`, or `physics_simulation/`. If the model clearly belongs to a new domain, create the domain folder with a `README.md` first.
 
 2. **Derive the slug**:
    - HF id `org/model` → directory name `org__model` (replace `/` with `__`).
@@ -38,9 +38,18 @@ Add a new model to this repository following all repo conventions.
    - `earth_science/`: state spatial/temporal resolution, coordinate conventions, data sources (ERA5, satellite, etc.).
    - `material_science/`: state input representations (graphs, SMILES, crystals) and unit conventions.
    - `protein_folding/`: surface license restrictions; avoid implying clinical/diagnostic use.
-   - `healthcare/`: add research/engineering-only disclaimer; no PHI; copy intended-use and limitations from the model card.
+   - `healthcare/` (Healthcare & Life Sciences): add research/engineering-only disclaimer; no PHI; copy intended-use and limitations from the model card.
+   - `physics_simulation/`: state physical domain (fluid dynamics, plasma, etc.), dataset format (HDF5, NetCDF), and HPC/multi-node requirements.
 
 9. **Do not commit** large checkpoints, datasets, `.env` files, or tokens — document how users obtain them instead.
+
+10. **Git workflow** — always branch, never commit directly to `main`:
+    1. `git fetch origin && git checkout -b aaji/<model-slug> origin/main`
+    2. Create all files, set scripts `chmod +x`.
+    3. `git add <domain>/models/<slug>/` and commit.
+    4. `git push -u origin aaji/<model-slug>`
+    5. Open a PR with `gh pr create` targeting `main`.
+    6. After the PR is merged: `git checkout main && git pull origin main && git branch -D aaji/<model-slug>`.
 
 ## Model to add
 

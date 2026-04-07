@@ -53,16 +53,16 @@ Structure prediction, folding, and protein language models.
 </td>
 <td width="50%" valign="top">
 
-### 🏥 Healthcare
+### 🏥 Healthcare & Life Sciences
 
 [![DNA double helix](docs/images/healthcare-ai.png)](healthcare/)
 
 Molecular design, medical imaging segmentation, and healthcare-adjacent ML.
 Models: **REINVENT4**, **SemlaFlow**, **SwinUNETR**, **GP-MoLFormer**.
 
-[Browse healthcare recipes →](healthcare/)
+[Browse healthcare & life sciences recipes →](healthcare/)
 
-> ⚠️ Healthcare content is for **research and engineering only**—not medical advice or clinical use.
+> ⚠️ Content is for **research and engineering only**—not medical advice or clinical use.
 
 </td>
 </tr>
@@ -150,5 +150,5 @@ See each domain's `models/README.md` for slug conventions and domain-specific no
 ## Disclaimers
 
 - Each model is under its **upstream license**; check the model card on Hugging Face before use.
-- **Healthcare** content is for research and engineering only. Do not commit patient-identifiable data or PHI.
+- **Healthcare & Life Sciences** content is for research and engineering only. Do not commit patient-identifiable data or PHI.
 - AMD/ROCm notes in individual recipes reflect what maintainers have tested—they do not replace upstream install matrices or official product documentation.

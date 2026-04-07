@@ -5,7 +5,7 @@ Audit an existing model entry in AI4Science Studio and report any issues.
 ## Checklist
 
 ### Structure
-- [ ] Folder is under the correct domain (`earth_science/`, `material_science/`, `protein_folding/`, `healthcare/`)
+- [ ] Folder is under the correct domain (`earth_science/`, `material_science/`, `protein_folding/`, `healthcare/`, `physics_simulation/`)
 - [ ] Slug follows the `org__model` naming rule, or is a public name with canonical HF id documented in `README.md`
 - [ ] `README.md` exists at `<domain>/models/<slug>/README.md`
 - [ ] `recipes/` subfolder exists with at least one task subfolder, each containing its own `README.md`
@@ -30,7 +30,8 @@ Audit an existing model entry in AI4Science Studio and report any issues.
 - `earth_science/`: spatial/temporal resolution stated in relevant recipes
 - `material_science/`: input representations and unit conventions documented
 - `protein_folding/`: license restrictions surfaced; no clinical/diagnostic implications
-- `healthcare/`: research/engineering-only disclaimer present; no PHI; intended use and limitations from the model card included
+- `healthcare/` (Healthcare & Life Sciences): research/engineering-only disclaimer present; no PHI; intended use and limitations from the model card included
+- `physics_simulation/`: physical domain stated; dataset format (HDF5, NetCDF) documented; HPC/multi-node requirements noted
 
 ### AMD/ROCm notes
 - [ ] Docker image + ROCm version stated in `docker_run.sh`
