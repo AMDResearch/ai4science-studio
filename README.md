@@ -21,7 +21,7 @@ Models are sourced from [Hugging Face](https://huggingface.co/) and leading rese
 [![ORBIT-2 climate downscaling — input vs. prediction](docs/images/orbit2-figure1.png)](earth_science/)
 
 Weather forecasting, climate modeling, and Earth-system ML.
-**[ORBIT-2](earth_science/models/ORBIT-2/)** — a scalable vision foundation model for global weather and climate downscaling, developed in collaboration with ORNL and validated on AMD Instinct. Also: **StormCast**, **NeuralGCM** and more.
+**[ORBIT-2](earth_science/models/ORBIT-2/)** — a scalable vision foundation model for global weather and climate downscaling, developed in collaboration with ORNL and validated on AMD Instinct. Also: **StormCast**, **NeuralGCM**, **ArchesWeather**, **PanguWeather**, **GenCast**, **Aurora**.
 
 [Browse earth science recipes →](earth_science/)
 
@@ -33,7 +33,7 @@ Weather forecasting, climate modeling, and Earth-system ML.
 [![HydraGNN architecture overview](docs/images/hydragnn-overview.png)](material_science/)
 
 Crystal structure generation, property prediction, and simulation surrogates.
-**[HydraGNN](material_science/models/HydraGNN/)** — a multi-task graph neural network for materials property prediction, developed at ORNL. Also: **MatterGen** and more.
+**[HydraGNN](material_science/models/HydraGNN/)** — a multi-task graph neural network for materials property prediction, developed at ORNL. Also: **MatterGen**.
 
 [Browse material science recipes →](material_science/)
 
@@ -58,12 +58,26 @@ Structure prediction, folding, and protein language models.
 [![DNA double helix](docs/images/healthcare-ai.png)](healthcare/)
 
 Molecular design, medical imaging segmentation, and healthcare-adjacent ML.
-Models: **REINVENT4**, **SemlaFlow**, **SwinUNETR**, **GP-MoLFormer** and more.
+Models: **REINVENT4**, **SemlaFlow**, **SwinUNETR**, **GP-MoLFormer**.
 
 [Browse healthcare recipes →](healthcare/)
 
 > ⚠️ Healthcare content is for **research and engineering only**—not medical advice or clinical use.
 
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+
+### ⚛️ Physics Simulation
+
+Surrogate models and neural operators for continuum dynamics, fluid mechanics, turbulence, and multiphysics systems.
+**[MATEY](physics_simulation/models/MATEY/)** — ORNL multiscale adaptive transformer for spatiotemporal physical systems, validated on Frontier/MI250X. Also: **Walrus** — Polymathic AI 1.3B cross-domain continuum dynamics foundation model.
+
+[Browse physics simulation recipes →](physics_simulation/)
+
+</td>
+<td width="50%" valign="top">
 </td>
 </tr>
 </table>
