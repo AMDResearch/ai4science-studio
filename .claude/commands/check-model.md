@@ -23,7 +23,8 @@ Audit an existing model entry in AI4Science Studio and report any issues.
 - [ ] `docker_run.sh`: auto-detects AMD Container Toolkit vs device passthrough; checks for existing container; auto-clones upstream repo if absent
 - [ ] `run_*.sh` / `run_*.py`: key params overridable via env vars; prints config summary; exits with clear error when required inputs are missing
 - [ ] `preflight_<slug>.py`: verifies GPU access and imports
-- [ ] `sbatch_*_mi300x.sh`: uses `--rocm` (not `--nv`) for AMD/Apptainer GPU passthrough
+- [ ] `sbatch_*_amd.sh`: uses `--rocm` (not `--nv`) for AMD/Apptainer GPU passthrough; named `_amd.sh` not `_mi300x.sh` (covers MI250X/MI300X/MI350X with rocm7.2.x)
+- [ ] `build_overlay_amd.sh` (for HPC models with heavy pip deps): NFS staging pattern, exposes `ROCM_WHL_TAG` as the ROCm version knob; see earth-science SKILL.md for the NFS staging pattern
 - [ ] All scripts are `chmod +x`
 
 ### Domain-specific

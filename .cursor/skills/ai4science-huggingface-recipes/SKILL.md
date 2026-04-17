@@ -25,3 +25,26 @@ Use this skill when adding or refactoring **train / fine-tune / inference / eval
 
 - Committing `token` values or private Hub tokens.
 - Checking in large `*.bin`, `*.safetensors`, or full datasets when `.gitignore` already excludes them—point users to Hub or documented download steps instead.
+- **Hardcoding HF repo filenames** without verifying: model repos ship different names than recipes assume (e.g. `walrus.pt` not `model.pt`). Use `list_repo_files()` to discover actual names, filter by extension, pick smallest or first match.
+- Assuming a `_mi300x.sh` SLURM script name — use `_amd.sh` (covers MI250X, MI300X, MI350X with the same `rocm7.2.x` image).
+
+## HF checkpoint download pattern (robust)
+
+```python
+from huggingface_hub import list_repo_files, hf_hub_download
+import glob, os
+
+repo = "org/model"
+cache = os.path.join(os.environ.get("HF_HOME", os.path.expanduser("~/.cache/huggingface")), "model")
+os.makedirs(cache, exist_ok=True)
+
+# Reuse any existing download
+existing = glob.glob(os.path.join(cache, "**/*.ckpt"), recursive=True)
+if existing:
+    chosen = sorted(existing)[0]
+else:
+    files = [f for f in list_repo_files(repo) if f.endswith(".ckpt")]
+    chosen_name = sorted(files)[0]  # or filter by size keyword
+    chosen = hf_hub_download(repo_id=repo, filename=chosen_name, local_dir=cache)
+print(chosen)
+```

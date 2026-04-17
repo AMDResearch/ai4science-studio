@@ -20,7 +20,8 @@ Create or improve a recipe (inference, fine-tune, eval, etc.) for a model alread
    | `docker_run.sh` | Launch the container; auto-detect AMD Container Toolkit (`docker info \| grep -qi amd`) vs device passthrough (`/dev/kfd` + all `/dev/dri/renderD*` nodes); check for existing container and exit with attach hint rather than error; auto-clone upstream repo if absent. |
    | `run_<task>.sh` / `run_<task>.py` | Run the model; all key params overridable via env vars with sensible defaults; print config summary before running; print error + fix instructions when required inputs are missing, then exit 1. |
    | `preflight_<slug>.py` | Smoke-test: verify GPU access, imports, and a tiny forward pass. |
-   | `sbatch_<task>_mi300x.sh` | SLURM batch script; use `--rocm` (not `--nv`) for AMD/Apptainer GPU passthrough. |
+   | `sbatch_<task>_amd.sh` | SLURM batch script; use `--rocm` (not `--nv`) for AMD/Apptainer GPU passthrough. Named `_amd.sh` (not `_mi300x.sh`) — same script works on MI250X, MI300X, and MI350X with `rocm7.2.x`. |
+   | `build_overlay_amd.sh` | (HPC models with heavy pip deps) Builds a persistent Apptainer ext3 overlay. Install to NFS staging dir, strip torch/nvidia/triton, copy to overlay. Expose `ROCM_WHL_TAG` as the ROCm version knob. |
 
    - All scripts must be `chmod +x`.
    - Use a `tl_config.toml.template` alongside run scripts for config-file-driven models.

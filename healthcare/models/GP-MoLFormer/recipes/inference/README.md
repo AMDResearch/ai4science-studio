@@ -7,9 +7,29 @@ Generate novel drug-like molecules unconditionally or constrained to a scaffold 
 ## Prerequisites
 
 - AMD Instinct GPU with ROCm 7.0+ driver
-- Docker with AMD Container Toolkit (or bare-device passthrough)
+- Apptainer (SLURM clusters) or Docker with AMD Container Toolkit / bare-device passthrough (interactive nodes)
 
-## Setup
+**Recommended image:** `rocm/pytorch:rocm7.0_ubuntu22.04_py3.10_pytorch_release_2.7.1`
+
+Covers MI250X (gfx90a), MI300X (gfx942), MI350X (gfx950).
+
+> The `fast_transformers` dependency is unavailable on ROCm — the code falls back to standard PyTorch transformers automatically, with no user action needed.
+
+## Option A — SLURM cluster (Apptainer)
+
+```bash
+export GPMOL_SIF=/path/to/rocm_pytorch.sif
+sbatch examples/sbatch_inference_amd.sh                          # unconditional
+SCAFFOLD="c1ccccc1" sbatch examples/sbatch_inference_amd.sh      # scaffold mode
+```
+
+On first run the script clones `IBM/gp-molformer` and installs deps inside the container (requires internet access from compute nodes). Subsequent runs reuse the clone from `GPMOL_WORK_DIR`.
+
+Key env vars: `GPMOL_SIF` (required), `GPMOL_WORK_DIR` (default: examples dir), `SCAFFOLD`, `NUM_BATCHES` (default: 1 = 1000 molecules), `OUTPUT_FILE`.
+
+## Option B — Docker interactive (single node)
+
+### Setup
 
 ```bash
 bash examples/docker_run.sh
@@ -21,20 +41,24 @@ This script will:
 3. Apply `pairtune_training.patch` (if present in `examples/`)
 4. Install Python dependencies
 
-> The `fast_transformers` dependency is unavailable on ROCm — the code falls back to standard PyTorch transformers automatically, with no user action needed.
-
 ## Unconditional generation
 
 ```bash
+# Docker
 docker exec gp-molformer bash /workspace/run_generation.sh
+
+# Apptainer (SLURM)
+sbatch examples/sbatch_inference_amd.sh
 ```
 
-Generates 1000 SMILES strings and writes them to `/workspace/generated.csv`. The script also prints validity and uniqueness stats.
+Generates 1000 SMILES strings and writes them to `generated.csv`. The script also prints validity and uniqueness stats.
 
 To generate more:
 
 ```bash
 docker exec -e NUM_BATCHES=5 gp-molformer bash /workspace/run_generation.sh
+# or
+NUM_BATCHES=5 sbatch examples/sbatch_inference_amd.sh
 ```
 
 ## Scaffold-constrained generation
@@ -43,6 +67,8 @@ Provide a SMILES fragment; the model completes full molecules preserving that sc
 
 ```bash
 docker exec -e SCAFFOLD="c1cccc" gp-molformer bash /workspace/run_generation.sh
+# or
+SCAFFOLD="c1cccc" sbatch examples/sbatch_inference_amd.sh
 ```
 
 Any valid SMILES fragment works as a scaffold, e.g.:
