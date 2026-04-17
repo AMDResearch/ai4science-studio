@@ -26,7 +26,7 @@ Hugging Face id `org/model` → directory name `org__model` (replace `/` with `_
 2. Copy `_template/` to `<domain>/models/<model-slug>/`.
 3. Fill in `README.md`: Hugging Face model id (or `N/A` with alternate source), task, license (SPDX id or link), upstream code/paper.
 4. Place how-to docs under `<model-slug>/recipes/`. Prefer one subfolder per task (`recipes/inference/`, `recipes/finetune/`, etc.), each with its own `README.md`.
-5. Place ready-to-run scripts under `<model-slug>/examples/`: `docker_run.sh`, `run_<task>.sh`/`.py`, `preflight_<slug>.py`, and `sbatch_<task>_mi300x.sh`. All scripts must be `chmod +x`.
+5. Place ready-to-run scripts under `<model-slug>/examples/`: `docker_run.sh`, `run_<task>.sh`/`.py`, `preflight_<slug>.py`, and `sbatch_<task>_amd.sh`. All scripts must be `chmod +x`. For HPC models with heavy pip deps, also add `build_overlay_amd.sh`.
 6. Do not commit large checkpoints or datasets—document how to obtain them instead.
 
 ## Conventions
@@ -51,5 +51,8 @@ Slash commands for Claude Code live in `.claude/commands/`:
 | `/add-model` | Walk through adding a new model (slug, folder, README, recipes, examples) |
 | `/add-recipe` | Add or improve a recipe for an existing model |
 | `/check-model` | Audit a model folder for completeness and convention compliance |
+| `/run-stormcast` | Run StormCast deterministic inference on an AMD cluster (SIF → overlay → sbatch) |
+| `/run-orbit2` | Run ORBIT-2 inference on an AMD cluster (repo clone → SIF → overlay → synthetic smoke-test or real data) |
+| `/run-gpmolformer` | Run GP-MoLFormer molecule generation on an AMD cluster (unconditional or scaffold-constrained) |
 
-Invoke with an argument, e.g. `/add-model jychoi-hpc/ORBIT-2 → earth_science`.
+Invoke with an argument, e.g. `/add-model jychoi-hpc/ORBIT-2 → earth_science` or `/run-stormcast SC_SIF=/path/to/sif`.
