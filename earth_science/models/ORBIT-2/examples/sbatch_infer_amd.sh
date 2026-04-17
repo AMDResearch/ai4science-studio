@@ -63,7 +63,12 @@
 
 set -euo pipefail
 
-SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+if [[ -n "${SLURM_JOB_ID:-}" ]]; then
+  _ORIG_CMD=$(scontrol show job "$SLURM_JOB_ID" | sed -n 's/.*Command=\(\S\+\).*/\1/p')
+  SCRIPT_DIR=$(cd "$(dirname "$_ORIG_CMD")" && pwd)
+else
+  SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+fi
 LAUNCHER="${STUDIO_ORBIT2_LAUNCHER:-$SCRIPT_DIR/run_visualize.py}"
 
 if [[ -z "${ORBIT2_ROOT:-}" ]]; then
@@ -79,6 +84,7 @@ fi
 # module load rocm
 
 export PYTHONNOUSERSITE=1
+export HSA_NO_SCRATCH_RECLAIM=1
 export MIOPEN_USER_DB_PATH="${TMPDIR:-/tmp}/orbit2-miopen-${SLURM_JOB_ID:-$$}"
 mkdir -p "$MIOPEN_USER_DB_PATH"
 
@@ -101,7 +107,7 @@ if [[ "${ORBIT2_USE_SYNTHETIC:-0}" == "1" ]]; then
     CKPT="$ORBIT2_CHECKPOINT"
   else
     echo "--- ORBIT2_CHECKPOINT not set; downloading smallest pretrain ckpt from HF ---"
-    CKPT=$(python - <<'PYEOF'
+    HF_DL_SCRIPT=$(cat <<'PYEOF'
 from huggingface_hub import list_repo_files, hf_hub_download
 import os, glob, tempfile
 
@@ -125,6 +131,18 @@ local = hf_hub_download(repo_id=repo, filename=chosen, local_dir=cache)
 print(local)
 PYEOF
 )
+    if [[ -n "${ORBIT2_SIF:-}" ]]; then
+      OVERLAY_ARG=()
+      if [[ -n "${ORBIT2_OVERLAY:-}" ]] && [[ -f "${ORBIT2_OVERLAY}" ]]; then
+        OVERLAY_ARG=(--overlay "${ORBIT2_OVERLAY}:ro")
+      fi
+      CKPT=$(apptainer exec "${OVERLAY_ARG[@]}" \
+          --env PYTHONPATH=/opt/orbit2-pkgs \
+          "$ORBIT2_SIF" \
+          bash -c "source /opt/venv/bin/activate && PYTHONPATH=/opt/orbit2-pkgs python3 -c \"\$1\"" _ "$HF_DL_SCRIPT")
+    else
+      CKPT=$(python - <<< "$HF_DL_SCRIPT")
+    fi
   fi
 
   # Stamp checkpoint path into the config
@@ -165,9 +183,9 @@ if [[ -n "${ORBIT2_SIF:-}" ]]; then
 set -euo pipefail
 source /opt/venv/bin/activate
 echo "[rank \$SLURM_PROCID / \$SLURM_NTASKS] GPU \$SLURM_LOCALID on \$(hostname)"
-export PYTHONPATH="/orbit2/src:/orbit2:\${PYTHONPATH:-}"
+export PYTHONPATH="/opt/orbit2-pkgs:/orbit2/src:/orbit2:\${PYTHONPATH:-}"
 cd /orbit2/examples
-python3 /orbit2/examples/run_visualize.py \\
+python3 /examples/run_visualize.py \\
     /config/config.yaml \\
     --index 0 --variable total_precipitation_24hr \\
     --master-port \$MASTER_PORT \\
@@ -209,7 +227,7 @@ RANKEOF
       --bind "$CONFIG_BIND" \
       --env HOSTNAME="$MASTER_ADDR" \
       --env MASTER_PORT="$MASTER_PORT" \
-      --env PYTHONPATH="/orbit2/src:/orbit2" \
+      --env PYTHONPATH="/opt/orbit2-pkgs:/orbit2/src:/orbit2" \
       --env LD_LIBRARY_PATH=/opt/venv/lib/python3.12/site-packages/torch/lib \
       "$ORBIT2_SIF" \
       bash "$RANK_SCRIPT"

@@ -1,0 +1,40 @@
+---
+description: Preferred approach for building Apptainer overlay images that avoid re-downloading torch
+globs: "**/build_overlay*.sh"
+alwaysApply: false
+---
+
+# Apptainer overlay: use the SIF venv instead of --target
+
+When building overlay images for Apptainer/Singularity containers that already
+ship a PyTorch venv (e.g. `/opt/venv` in `rocm/pytorch` images), prefer
+installing into the activated venv rather than using `pip install --target`.
+
+## Problem
+
+`pip install --target <dir>` creates a fully isolated install that does **not**
+see packages in the container's venv. When a dependency like
+`pytorch-lightning` declares `torch` as a requirement, pip resolves and
+downloads the full ROCm torch wheel (~6 GB), even though the identical version
+is already present in the SIF.
+
+## Preferred approach
+
+1. Mount the overlay read-write and activate the SIF's venv.
+2. Use plain `pip install` (no `--target`). pip sees the existing torch and
+   skips it; new packages are written into the overlay's upper layer.
+3. No post-install strip step is needed because torch was never downloaded.
+
+```bash
+apptainer exec --rocm --overlay "$OVERLAY:rw" "$SIF" bash -c '
+  source /opt/venv/bin/activate
+  pip install --no-cache-dir mpi4py huggingface-hub pytorch-lightning ...
+'
+```
+
+## When --target is still acceptable
+
+- If the overlay must keep packages strictly isolated from the venv
+  (e.g. multiple overlays with conflicting dep versions).
+- In that case, keep the existing NFS-staging + strip-torch pattern, but
+  document the ~6 GB download overhead in a comment.

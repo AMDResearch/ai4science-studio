@@ -48,10 +48,10 @@ model:
   superres_mag: 4
   cnn_ratio: 4
   patch_size: 2
-  embed_dim: 1024
-  depth: 8
+  embed_dim: 256
+  depth: 6
   decoder_depth: 4
-  num_heads: 16
+  num_heads: 4
   mlp_ratio: 4
   drop_path: 0.1
   drop_rate: 0.1
