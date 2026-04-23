@@ -1,0 +1,90 @@
+# AI4Science Studio — Model Index
+#
+# Machine-readable index of all models in this repository.
+# Agents: read this file first to discover what's available.
+# For full details on any model, read <domain>/models/<slug>/model.yaml.
+
+models:
+  # --- Earth Science ---
+  - slug: StormCast
+    domain: earth_science
+    hf_id: nvidia/stormcast-v1-era5-hrrr
+    license: Apache-2.0
+    task: High-resolution convection-allowing weather prediction
+    tasks_available: [inference, ensemble]
+    path: earth_science/models/StormCast
+
+  - slug: ORBIT-2
+    domain: earth_science
+    hf_id: jychoi-hpc/ORBIT-2
+    license: See upstream model card
+    task: Global weather and climate downscaling
+    tasks_available: [inference]
+    path: earth_science/models/ORBIT-2
+
+  # --- Material Science ---
+  - slug: MatterGen
+    domain: material_science
+    hf_id: microsoft/mattergen
+    license: MIT
+    task: Diffusion-based generative model for inorganic materials design
+    tasks_available: [inference, train]
+    path: material_science/models/MatterGen
+
+  - slug: HydraGNN
+    domain: material_science
+    hf_id: mlupopa/HydraGNN_Predictive_GFM_2024
+    license: BSD-3-Clause-Clear
+    task: Ensemble of predictive graph foundation models for atomistic materials
+    tasks_available: [inference, train]
+    path: material_science/models/HydraGNN
+
+  # --- Healthcare & Life Sciences ---
+  - slug: GP-MoLFormer
+    domain: healthcare
+    hf_id: ibm-research/GP-MoLFormer-Uniq
+    license: Apache-2.0
+    task: SMILES molecule generation
+    tasks_available: [inference, finetune]
+    path: healthcare/models/GP-MoLFormer
+
+  - slug: SwinUNETR
+    domain: healthcare
+    hf_id: N/A
+    license: See upstream (MONAI / silogen/ai-samples)
+    task: 3D medical image segmentation
+    tasks_available: [train, inference]
+    path: healthcare/models/SwinUNETR
+
+  - slug: SemlaFlow
+    domain: healthcare
+    hf_id: N/A
+    license: MIT
+    task: 3D molecular structure generation
+    tasks_available: [inference]
+    path: healthcare/models/SemlaFlow
+
+  - slug: REINVENT4
+    domain: healthcare
+    hf_id: N/A
+    license: Apache-2.0
+    task: Reinforcement learning for molecular design
+    tasks_available: [finetune]
+    path: healthcare/models/REINVENT4
+
+  # --- Physics Simulation ---
+  - slug: MATEY
+    domain: physics_simulation
+    hf_id: N/A
+    license: MIT
+    task: Spatiotemporal surrogate modeling for multiphysics systems
+    tasks_available: [train, inference]
+    path: physics_simulation/models/MATEY
+
+  - slug: Walrus
+    domain: physics_simulation
+    hf_id: polymathic-ai/walrus
+    license: MIT
+    task: Cross-domain surrogate simulation for continuum dynamics
+    tasks_available: [inference]
+    path: physics_simulation/models/Walrus
