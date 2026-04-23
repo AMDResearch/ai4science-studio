@@ -4,17 +4,25 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository purpose
 
-AI4Science Studio is a documentation-first recipe collection for open AI-for-science models. There is no build system, compiled code, or test suite—the repo is entirely Markdown files and (optionally) scripts and notebooks in recipe folders. Upstream code lives in external GitHub repos; upstream model weights live on Hugging Face.
+AI4Science Studio is an **agent-first** recipe collection for open AI-for-science models. The primary interface is an AI coding agent (Cursor, Claude Code, etc.) that reads machine-readable metadata to discover, configure, and run models. There is no build system, compiled code, or test suite—the repo is Markdown files, YAML manifests, and (optionally) scripts and notebooks in recipe folders. Upstream code lives in external GitHub repos; upstream model weights live on Hugging Face.
+
+## Agent entry points (read these first)
+
+- **`models.yaml`** (repo root) — index of all models; read this to discover what's available.
+- **`<model>/model.yaml`** — per-model manifest with HF id, license, recipes, env vars, and hardware.
+- **`.cursor/skills/`** — agent skills for Cursor; `.claude/commands/` — slash commands for Claude Code.
 
 ## Directory layout
 
 ```
+models.yaml                                 # repo-wide model index (agent entry point)
+<domain>/models/<model-slug>/model.yaml     # machine-readable model manifest
 <domain>/models/<model-slug>/README.md      # HF id, license, upstream links
 <domain>/models/<model-slug>/recipes/       # how-to docs, one subfolder per task
 <domain>/models/<model-slug>/examples/      # ready-to-run scripts
 ```
 
-**Domains:** `earth_science/`, `material_science/`, `protein_folding/`, `healthcare/`
+**Domains:** `earth_science/`, `material_science/`, `protein_folding/`, `healthcare/`, `physics_simulation/`
 
 ## Model slug rule
 
@@ -27,7 +35,9 @@ Hugging Face id `org/model` → directory name `org__model` (replace `/` with `_
 3. Fill in `README.md`: Hugging Face model id (or `N/A` with alternate source), task, license (SPDX id or link), upstream code/paper.
 4. Place how-to docs under `<model-slug>/recipes/`. Prefer one subfolder per task (`recipes/inference/`, `recipes/finetune/`, etc.), each with its own `README.md`.
 5. Place ready-to-run scripts under `<model-slug>/examples/`: `docker_run.sh`, `run_<task>.sh`/`.py`, `preflight_<slug>.py`, and `sbatch_<task>_amd.sh`. All scripts must be `chmod +x`. For HPC models with heavy pip deps, also add `build_overlay_amd.sh`.
-6. Do not commit large checkpoints or datasets—document how to obtain them instead.
+6. Create a `model.yaml` in the model folder with structured metadata (name, hf_id, license, task, recipes, env_vars).
+7. Add the model to the root `models.yaml` index.
+8. Do not commit large checkpoints or datasets—document how to obtain them instead.
 
 ## Conventions
 
@@ -56,7 +66,7 @@ When you fix anything in a model's scripts, do **all** of the following in the s
 
 ## Cursor Agent Skills
 
-Domain-specific conventions for AI coding agents are defined in `.cursor/skills/`. Each `SKILL.md` covers one scope: general repo rules (`ai4science-studio`), Hugging Face recipe workflows (`ai4science-huggingface-recipes`), and per-domain cautions for earth science, healthcare, material science, and protein folding.
+Domain-specific conventions for AI coding agents are defined in `.cursor/skills/`. Each `SKILL.md` covers one scope: general repo rules (`ai4science-studio`), Hugging Face recipe workflows (`ai4science-huggingface-recipes`), per-domain cautions for earth science, healthcare, material science, protein folding, and physics simulation, plus operational skills (`ai4science-run-models`, `ai4science-discover`).
 
 ## Claude Code Skills
 
@@ -67,8 +77,17 @@ Slash commands for Claude Code live in `.claude/commands/`:
 | `/add-model` | Walk through adding a new model (slug, folder, README, recipes, examples) |
 | `/add-recipe` | Add or improve a recipe for an existing model |
 | `/check-model` | Audit a model folder for completeness and convention compliance |
-| `/run-stormcast` | Run StormCast deterministic inference on an AMD cluster (SIF → overlay → sbatch) |
-| `/run-orbit2` | Run ORBIT-2 inference on an AMD cluster (repo clone → SIF → overlay → synthetic smoke-test or real data) |
-| `/run-gpmolformer` | Run GP-MoLFormer molecule generation on an AMD cluster (unconditional or scaffold-constrained) |
+| `/list-models` | Discover and filter models by domain, task, or license |
+| `/status` | Readiness audit for all models (scripts, preflight, recipes) |
+| `/run-stormcast` | Run StormCast inference on an AMD cluster |
+| `/run-orbit2` | Run ORBIT-2 inference on an AMD cluster |
+| `/run-gpmolformer` | Run GP-MoLFormer molecule generation on an AMD cluster |
+| `/run-mattergen` | Run MatterGen crystal generation on an AMD cluster |
+| `/run-hydragnn` | Run HydraGNN ensemble inference on an AMD cluster |
+| `/run-swinunetr` | Run SwinUNETR medical segmentation on an AMD cluster |
+| `/run-semlaflow` | Run SemlaFlow 3D molecular generation on an AMD cluster |
+| `/run-reinvent4` | Run REINVENT4 transfer learning on an AMD cluster |
+| `/run-matey` | Run MATEY spatiotemporal modeling on an AMD cluster |
+| `/run-walrus` | Run Walrus physics rollout on an AMD cluster |
 
 Invoke with an argument, e.g. `/add-model jychoi-hpc/ORBIT-2 → earth_science` or `/run-stormcast SC_SIF=/path/to/sif`.
