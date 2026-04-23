@@ -6,9 +6,28 @@ Sample novel 3D drug-like molecular structures from a pretrained SemlaFlow check
 
 ## Prerequisites
 
-- AMD Instinct GPU with ROCm 6.4.1+ driver
-- Docker with GPU device access
-- Pretrained checkpoint (see [upstream repo](https://github.com/rssrwn/semla-flow) for Google Drive links)
+- Container: `rocm/pytorch:rocm6.4.1_ubuntu24.04_py3.12_pytorch_release_2.6.0`
+- GPU: AMD Instinct with ROCm 6.4.1+ driver
+- Runtime: Docker with GPU device access
+- Weights: download from Google Drive (see [upstream repo](https://github.com/rssrwn/semla-flow))
+
+## Environment Variables
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `CHECKPOINT` | Yes | -- | Path to pretrained `.ckpt` file |
+| `DATASET` | No | `drugs` | Target dataset (`qm9` or `drugs`) |
+| `OUTPUT_FILE` | No | `/workspace/generated.sdf` | Output SDF file path |
+| `NUM_STEPS` | No | `20` | ODE integration steps (minimum 20 recommended) |
+| `USE_COMPILE` | No | `1` | Enable `torch.compile` (~44% speedup) |
+| `NO_EMA` | No | `1` | Disable EMA for faster inference (~8% extra) |
+
+## Quick Start
+
+```bash
+cd healthcare/models/SemlaFlow/examples
+./docker_run.sh inference
+```
 
 ## Setup
 

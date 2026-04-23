@@ -6,8 +6,26 @@ Use REINVENT4's Transfer Learning (TL) mode to bias a pretrained generative mode
 
 ## Prerequisites
 
-- AMD Instinct GPU with ROCm 6.3.3+ driver
-- Docker with GPU device access
+- Container: `rocm/pytorch:rocm6.3.3_ubuntu24.04_py3.12_pytorch_release_2.6.0`
+- GPU: AMD Instinct with ROCm 6.3.3+ driver
+- Runtime: Docker with GPU device access
+- Data: ChEMBL35 SMILES (see download section below)
+
+## Environment Variables
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `CONFIG_FILE` | Yes | `/workspace/tl_config.toml` | TOML configuration for transfer learning |
+| `RESULTS_DIR` | No | `/workspace/results` | Logs and results directory |
+
+## Quick Start
+
+```bash
+cd healthcare/models/REINVENT4/examples
+./docker_run.sh
+# Then inside the container:
+bash /workspace/run_tl.sh
+```
 
 ## Setup
 

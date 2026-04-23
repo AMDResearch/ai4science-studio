@@ -1,12 +1,29 @@
 # HydraGNN: inference and ensemble workflows
 
+> **Ready-to-run scripts:** see [`../../examples/`](../../examples/) for `docker_run.sh` and `run_inference.sh`.
+
 This is the usual **AI4Science Studio** entry point: use **published checkpoints** from Hugging Face with **HydraGNN** on branch **`Predictive_GFM_2024`**.
 
 ## Prerequisites
 
-1. Clone [`ORNL/HydraGNN`](https://github.com/ORNL/HydraGNN) and check out branch **`Predictive_GFM_2024`**.
-2. Install the package and dependencies per the upstream README (for example `pip install -e .` and the repository's requirement files).
-3. Download the **ensemble** artifacts you need from [`mlupopa/HydraGNN_Predictive_GFM_2024`](https://huggingface.co/mlupopa/HydraGNN_Predictive_GFM_2024). Under `Ensemble_of_models/`, each trial folder (e.g. `gfm_0.229`) typically contains a **`config.json`** and checkpoint files named like **`gfm_0.<ID>_epoch_<N>.pk`** (see the live Hub tree for exact names).
+- Container: `rocm/pytorch:rocm7.0_ubuntu22.04_py3.10_pytorch_release_2.7.1`
+- Code: clone [`ORNL/HydraGNN`](https://github.com/ORNL/HydraGNN) branch **`Predictive_GFM_2024`**; install with `pip install -e .`
+- Weights: download from [`mlupopa/HydraGNN_Predictive_GFM_2024`](https://huggingface.co/mlupopa/HydraGNN_Predictive_GFM_2024) -- under `Ensemble_of_models/`, each trial folder has a `config.json` and `.pk` checkpoint
+
+## Environment Variables
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `HG_CHECKPOINT` | Yes | -- | Path to `.pk` checkpoint file |
+| `HG_CONFIG` | Yes | -- | Matching `config.json` for the checkpoint |
+| `HG_OUTPUT_DIR` | No | `/workspace/results` | Prediction output directory |
+
+## Quick Start
+
+```bash
+cd material_science/models/HydraGNN/examples
+./docker_run.sh inference
+```
 
 ## Align config with weights
 

@@ -1,11 +1,27 @@
 # MatterGen — Inference Recipe
 
+> **Ready-to-run scripts:** see [`../../examples/`](../../examples/) for `docker_run.sh`, `run_inference.sh`, and `sbatch_inference_mi300x.sh`.
+
 Generate novel inorganic crystal structures using pretrained MatterGen checkpoints.
 
 ## Prerequisites
 
-- AMD Instinct GPU (MI300X recommended) with ROCm kernel-mode driver (`amdgpu-dkms`)
-- Docker with AMD Container Toolkit
+- Container: `rocm/pytorch:rocm7.0_ubuntu22.04_py3.10_pytorch_release_2.7.1`
+- GPU: AMD Instinct MI300X recommended (ROCm kernel-mode driver `amdgpu-dkms`)
+- Runtime: Docker with AMD Container Toolkit
+- Code: clone [`microsoft/mattergen`](https://github.com/microsoft/mattergen)
+
+## Environment Variables
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `PRETRAINED_NAME` | No | `mattergen_base` | Checkpoint / pretrained model name |
+| `BATCH_SIZE` | No | `16` | Structures per batch |
+| `NUM_BATCHES` | No | `1` | Number of batches |
+| `OUTPUT_DIR` | No | `/workspace/results` | Output directory |
+| `PROPERTIES` | No | -- | Property dict for conditioned generation (empty = unconditional) |
+| `GUIDANCE_FACTOR` | No | `2.0` | Diffusion guidance factor when conditioning |
+| `MG_SIF` | No | -- | Apptainer SIF path (SLURM scripts) |
 
 ## Setup
 

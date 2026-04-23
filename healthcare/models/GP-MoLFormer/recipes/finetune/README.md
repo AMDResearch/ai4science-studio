@@ -2,13 +2,16 @@
 
 > **Research / engineering use only.** Not for clinical or diagnostic use.
 
+> **Ready-to-run scripts:** see [`../../examples/`](../../examples/) for `docker_run.sh` and `run_pairtune.sh`.
+
 Fine-tune GP-MoLFormer toward a target molecular property using the pair-tuning approach — a lightweight RL-like optimization that adapts the model without full retraining.
 
 ## Prerequisites
 
-- AMD Instinct GPU with ROCm 7.0+ driver
-- Docker with AMD Container Toolkit
-- Container set up via `examples/docker_run.sh` (includes applying `pairtune_training.patch`)
+- Container: `rocm/pytorch:rocm7.0_ubuntu22.04_py3.10_pytorch_release_2.7.1`
+- GPU: AMD Instinct with ROCm 7.0+ driver
+- Runtime: Docker with AMD Container Toolkit
+- Setup: container initialized via `examples/docker_run.sh` (applies `pairtune_training.patch`)
 
 ## What is pair-tuning?
 
