@@ -35,8 +35,8 @@
 #   For older hardware (MI100/gfx908): use a rocm6.x image.
 
 #SBATCH --job-name=gpmolformer-infer
-#SBATCH --partition=YOUR_PARTITION_HERE
-#SBATCH --account=YOUR_ACCOUNT_HERE
+#SBATCH --partition=1CN192C4G1H_MI300A_Ubuntu22
+#SBATCH -A amd
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1
 #SBATCH --ntasks=1
@@ -47,7 +47,12 @@
 
 set -euo pipefail
 
-SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+if [[ -n "${SLURM_JOB_ID:-}" ]]; then
+  _ORIG_CMD=$(scontrol show job "$SLURM_JOB_ID" | sed -n 's/.*Command=\(\S\+\).*/\1/p')
+  SCRIPT_DIR=$(cd "$(dirname "$_ORIG_CMD")" && pwd)
+else
+  SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+fi
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -62,6 +67,10 @@ GPMOL_WORK_DIR="${GPMOL_WORK_DIR:-$SCRIPT_DIR}"
 SCAFFOLD="${SCAFFOLD:-}"
 NUM_BATCHES="${NUM_BATCHES:-1}"
 OUTPUT_FILE="${OUTPUT_FILE:-/workspace/generated.csv}"
+
+# Per-job package dir for pip install --target (SIF is read-only)
+GPMOL_PKGDIR="${TMPDIR:-/tmp}/gpmol-pkgs-${SLURM_JOB_ID:-$$}"
+mkdir -p "$GPMOL_PKGDIR"
 
 echo "=== GP-MoLFormer molecule generation ==="
 echo "  SIF          : $GPMOL_SIF"
@@ -78,6 +87,8 @@ echo ""
 apptainer exec \
     --rocm \
     --bind "$GPMOL_WORK_DIR":/workspace \
+    --bind "$SCRIPT_DIR":/scripts \
+    --bind "${GPMOL_PKGDIR}:/opt/gpmol-pkgs" \
     --env SCAFFOLD="$SCAFFOLD" \
     --env NUM_BATCHES="$NUM_BATCHES" \
     --env OUTPUT_FILE="$OUTPUT_FILE" \
@@ -94,11 +105,24 @@ fi
 
 cd gp-molformer
 
-echo "--- Installing dependencies ---"
-pip install -q --no-cache-dir -r requirements.txt 2>&1 | tail -5
+echo "--- Installing dependencies (from environment.yml, via pip) ---"
+pip install -q --no-cache-dir --target /opt/gpmol-pkgs \
+    "accelerate==0.26.1" "datasets==2.20.0" "networkx>=3.1" \
+    "numpy<2" "pandas>=2.2" "peft==0.10.0" "scikit-learn>=1.5" \
+    "transformers>=4.36,<4.41" 2>&1 | tail -5
+pip install -q --no-cache-dir --target /opt/gpmol-pkgs \
+    rdkit-pypi 2>&1 | tail -3 \
+    || echo "  rdkit unavailable for $(python3 --version) — validity check will be skipped"
+
+echo "--- Stripping torch / nvidia / triton (keep ROCm torch from SIF) ---"
+for pkg in torch torchvision torchaudio nvidia triton; do
+    rm -rf "/opt/gpmol-pkgs/${pkg}" "/opt/gpmol-pkgs/${pkg}"-*.dist-info 2>/dev/null || true
+done
+
+export PYTHONPATH="/opt/gpmol-pkgs:${PYTHONPATH:-}"
 
 echo "--- Running generation ---"
-bash /workspace/run_generation.sh
+bash /scripts/run_generation.sh
 '
 
 echo ""

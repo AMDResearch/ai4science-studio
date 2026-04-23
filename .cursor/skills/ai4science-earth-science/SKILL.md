@@ -70,6 +70,12 @@ The `earth_science/` domain covers **climate**, **weather**, and broader **Earth
 
 **Correct pattern — NFS staging + strip + copy:** see studio SKILL.md for full code. Use `--extra-index-url https://download.pytorch.org/whl/<ROCM_WHL_TAG>` (no constraint); ROCm torch has no `nvidia-*` CUDA co-package deps so the entire CUDA chain is never resolved.
 
+## Validated dep quirks (earth science models)
+
+- **`tensordict`** (used by StormCast via earth2studio) requires **`pyvers`** at runtime. `--no-deps` for tensordict is needed to avoid pulling CUDA torch, but `pyvers` must be installed separately alongside the other runtime deps.
+- **StormCast no-overlay path**: uses the install-to-tmp + bind-mount pattern (see studio SKILL.md). Packages go to `/opt/stormcast-pkgs` via `--target` + bind-mount. `PYTHONPATH` must include this path in the inference `bash -c` block.
+- **ORBIT-2 no-overlay path**: same pattern, packages at `/opt/orbit2-pkgs`. All three `apptainer exec` calls (checkpoint download, synthetic data gen, srun inference) must include `"${PKGDIR_BIND[@]}"`.
+
 ## Typical pitfalls
 
 - Mixing incompatible projection or time semantics — document CRS and time axis assumptions.

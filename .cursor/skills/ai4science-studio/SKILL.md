@@ -161,6 +161,8 @@ apptainer pull docker://rocm/pytorch:rocm7.2.2_ubuntu24.04_py3.12_pytorch_releas
 
 **Why `--extra-index-url` instead:** `--extra-index-url https://download.pytorch.org/whl/rocm7.2` causes pip to pick the ROCm torch wheel, which has **no** `nvidia-*` CUDA co-package deps.
 
+**Prefer `--extra-index-url` + strip over `--no-deps` for runtime installs.** Using `--no-deps` to avoid pulling CUDA torch also silently drops transitive runtime deps (e.g. `tensordict` needs `pyvers` and `treelib`). Instead, use `--extra-index-url` so pip resolves the full dep tree with ROCm torch, then strip `torch / torchvision / torchaudio / nvidia / triton` after install. The ROCm torch download (~3 GB) is wasteful but the install is correct. Reserve `--no-deps` for the overlay build (where overlay size is constrained and dep lists are manually curated).
+
 ```bash
 # Inside the container during overlay build:
 pip install -q --no-cache-dir --target "$STAGE_DIR" \
@@ -186,9 +188,41 @@ Always verify at end: `assert 'rocm' in torch.__version__`
 
 ## pip install requires --target (SIF is read-only)
 
-SIF files are squashfs (read-only). All `pip install` inside `apptainer exec` must use `--target /workspace/pip-packages`. Set `PYTHONPATH=/workspace/pip-packages:...`.
+SIF files are squashfs (read-only). All `pip install` inside `apptainer exec` must use `--target <dir>`. Set `PYTHONPATH=<dir>:...`.
 
 **Torch strip is safe** in overlay/pip-packages — the SIF's venv torch is untouched and remains the primary copy.
+
+## No-overlay install-to-tmp pattern
+
+When an sbatch script supports an optional overlay but the user doesn't provide one, deps must be installed into a **host-side temp dir** and **bind-mounted** into the container. The read-only SIF prevents `pip install` into the venv.
+
+```bash
+PKGDIR_BIND=()
+if [[ -n "$SIF" ]] && { [[ -z "$OVERLAY" ]] || [[ ! -f "$OVERLAY" ]]; }; then
+  PKGDIR="${TMPDIR:-/tmp}/<model>-pkgs-${SLURM_JOB_ID:-$$}"
+  mkdir -p "$PKGDIR"
+  PKGDIR_BIND=(--bind "${PKGDIR}:/opt/<model>-pkgs")
+
+  # Write install script to a host file (avoids quoting issues)
+  cat > "$INSTALL_SCRIPT" << 'INSTALLEOF'
+  ...pip install --target /opt/<model>-pkgs ...
+  INSTALLEOF
+
+  apptainer exec --rocm "${PKGDIR_BIND[@]}" \
+      --bind "$(dirname "$INSTALL_SCRIPT"):$(dirname "$INSTALL_SCRIPT")" \
+      "$SIF" bash "$INSTALL_SCRIPT"
+fi
+
+# Wire PKGDIR_BIND into ALL subsequent apptainer exec calls:
+apptainer exec --rocm "${OVERLAY_ARG[@]}" "${PKGDIR_BIND[@]}" ...
+```
+
+Key design points:
+- `PKGDIR_BIND` is an empty array when overlay IS present → expands to nothing
+- The host dir is bound to the same path the overlay would provide (e.g. `/opt/orbit2-pkgs`)
+- The rank script's PYTHONPATH stays the same regardless of overlay vs bind-mount
+- The install script heredoc uses a **quoted delimiter** (`<< 'EOF'`) so no escaping is needed; pass env vars via `--env`
+- **Every** `apptainer exec` in the script must include `"${PKGDIR_BIND[@]}"` — the checkpoint download, the data generation, and the inference run
 
 ## Multi-GPU distributed launch (Apptainer + SLURM)
 

@@ -24,8 +24,8 @@ trainer:
 
 #----------  Parallelism -------------
 parallelism:
-  fsdp: 1
-  simple_ddp: 1
+  fsdp: 4
+  simple_ddp: 4
   tensor_par: 1
   seq_par: 1
 

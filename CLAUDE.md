@@ -38,6 +38,22 @@ Hugging Face id `org/model` → directory name `org__model` (replace `/` with `_
 - **Healthcare & Life Sciences (HCLS) recipes** must include a research/engineering-only disclaimer and must not reference patient-identifiable data or PHI.
 - Large artifacts (checkpoints, datasets, `.env` files) are in `.gitignore`; do not add them.
 
+## Organic lesson capture and propagation
+
+Every bug fix, workaround, or pattern discovery is a lesson. Do not treat skill/rule/recipe updates as a separate task — fold them into the fix itself.
+
+When you fix anything in a model's scripts, do **all** of the following in the same pass:
+
+1. **Fix the immediate script** that failed.
+2. **Propagate to sibling models.** Scan `*/models/*/examples/` for the same pattern and fix them now.
+3. **Propagate across runtimes.** If the fix was in an Apptainer script, check the Docker equivalent (and vice versa). Common cross-runtime issues: `SCRIPT_DIR` resolution, read-only FS handling, dep lists/version pins, env-var clobbering, torch protection after `pip install`.
+4. **Update the relevant skill/doc.** Add the lesson to the right file:
+   - Repo-wide patterns → `.cursor/skills/ai4science-studio/SKILL.md`
+   - Domain-specific patterns → `.cursor/skills/ai4science-<domain>/SKILL.md`
+5. **Create or update a rule** (`.cursor/rules/`) if the lesson is a recurring process mistake, not just a one-off technical fix.
+
+**Litmus test:** would a fresh agent session working on a different model make the same mistake? If yes, the fix is incomplete — the lesson must be discoverable in a skill, rule, or `CLAUDE.md` before the task is done.
+
 ## Cursor Agent Skills
 
 Domain-specific conventions for AI coding agents are defined in `.cursor/skills/`. Each `SKILL.md` covers one scope: general repo rules (`ai4science-studio`), Hugging Face recipe workflows (`ai4science-huggingface-recipes`), and per-domain cautions for earth science, healthcare, material science, and protein folding.

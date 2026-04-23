@@ -16,12 +16,15 @@
 #      Recommended image: rocm/pytorch:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0
 #   2. (Optional) Build a persistent overlay with pre-installed deps:
 #        sbatch build_overlay_amd.sh   # runs once, creates stormcast-overlay.img
-#      Without an overlay, deps are installed on each job start (~5 min overhead).
+#      Without an overlay, deps are installed into a per-job temp dir on the
+#      host and bind-mounted into the container (~5 min overhead per job).
 #   3. Adjust #SBATCH directives below for your site's partition and account.
 #
 # ── Key environment variables ─────────────────────────────────────────────────
 #   SC_SIF        Path to Apptainer SIF image (required for container mode)
-#   SC_OVERLAY    Path to pre-built ext3 overlay (optional, skips pip install)
+#   SC_OVERLAY    Path to pre-built ext3 overlay (optional, skips pip install).
+#                 If unset (or file missing), deps are installed into a
+#                 per-job temp dir at startup (~5 min overhead).
 #   SC_START      Forecast start time ISO-8601, e.g. 2025-01-01T06 (default: 2025-01-01T06)
 #   SC_STEPS      Number of 1-h inference steps (default: 6)
 #   SC_OUTPUT     Output zarr path (default: outputs/pred-<start>.zarr next to script)
@@ -34,8 +37,8 @@
 # See: ../recipes/inference/README.md
 
 #SBATCH --job-name=stormcast-infer
-#SBATCH --partition=YOUR_PARTITION_HERE
-#SBATCH --account=YOUR_ACCOUNT_HERE
+#SBATCH --partition=1CN192C4G1H_MI300A_Ubuntu22
+#SBATCH -A amd
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1
 #SBATCH --ntasks=1
@@ -46,7 +49,12 @@
 
 set -euo pipefail
 
-SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+if [[ -n "${SLURM_JOB_ID:-}" ]]; then
+  _ORIG_CMD=$(scontrol show job "$SLURM_JOB_ID" | sed -n 's/.*Command=\(\S\+\).*/\1/p')
+  SCRIPT_DIR=$(cd "$(dirname "$_ORIG_CMD")" && pwd)
+else
+  SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+fi
 
 # ---------------------------------------------------------------------------
 # Configuration (override by exporting before sbatch)
@@ -90,28 +98,66 @@ if [[ -n "${SC_SIF}" ]]; then
     echo "  Runtime : Apptainer (${SC_SIF})"
 
     OVERLAY_ARG=()
+    PKGDIR_BIND=()
     if [[ -n "${SC_OVERLAY}" ]] && [[ -f "${SC_OVERLAY}" ]]; then
         OVERLAY_ARG=(--overlay "${SC_OVERLAY}:ro")
         echo "  Overlay : ${SC_OVERLAY}"
     else
-        echo "  No overlay — deps will be installed at job start (~5 min)"
+        # ---------------------------------------------------------------
+        # No-overlay dep install (~5 min one-time per job)
+        # Install into a per-job host dir, bind-mount to /opt/stormcast-pkgs.
+        # Uses --extra-index-url so pip resolves torch from the ROCm wheel
+        # index (no nvidia-* CUDA co-deps). Torch is stripped afterward.
+        # This is more robust than --no-deps, which also drops transitive
+        # runtime deps (pyvers, treelib, etc.).
+        # ---------------------------------------------------------------
+        SC_PKGDIR="${TMPDIR:-/tmp}/stormcast-pkgs-${SLURM_JOB_ID:-$$}"
+        mkdir -p "$SC_PKGDIR"
+        PKGDIR_BIND=(--bind "${SC_PKGDIR}:/opt/stormcast-pkgs")
+        ROCM_WHL_TAG="${ROCM_WHL_TAG:-rocm7.2}"
+        echo "  No overlay — installing deps → $SC_PKGDIR (~5 min)"
+
+        _INSTALL_SCRIPT="${TMPDIR:-/tmp}/sc_dep_install_${SLURM_JOB_ID:-$$}.sh"
+        cat > "$_INSTALL_SCRIPT" << 'INSTALLEOF'
+#!/usr/bin/env bash
+set -euo pipefail
+source /opt/venv/bin/activate
+PKG=/opt/stormcast-pkgs
+WHL="https://download.pytorch.org/whl/${ROCM_WHL_TAG}"
+
+echo "--- [1/2] Installing earth2studio[stormcast] + cartopy ---"
+pip install -q --no-cache-dir --target "$PKG" \
+    --extra-index-url "$WHL" \
+    "earth2studio[stormcast]" cartopy 2>&1 | tail -5
+
+echo "--- [2/2] Strip torch / nvidia / triton (keep SIF ROCm torch) ---"
+for pkg in torch torchvision torchaudio torchgen functorch nvidia triton; do
+    rm -rf "${PKG}/${pkg}" "${PKG}/${pkg}"-*.dist-info 2>/dev/null || true
+done
+
+echo "--- Installed: $(du -sh $PKG | cut -f1) ---"
+INSTALLEOF
+        chmod +x "$_INSTALL_SCRIPT"
+
+        apptainer exec --rocm \
+            "${PKGDIR_BIND[@]}" \
+            --bind "$(dirname "$_INSTALL_SCRIPT"):$(dirname "$_INSTALL_SCRIPT")" \
+            --env ROCM_WHL_TAG="$ROCM_WHL_TAG" \
+            "$SC_SIF" \
+            bash "$_INSTALL_SCRIPT"
+
+        echo "  Dep install complete"
     fi
 
     apptainer exec \
         --rocm \
-        "${OVERLAY_ARG[@]}" \
+        "${OVERLAY_ARG[@]}" "${PKGDIR_BIND[@]}" \
         --bind "${SCRIPT_DIR}:/workspace" \
         --env LD_LIBRARY_PATH=/opt/venv/lib/python3.12/site-packages/torch/lib \
         "${SC_SIF}" \
         bash -c '
 source /opt/venv/bin/activate
-export PYTHONPATH="${PYTHONPATH:-}"
-
-# Install deps if not pre-baked in an overlay
-if ! python3 -c "import earth2studio, cartopy" 2>/dev/null; then
-    echo "--- Installing earth2studio[stormcast] and cartopy ---"
-    pip install -q --no-cache-dir "earth2studio[stormcast]" cartopy 2>&1 | tail -5
-fi
+export PYTHONPATH="/opt/stormcast-pkgs:${PYTHONPATH:-}"
 
 python /workspace/run_inference.py \
     --start "'"${SC_START}"'" \

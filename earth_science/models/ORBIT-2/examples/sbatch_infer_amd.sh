@@ -42,6 +42,8 @@
 #                         If unset, runs bare-metal.
 #   ORBIT2_OVERLAY        Path to a pre-built ext3 overlay image (optional).
 #                         Build once with build_overlay_amd.sh, then reuse across jobs.
+#                         If unset (or file missing), deps are installed into a
+#                         per-job temp dir at startup (~15 min overhead).
 #   STUDIO_ORBIT2_LAUNCHER  Override path to run_visualize.py (rarely needed).
 #
 # Multi-node scaling:
@@ -50,12 +52,12 @@
 #
 # See ../recipes/inference-and-visualization.md and ../recipes/local-cluster-amd.md
 
-#SBATCH -A YOUR_PROJECT_HERE
 #SBATCH -J orbit2-vis
-#SBATCH --partition=YOUR_PARTITION_HERE
+#SBATCH --partition=1CN192C4G1H_MI300A_Ubuntu22
+#SBATCH -A amd
 #SBATCH --nodes=1
-#SBATCH --gres=gpu:8
-#SBATCH --ntasks-per-node=8
+#SBATCH --gres=gpu:4
+#SBATCH --ntasks-per-node=4
 #SBATCH --cpus-per-task=7
 #SBATCH -t 00:30:00
 #SBATCH -o orbit2-vis-%j.out
@@ -87,6 +89,87 @@ export PYTHONNOUSERSITE=1
 export HSA_NO_SCRATCH_RECLAIM=1
 export MIOPEN_USER_DB_PATH="${TMPDIR:-/tmp}/orbit2-miopen-${SLURM_JOB_ID:-$$}"
 mkdir -p "$MIOPEN_USER_DB_PATH"
+
+# ---------------------------------------------------------------------------
+# No-overlay dep install (Apptainer only — ~15 min one-time per job)
+# When ORBIT2_SIF is set but no overlay is provided, install all Python
+# dependencies into a per-job temp dir on the host and bind-mount it into
+# the container at /opt/orbit2-pkgs (the same path the overlay provides).
+# ---------------------------------------------------------------------------
+PKGDIR_BIND=()
+if [[ -n "${ORBIT2_SIF:-}" ]] && { [[ -z "${ORBIT2_OVERLAY:-}" ]] || [[ ! -f "${ORBIT2_OVERLAY:-}" ]]; }; then
+  ORBIT2_PKGDIR="${TMPDIR:-/tmp}/orbit2-pkgs-${SLURM_JOB_ID:-$$}"
+  mkdir -p "$ORBIT2_PKGDIR"
+  PKGDIR_BIND=(--bind "${ORBIT2_PKGDIR}:/opt/orbit2-pkgs")
+  ROCM_WHL_TAG="${ROCM_WHL_TAG:-rocm7.2}"
+  echo "--- No overlay: installing ORBIT-2 deps → $ORBIT2_PKGDIR (~15 min) ---"
+
+  _INSTALL_SCRIPT="${TMPDIR:-/tmp}/orbit2_dep_install_${SLURM_JOB_ID:-$$}.sh"
+  cat > "$_INSTALL_SCRIPT" << 'INSTALLEOF'
+#!/usr/bin/env bash
+set -euo pipefail
+source /opt/venv/bin/activate
+PKG=/opt/orbit2-pkgs
+WHL="https://download.pytorch.org/whl/${ROCM_WHL_TAG}"
+
+echo "--- [1/5] Core deps (mpi4py, huggingface-hub, pytorch-lightning) ---"
+pip install -q --no-cache-dir --target "$PKG" \
+    --extra-index-url "$WHL" \
+    mpi4py huggingface-hub 2>&1 | tail -3
+pip install -q --no-cache-dir --no-deps --target "$PKG" \
+    pytorch-lightning 2>&1 | tail -3
+pip install -q --no-cache-dir --target "$PKG" \
+    --extra-index-url "$WHL" \
+    lightning-utilities torchmetrics 2>&1 | tail -3
+
+echo "--- [2/5] Science / data deps ---"
+pip install -q --no-cache-dir --target "$PKG" \
+    --extra-index-url "$WHL" \
+    "timm==0.9.2" "tensorboard==2.11.2" wandb \
+    cdsapi "dask>=2022.2.0" "importlib-metadata==4.13.0" \
+    "matplotlib>=3.5.3" "netcdf4>=1.6.2" "scikit-learn>=1.0.2" \
+    "xarray>=0.20.2" "rasterio>=1.3.7" scikit-image einops lpips \
+    pyyaml 2>&1 | tail -5
+
+echo "--- [3/5] xformers for ROCm ---"
+pip install -q --no-cache-dir --no-deps -U xformers \
+    --index-url "$WHL" \
+    --target "$PKG" 2>&1 | tail -3
+
+echo "--- [4/5] xformers.components shim ---"
+python3 - "$PKG" << 'PYEOF'
+import pathlib, sys
+xf = pathlib.Path(sys.argv[1]) / "xformers"
+comp = xf / "components"; attn = comp / "attention"
+for d in [comp, attn]: d.mkdir(exist_ok=True)
+(comp / "__init__.py").write_text("")
+(attn / "__init__.py").write_text("")
+(attn / "core.py").write_text(
+    "import torch.nn.functional as F\n\n"
+    "def scaled_dot_product_attention(q, k, v, att_mask=None, dropout=0.0):\n"
+    "    return F.scaled_dot_product_attention(q, k, v, attn_mask=att_mask, dropout_p=dropout)\n"
+)
+print("xformers.components shim written")
+PYEOF
+
+echo "--- [5/5] Strip torch / nvidia / triton ---"
+for pkg in torch torchvision torchaudio torchgen functorch nvidia triton; do
+    rm -rf "${PKG}/${pkg}" "${PKG}/${pkg}"-*.dist-info 2>/dev/null || true
+done
+
+echo "--- Installed: $(du -sh $PKG | cut -f1) ---"
+INSTALLEOF
+  chmod +x "$_INSTALL_SCRIPT"
+
+  apptainer exec --rocm \
+      "${PKGDIR_BIND[@]}" \
+      --bind "$(dirname "$_INSTALL_SCRIPT"):$(dirname "$_INSTALL_SCRIPT")" \
+      --env ROCM_WHL_TAG="$ROCM_WHL_TAG" \
+      "$ORBIT2_SIF" \
+      bash "$_INSTALL_SCRIPT"
+
+  echo "--- Dep install complete ---"
+fi
 
 # ---------------------------------------------------------------------------
 # Synthetic data (optional — generates ~2 MB dataset, no ERA5/PRISM required)
@@ -136,7 +219,7 @@ PYEOF
       if [[ -n "${ORBIT2_OVERLAY:-}" ]] && [[ -f "${ORBIT2_OVERLAY}" ]]; then
         OVERLAY_ARG=(--overlay "${ORBIT2_OVERLAY}:ro")
       fi
-      CKPT=$(apptainer exec "${OVERLAY_ARG[@]}" \
+      CKPT=$(apptainer exec "${OVERLAY_ARG[@]}" "${PKGDIR_BIND[@]}" \
           --env PYTHONPATH=/opt/orbit2-pkgs \
           "$ORBIT2_SIF" \
           bash -c "source /opt/venv/bin/activate && PYTHONPATH=/opt/orbit2-pkgs python3 -c \"\$1\"" _ "$HF_DL_SCRIPT")
@@ -202,7 +285,7 @@ RANKEOF
   if [[ "${ORBIT2_USE_SYNTHETIC:-0}" == "1" ]]; then
     apptainer exec \
         --rocm \
-        "${OVERLAY_ARG[@]}" \
+        "${OVERLAY_ARG[@]}" "${PKGDIR_BIND[@]}" \
         --bind "$SCRIPT_DIR":/examples \
         "$ORBIT2_SIF" \
         python3 /examples/make_synthetic_data.py --out-dir "$SYNTH_DIR"
@@ -220,7 +303,7 @@ RANKEOF
   # for any number of nodes without changing the srun command.
   srun --mpi=pmix apptainer exec \
       --rocm \
-      "${OVERLAY_ARG[@]}" \
+      "${OVERLAY_ARG[@]}" "${PKGDIR_BIND[@]}" \
       --bind "$ORBIT2_ROOT":/orbit2 \
       --bind "$SCRIPT_DIR":/examples \
       --bind "$(dirname "$RANK_SCRIPT"):$(dirname "$RANK_SCRIPT")" \

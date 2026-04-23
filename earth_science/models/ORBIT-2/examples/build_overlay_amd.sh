@@ -56,8 +56,7 @@
 #                           (default: rocm7.2)
 
 #SBATCH --job-name=orbit2-overlay
-#SBATCH --partition=YOUR_PARTITION_HERE
-#SBATCH --account=YOUR_ACCOUNT_HERE
+#SBATCH --partition=1CN192C4G1H_MI300A_Ubuntu22
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --gres=gpu:1
