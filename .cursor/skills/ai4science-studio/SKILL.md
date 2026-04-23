@@ -1,6 +1,6 @@
 ---
 name: ai4science-studio
-description: Applies when working in the AI4Science Studio repository. Describes domain layout, model slug rules, where recipes live, safety expectations, and AMD/ROCm HPC patterns validated in practice.
+description: Applies when working in the AI4Science Studio repository. Describes domain layout, model slug rules, where recipes live, safety expectations, and AMD/ROCm HPC patterns (Apptainer and Docker) validated in practice.
 ---
 
 # AI4Science Studio (repository)
@@ -30,13 +30,27 @@ Hugging Face id `org/model` → directory name `org__model` (replace `/` with do
    - `docker_run.sh` — auto-detects AMD Container Toolkit (`docker info | grep -qi amd`) vs device passthrough (`/dev/kfd` + all `/dev/dri/renderD*`); checks for existing container and exits with attach hint; auto-clones upstream repo if absent.
    - `run_<task>.sh` / `run_<task>.py` — all key params overridable via env vars with sensible defaults; prints config summary before running; exits with clear error when required inputs are missing.
    - `preflight_<slug>.py` — smoke-test verifying GPU access and imports.
-   - `sbatch_<task>_amd.sh` — SLURM batch script; use `--rocm` (not `--nv`) for AMD/Apptainer GPU passthrough. Named `_amd.sh` (not `_mi300x.sh`) — the same script works on MI250X, MI300X, and MI350X with a `rocm7.2.x` image.
-   - `build_overlay_amd.sh` — (HPC models with heavy pip deps) builds a persistent Apptainer ext3 overlay pre-loaded with pip deps. Run once per cluster; reuse with `--overlay <path>:ro` to skip 5–15 min pip install on every job. See "Overlay build pattern" below.
+   - `sbatch_<task>_amd.sh` — SLURM + Apptainer batch script; use `--rocm` (not `--nv`) for AMD GPU passthrough.
+   - `sbatch_<task>_docker.sh` — SLURM + Docker batch script; uses device passthrough or `--runtime=amd`.
+   - `build_overlay_amd.sh` — (Apptainer only, HPC models with heavy pip deps) builds a persistent ext3 overlay. Run once per cluster; reuse with `--overlay <path>:ro`.
    - All scripts must be `chmod +x`.
 5. Copy structure from [`_template/`](../../../_template/) when starting a new model folder.
-6. For **HPC-oriented** models, consider `recipes/local-cluster-amd.md` (institutional **AMD Instinct** + SLURM/PBS-style notes) and **`data-access.md`** sections on **staging** data (public **Globus** or **Hugging Face CLI** vs copy from **OLCF**/collaborator when public endpoints are not usable).
-7. Write recipes around **AMD Instinct** with **PyTorch ROCm** when that matches what upstream documents for supported paths (`gpu_type: "amd"` where configs expose it). Point readers to upstream for install options this repo does not spell out.
-8. **GPU arch naming:** Scripts are named `_amd.sh`, not `_mi300x.sh`. The same `rocm7.2.x` image covers MI250X (gfx90a), MI300X (gfx942), and MI350X (gfx950). Only the `ROCM_WHL_TAG` env var and the SIF image need to change for a different ROCm generation — document those as the two knobs, not the GPU model name.
+6. For **HPC-oriented** models, consider `recipes/local-cluster-amd.md` and **`data-access.md`** sections on data staging.
+7. Write recipes around **AMD Instinct** with **PyTorch ROCm** when that matches upstream supported paths.
+8. **GPU arch naming:** Scripts are named `_amd.sh` / `_docker.sh`, not `_mi300x.sh`. The same `rocm7.2.x` image covers MI250X (gfx90a), MI300X (gfx942), and MI350X (gfx950). Only the `ROCM_WHL_TAG` env var and the image tag need to change for a different ROCm generation.
+
+---
+
+# Common HPC patterns (both Apptainer and Docker)
+
+## Rule: always check the Apptainer path first
+
+Before writing or debugging a Docker sbatch script, **always review**:
+1. The corresponding `sbatch_*_amd.sh` (Apptainer) script in the repo
+2. Any hand-crafted test scripts the user has validated
+3. The cluster lessons in memory / SKILL files
+
+Many issues (dep lists, version pins, env vars, torch protection) are already solved in the Apptainer path. Adapt solutions from there rather than reinventing.
 
 ## Canonical AMD/ROCm container image
 
@@ -45,12 +59,71 @@ Hugging Face id `org/model` → directory name `org__model` (replace `/` with do
 - Covers MI250X (gfx90a), MI300X (gfx942), MI350X (gfx950)
 - Python 3.12, PyTorch 2.10.0+rocm7.2.2
 - For older hardware (MI100/gfx908): use a `rocm6.x` image
-- For future hardware: update SIF + `ROCM_WHL_TAG` together
+- For future hardware: update image tag + `ROCM_WHL_TAG` together
 
-Build the SIF once and reuse:
+## Never clobber inherited env vars
+
+Always **append** to `LD_LIBRARY_PATH`, `PYTHONPATH`, `PATH`, `LD_PRELOAD` using `${VAR:-}`. This applies to both runtimes:
+- Apptainer `--env LD_LIBRARY_PATH=X` replaces the image default
+- Docker `-e LD_LIBRARY_PATH=X` replaces the image default
+
+The `rocm/pytorch` image sets `LD_LIBRARY_PATH=/opt/rocm/lib`. Clobbering it makes `libhsa-runtime64.so` and `libamdhip64.so` unfindable → `torch.cuda.device_count()=0` → silent CPU fallback.
+
+**Correct pattern** — append inside the container script:
 ```bash
-apptainer pull docker://rocm/pytorch:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0
+export LD_LIBRARY_PATH="/opt/venv/lib/python3.12/site-packages/torch/lib:${LD_LIBRARY_PATH:-}"
+export PYTHONPATH="/my/paths:${PYTHONPATH:-}"
 ```
+
+Only use `-e` / `--env` for variables you are **introducing** (e.g. `-e ORBIT2_ROOT=/orbit2`).
+
+## SLURM spool dir workaround
+
+`BASH_SOURCE[0]` resolves to `/var/spool/slurmd/jobXXXX/` when SLURM copies the script before execution. Use `scontrol` to recover the original path:
+
+```bash
+SCRIPT_DIR=$(cd "$(dirname "$(scontrol show job "$SLURM_JOB_ID" | grep -oP 'Command=\K\S+')")" && pwd)
+```
+
+Applies to both Docker and Apptainer sbatch scripts.
+
+## Python version compatibility
+
+The canonical image is **py3.12**. Some upstream models pin older deps that lack cp312 binary wheels:
+- `transformers==4.32.1` → pulls `tokenizers 0.13.x` (no cp312 wheel, requires Rust to build from source). Fix: use `transformers>=4.36,<4.41` (gets tokenizers>=0.15 with cp312 wheels; stays below 4.41 where `transformers.onnx` was removed).
+- Always check what Python version the working Apptainer path uses. If it used py3.10, version pins may need adjustment for py3.12.
+
+## ROCm torch protection
+
+After any bulk `pip install`, verify the ROCm torch is still intact:
+```bash
+python3 -c "import torch; assert 'rocm' in torch.__version__, f'Non-ROCm torch: {torch.__version__}'"
+```
+Many upstream packages declare `torch` as a dependency. pip may silently pull a CUDA build that shadows the ROCm venv torch.
+
+## Shell quoting rules for sbatch scripts
+
+- Never put unescaped `(`, `)`, `'`, or Python f-strings inside a `bash -c '...'` block — SLURM's shell trips on nested quotes
+- For non-trivial Python: write the script to a host file, bind-mount it, invoke with `python3 /scripts/foo.py`
+- For heredocs containing Python: use `<< 'PYEOF'` (quoted delimiter) so the shell does not expand `$variables`; pass host variables as `sys.argv` arguments
+
+## HF repo file layout — verify before hardcoding
+
+Use `list_repo_files()` to discover actual filenames. Example: the Walrus HF repo ships `walrus.pt`, not `model.pt`. ORBIT-2 checkpoint names are versioned subdirectories.
+
+```python
+from huggingface_hub import list_repo_files
+files = [f for f in list_repo_files(repo) if f.endswith(".ckpt")]
+chosen = next((f for f in sorted(files) if "8m" in f), sorted(files)[0])
+```
+
+## pip-packages / overlay wipe policy
+
+Delete `pip-packages/` or rebuild the overlay entirely when switching to a different base image. Packages compiled for a different Python version or NumPy ABI will crash silently. Stale `.dist-info` also confuses pip resolution.
+
+---
+
+# Apptainer-specific patterns
 
 ## Standard Apptainer exec template
 
@@ -59,14 +132,21 @@ apptainer exec \
     --rocm \
     --overlay "${OVERLAY}:ro" \               # omit if no overlay
     --bind "$WORKSPACE":/workspace \
-    --env LD_LIBRARY_PATH=/opt/venv/lib/python3.12/site-packages/torch/lib \
-    "$SIF" bash /scripts/run.sh
+    "$SIF" bash -c '
+source /opt/venv/bin/activate
+export LD_LIBRARY_PATH="/opt/venv/lib/python3.12/site-packages/torch/lib:${LD_LIBRARY_PATH:-}"
+...
+'
 ```
 
 **Rules:**
-- Always `--rocm`, never manually bind `/opt/rocm` or `/dev/kfd` — `--rocm` handles them and avoids ROCm version mixing
-- Always `--env LD_LIBRARY_PATH=...torch/lib` — required for `libcaffe2_nvrtc.so` to be found
+- Always `--rocm`, never manually bind `/opt/rocm` or `/dev/kfd` — `--rocm` handles GPU device injection and avoids ROCm version mixing
 - Never bind-mount host `/opt/rocm` when container ROCm > host ROCm (ABI mismatch crashes RCCL)
+
+Build the SIF once and reuse:
+```bash
+apptainer pull docker://rocm/pytorch:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0
+```
 
 ## Overlay build pattern (for heavy pip dep models)
 
@@ -77,9 +157,9 @@ apptainer exec \
 2. Strip `torch / torchvision / torchaudio / torchgen / functorch / nvidia / triton` from staging
 3. `cp -r` the stripped ~1–2 GB into the overlay
 
-**Why not a pip constraints file:** The venv's torch has a local version string (`torch==2.10.0+rocm7.2.2.gitXXX`). pip cannot find this on any index when resolving `--target` mode, causing `ResolutionImpossible`. Do not use `--constraint torch==<rocm-local-ver>`.
+**Why not a pip constraints file:** The venv's torch has a local version string (`torch==2.10.0+rocm7.2.2.gitXXX`). pip cannot find this on any index when resolving `--target` mode, causing `ResolutionImpossible`.
 
-**Why `--extra-index-url` instead:** `--extra-index-url https://download.pytorch.org/whl/rocm7.2` causes pip to pick the ROCm torch wheel, which has **no** `nvidia-*` CUDA co-package deps — the entire CUDA chain is never resolved.
+**Why `--extra-index-url` instead:** `--extra-index-url https://download.pytorch.org/whl/rocm7.2` causes pip to pick the ROCm torch wheel, which has **no** `nvidia-*` CUDA co-package deps.
 
 ```bash
 # Inside the container during overlay build:
@@ -104,6 +184,12 @@ Always verify at end: `assert 'rocm' in torch.__version__`
 - ORBIT-2 (pytorch-lightning + xformers + wandb + mpi4py + ...): 7 GB overlay, ~2 GB content
 - StormCast (earth2studio + cartopy): 4 GB overlay, ~1.7 GB content
 
+## pip install requires --target (SIF is read-only)
+
+SIF files are squashfs (read-only). All `pip install` inside `apptainer exec` must use `--target /workspace/pip-packages`. Set `PYTHONPATH=/workspace/pip-packages:...`.
+
+**Torch strip is safe** in overlay/pip-packages — the SIF's venv torch is untouched and remains the primary copy.
+
 ## Multi-GPU distributed launch (Apptainer + SLURM)
 
 ```bash
@@ -115,7 +201,6 @@ srun --mpi=pmix apptainer exec \
     "${OVERLAY_ARG[@]}" \
     --env HOSTNAME="$MASTER_ADDR" \
     --env MASTER_PORT="$MASTER_PORT" \
-    --env LD_LIBRARY_PATH=/opt/venv/lib/python3.12/site-packages/torch/lib \
     "$SIF" bash "$RANK_SCRIPT"
 ```
 
@@ -125,24 +210,106 @@ srun --mpi=pmix apptainer exec \
 
 **Multi-node scaling:** Change `--nodes=N --ntasks=N*<gpus_per_node>` in the SBATCH header; the `srun` command is unchanged.
 
-**MPI workloads must use Apptainer, not Docker:** Docker's `MPI_Init` / `orted` fails. Apptainer shares host namespaces and picks up the host MPI runtime transparently.
+---
 
-## Shell quoting rules for sbatch scripts
+# Docker-specific patterns
 
-- Never put unescaped `(`, `)`, `'`, or Python f-strings inside a `bash -c '...'` block — SLURM's shell trips on nested quotes
-- For non-trivial Python: write the script to a host file, bind-mount it, invoke with `python3 /scripts/foo.py`
-- For heredocs containing Python: use `<< 'PYEOF'` (quoted delimiter) so the shell does not expand `$variables`; pass host variables as `sys.argv` arguments
+## GPU passthrough — two-path detection
 
-## HF repo file layout — verify before hardcoding
+Docker needs explicit GPU device injection. Detect AMD Container Toolkit vs raw device passthrough:
 
-Use `list_repo_files()` to discover actual filenames. Example: the Walrus HF repo ships `walrus.pt`, not `model.pt`. ORBIT-2 checkpoint names are versioned subdirectories.
-
-```python
-from huggingface_hub import list_repo_files
-files = [f for f in list_repo_files(repo) if f.endswith(".ckpt")]
-chosen = next((f for f in sorted(files) if "8m" in f), sorted(files)[0])
+```bash
+GPU_ARGS=()
+if docker info 2>/dev/null | grep -qi "amd"; then
+    GPU_ARGS=(--runtime=amd -e AMD_VISIBLE_DEVICES=all)
+else
+    GPU_ARGS=(--device=/dev/kfd)
+    for dev in /dev/dri/renderD*; do
+        [[ -e "$dev" ]] && GPU_ARGS+=(--device="$dev")
+    done
+    GPU_ARGS+=(--group-add video)
+fi
 ```
 
-## pip-packages / overlay wipe policy
+## Standard Docker run template
 
-Delete `pip-packages/` or rebuild the overlay entirely when switching to a different base SIF image. Packages compiled for a different Python version or NumPy ABI will crash silently (e.g. "do not import numpy from its source directory"). Stale `.dist-info` also confuses pip resolution.
+```bash
+docker run --rm \
+    "${GPU_ARGS[@]}" \
+    --name "<model>-${SLURM_JOB_ID:-$$}" \
+    --network host \
+    --shm-size=16g \
+    -v "$HOST_DIR":/workspace \
+    "$IMAGE" \
+    bash -c '
+set -euo pipefail
+source /opt/venv/bin/activate
+export LD_LIBRARY_PATH="/opt/venv/lib/python3.12/site-packages/torch/lib:${LD_LIBRARY_PATH:-}"
+export PYTHONPATH="/my/paths:${PYTHONPATH:-}"
+...
+'
+```
+
+**Rules:**
+- `--rm` for ephemeral containers (clean exit like Apptainer)
+- `--network host` for HuggingFace / PyPI / NOAA downloads and distributed init
+- `--shm-size=16g` for PyTorch DataLoader shared memory
+- Container name with cleanup trap: `trap 'docker rm -f "$CONTAINER_NAME" 2>/dev/null' EXIT`
+
+## Env vars: append inside container, NEVER via `-e`
+
+`docker run -e LD_LIBRARY_PATH=X` **replaces** the image default entirely. The `rocm/pytorch` image sets `LD_LIBRARY_PATH=/opt/rocm/lib`. Clobbering it drops `libhsa-runtime64.so` and `libamdhip64.so` from the search path, causing `torch.cuda.device_count()=0` and silent CPU fallback.
+
+**Only use `-e` for variables you are introducing** (e.g. `-e ORBIT2_ROOT=/orbit2`, `-e MIOPEN_USER_DB_PATH=/tmp/miopen`). For inherited vars, always append inside the container script.
+
+## Writable container filesystem
+
+Docker containers are writable (unlike Apptainer SIF). Key differences:
+- **No `--target` needed** for pip — installs go into the default site-packages
+- **No overlay needed** — pip installs persist for the container's lifetime
+- **Do NOT strip `torch`** after pip install — it would remove the only copy. Only strip `nvidia`/`triton` CUDA co-packages:
+  ```bash
+  SITE=$(python3 -c "import site; print(site.getsitepackages()[0])")
+  for pkg in nvidia triton; do
+      rm -rf "${SITE}/${pkg}" "${SITE}/${pkg}"-*.dist-info 2>/dev/null || true
+  done
+  ```
+
+## MPI in Docker — use torchrun instead
+
+Docker has no `srun --mpi=pmix` equivalent. OpenMPI's `orte_init` needs the full runtime tree which isn't available in most Docker images.
+
+**For multi-GPU distributed models:** Use `torchrun --standalone --nproc_per_node=N` inside a single container with all GPUs passed through. Write a Python rank wrapper that maps torchrun env vars to SLURM env vars if the upstream code expects them:
+```python
+os.environ["SLURM_NTASKS"]  = os.environ.get("WORLD_SIZE", "8")
+os.environ["SLURM_PROCID"]  = os.environ.get("RANK", "0")
+os.environ["SLURM_LOCALID"] = os.environ.get("LOCAL_RANK", "0")
+```
+
+**For models that import `mpi4py` at module level** without actually using MPI (e.g. `ORBIT_USE_DDSTORE=0`): inject a mpi4py stub package and prepend to `PYTHONPATH`:
+```bash
+mkdir -p /tmp/mpi4py_stub/mpi4py
+python3 -c "
+stub = '''
+class _RC:
+    thread_level = \"serialized\"; threads = False; initialize = False
+rc = _RC()
+class _CommWorld:
+    rank = 0; size = 1
+    def allreduce(self, x, op=None): return x
+    def Barrier(self): pass
+    def bcast(self, obj, root=0): return obj
+class MPI:
+    COMM_WORLD = _CommWorld()
+    SUM = 0; MAX = 1; MIN = 2
+'''
+open('/tmp/mpi4py_stub/mpi4py/__init__.py', 'w').write(stub)
+"
+export PYTHONPATH="/tmp/mpi4py_stub:\${PYTHONPATH:-}"
+```
+
+**Multi-node Docker is not supported** — use Apptainer + `srun --mpi=pmix` for multi-node distributed workloads.
+
+## apt-get may be blocked
+
+On some clusters, port 80 to Ubuntu mirrors is blocked from containers. Only HTTPS endpoints (PyPI, HuggingFace, NOAA) work. Install everything via `pip`.

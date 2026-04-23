@@ -3,13 +3,18 @@
 > **Research / engineering use only.** Outputs are novel SMILES strings for
 > drug-discovery research. Not validated for clinical or therapeutic use.
 
-Guide the user through running GP-MoLFormer on an AMD cluster via SLURM + Apptainer.
+Guide the user through running GP-MoLFormer on an AMD cluster via SLURM.
 
 ## Step 1 — Questionnaire (ask ALL questions before doing anything)
 
 Ask the user the following questions. Do not assume any defaults. Wait for answers to all questions before proceeding.
 
-**Q1. SIF path**
+**Q0. Container runtime**
+Which container runtime do you want to use?
+- **Apptainer** (recommended for HPC — supports overlays, `--rocm` flag for GPU)
+- **Docker** (simpler setup, no overlay needed, but no MPI support and env vars must be appended not replaced)
+
+**Q1. (Apptainer only) SIF path**
 Do you have an Apptainer SIF to use? If yes, what is the full path? The validated image is `rocm/pytorch:rocm7.0_ubuntu22.04_py3.10_pytorch_release_2.7.1` — if you don't have a SIF, I will generate the pull command. The rocm7.2.2 image also works if you already have it.
 
 **Q2. Work directory**
@@ -36,6 +41,8 @@ What is your SLURM partition name and account/project name?
 
 ## Step 2 — Act on answers
 
+### Apptainer path
+
 **If SIF is missing:**
 ```bash
 apptainer pull docker://rocm/pytorch:rocm7.0_ubuntu22.04_py3.10_pytorch_release_2.7.1
@@ -44,10 +51,23 @@ Tell the user to set `GPMOL_SIF` to the resulting `.sif` path.
 
 **Edit the SBATCH header** in `healthcare/models/GP-MoLFormer/examples/sbatch_inference_amd.sh` to set the user's partition and account (replacing `YOUR_PARTITION_HERE` / `YOUR_ACCOUNT_HERE`).
 
-Note: the script clones `IBM/gp-molformer` and installs `requirements.txt` on first run — internet access from compute nodes is required. Subsequent runs reuse the existing clone in `GPMOL_WORK_DIR`.
+Note: the script clones `IBM/gp-molformer` and installs deps on first run — internet access from compute nodes is required. Subsequent runs reuse the existing clone in `GPMOL_WORK_DIR`.
+
+**Important:** IBM/gp-molformer has no `requirements.txt`. The Apptainer script uses the py3.10 image where `transformers==4.32.1` and its tokenizers dep have prebuilt wheels. If using the py3.12 image instead, use the Docker script or pin `transformers>=4.36,<4.41`.
+
+### Docker path
+
+**Edit the SBATCH header** in `healthcare/models/GP-MoLFormer/examples/sbatch_inference_docker.sh` to set the user's partition and account.
+
+Docker-specific notes:
+- Uses `rocm/pytorch:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0` (py3.12)
+- Installs deps explicitly (no `requirements.txt` exists in upstream repo): `accelerate`, `datasets`, `networkx`, `pandas`, `peft`, `scikit-learn`, `transformers>=4.36,<4.41`, `rdkit`
+- The `transformers` pin avoids two issues: `tokenizers 0.13.x` has no cp312 wheel (fixed by >=4.36), and `transformers.onnx` was removed in >=4.41 (MoLFormer's HF config imports it)
+- No SIF or overlay needed
 
 ## Step 3 — Submit
 
+### Apptainer
 ```bash
 export GPMOL_SIF=<path>
 export GPMOL_WORK_DIR=<path>
@@ -57,11 +77,20 @@ export OUTPUT_FILE=<container-path>
 sbatch healthcare/models/GP-MoLFormer/examples/sbatch_inference_amd.sh
 ```
 
+### Docker
+```bash
+export GPMOL_WORK_DIR=<path>
+export SCAFFOLD=<smiles>        # omit entirely if unconditional mode
+export NUM_BATCHES=<n>
+export OUTPUT_FILE=<container-path>
+sbatch healthcare/models/GP-MoLFormer/examples/sbatch_inference_docker.sh
+```
+
 ## Step 4 — Monitor
 
 ```bash
 squeue -j <job_id>
-tail -f gpmolformer-infer-<job_id>.out
+tail -f gpmolformer-*-<job_id>.out
 ```
 
 On success: output CSV is at `<GPMOL_WORK_DIR>/<output_filename>`. The log prints validity and uniqueness stats.
@@ -70,8 +99,8 @@ On success: output CSV is at `<GPMOL_WORK_DIR>/<output_filename>`. The log print
 
 | Mode | Batches | Molecules | Valid | Wall time |
 |---|---|---|---|---|
-| Unconditional | 1 | 1000 | ~996 (99.6%) | ~41 s |
-| Scaffold `c1ccccc1` | 1 | 1000 | ~653 | ~41 s |
+| Unconditional | 1 | 1000 | ~995 (99.5%) | ~90 s |
+| Scaffold `c1ccccc1` | 1 | 1000 | ~653 | ~90 s |
 
 ## Arguments
 

@@ -1,15 +1,20 @@
 # Run StormCast deterministic inference on an AMD cluster
 
-Guide the user through running StormCast end-to-end on an AMD cluster via SLURM + Apptainer.
+Guide the user through running StormCast end-to-end on an AMD cluster via SLURM.
 
 ## Step 1 — Questionnaire (ask ALL questions before doing anything)
 
 Ask the user the following questions. Do not assume any defaults. Wait for answers to all questions before proceeding.
 
-**Q1. SIF path**
+**Q0. Container runtime**
+Which container runtime do you want to use?
+- **Apptainer** (recommended for HPC — supports overlays, `--rocm` flag for GPU)
+- **Docker** (simpler setup, no overlay needed, but env vars must be appended not replaced)
+
+**Q1. (Apptainer only) SIF path**
 Do you have an Apptainer SIF built from `rocm/pytorch:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0`? If yes, what is the full path? If no, I will generate the pull command.
 
-**Q2. Overlay**
+**Q2. (Apptainer only) Overlay**
 Do you have a pre-built StormCast overlay image (`stormcast-overlay.img`)? If yes, what is the full path? If no, would you like to build one now (one-time ~10 min job that skips a ~5 min pip install on every future run), or skip the overlay and pay the install cost per job?
 
 **Q3. Forecast start time**
@@ -28,6 +33,8 @@ What is your SLURM partition name and account/project name?
 
 ## Step 2 — Act on answers
 
+### Apptainer path
+
 **If SIF is missing:**
 ```bash
 apptainer pull docker://rocm/pytorch:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0
@@ -44,10 +51,19 @@ Tell the user to wait for the build job to complete, note the overlay path from 
 
 **Edit the SBATCH header** in `earth_science/models/StormCast/examples/sbatch_inference_amd.sh` to set the user's partition and account (replacing `YOUR_PARTITION_HERE` / `YOUR_ACCOUNT_HERE`).
 
+### Docker path
+
+**Edit the SBATCH header** in `earth_science/models/StormCast/examples/sbatch_inference_docker.sh` to set the user's partition and account.
+
+Docker-specific notes:
+- No SIF or overlay needed — deps are installed at container start (~5 min)
+- Uses `docker run --rm` with GPU device passthrough
+- `LD_LIBRARY_PATH` is appended inside the container script (not via `-e`) to preserve `/opt/rocm/lib`
+- Wall time is set to 2 hours to allow for first-run model download + inference
+
 ## Step 3 — Submit
 
-Once all answers are in hand:
-
+### Apptainer
 ```bash
 export SC_SIF=<path>
 export SC_OVERLAY=<path>        # omit if user chose to skip overlay
@@ -57,11 +73,19 @@ export SC_OUTPUT=<path>
 sbatch earth_science/models/StormCast/examples/sbatch_inference_amd.sh
 ```
 
+### Docker
+```bash
+export SC_START=<iso-datetime>
+export SC_STEPS=<n>
+export SC_OUTPUT=<path>
+sbatch earth_science/models/StormCast/examples/sbatch_inference_docker.sh
+```
+
 ## Step 4 — Monitor
 
 ```bash
 squeue -j <job_id>
-tail -f stormcast-infer-<job_id>.out
+tail -f stormcast-*-<job_id>.out
 ```
 
 On success: output zarr is at the path the user specified. Validate with:
@@ -73,12 +97,10 @@ print(ds)
 
 ## Expected results
 
-| Metric | Value |
-|---|---|
-| Wall time (with overlay) | ~2–3 min |
-| Wall time (no overlay) | ~7–8 min |
-| VRAM | ~9.6 GB |
-| Output | zarr with u, v, z, t, q, refc, mslp fields |
+| Runtime | Wall time (with overlay) | Wall time (no overlay) | VRAM | Output |
+|---|---|---|---|---|
+| Apptainer (GPU) | ~2–3 min | ~7–8 min | ~9.6 GB | zarr with u, v, z, t, q, refc, mslp fields |
+| Docker (GPU) | N/A | ~7–8 min | ~9.6 GB | same |
 
 ## Arguments
 
