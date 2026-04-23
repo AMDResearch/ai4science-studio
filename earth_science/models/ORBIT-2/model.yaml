@@ -1,0 +1,48 @@
+name: ORBIT-2
+hf_id: jychoi-hpc/ORBIT-2
+license: See upstream model card
+task: Global weather and climate downscaling (vision foundation model)
+domain: earth_science
+upstream_code: https://github.com/XiaoWang-Github/ORBIT-2
+paper: https://arxiv.org/abs/2505.04802
+container_image: rocm/pytorch:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0
+vram_gb: null
+validated_hardware:
+  - MI300X
+
+recipes:
+  - task: inference
+    description: Inference and visualization with optional synthetic smoke test
+    recipe_path: recipes/inference/
+    script: examples/run_visualize.py
+    slurm: examples/sbatch_infer_amd.sh
+
+env_vars:
+  ORBIT2_ROOT:
+    description: Path to cloned XiaoWang-Github/ORBIT-2 repository
+    required: true
+    default: null
+  ORBIT2_CHECKPOINT:
+    description: Path to .ckpt file (downloaded from HF in synthetic mode)
+    required: false
+    default: null
+  ORBIT2_CONFIG:
+    description: Config YAML basename for real-data mode
+    required: false
+    default: interm_8m_ft.yaml
+  ORBIT2_USE_SYNTHETIC:
+    description: Set 1 for synthetic data smoke test
+    required: false
+    default: "0"
+  ORBIT2_SIF:
+    description: Path to Apptainer SIF file
+    required: false
+    default: null
+  ORBIT2_OVERLAY:
+    description: Pre-built ext3 overlay (skips ~15 min pip install per job)
+    required: false
+    default: null
+  ORBIT2_MASTER_PORT:
+    description: Distributed master port
+    required: false
+    default: "29500"

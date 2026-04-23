@@ -1,0 +1,46 @@
+name: HydraGNN (Predictive GFM 2024)
+hf_id: mlupopa/HydraGNN_Predictive_GFM_2024
+license: BSD-3-Clause-Clear
+task: Ensemble of predictive graph foundation models for atomistic materials (energy + forces)
+domain: material_science
+upstream_code: https://github.com/ORNL/HydraGNN
+upstream_branch: Predictive_GFM_2024
+paper: null
+container_image: rocm/pytorch:rocm7.0_ubuntu22.04_py3.10_pytorch_release_2.7.1
+vram_gb: null
+validated_hardware: []
+
+data_format: ADIOS (HDF5-based)
+data_source: https://doi.ccs.ornl.gov/dataset/3a49c8df-83f7-5d32-84be-f81d289e7cdd
+
+recipes:
+  - task: inference
+    description: Load checkpoints and run predictions with the GFM ensemble
+    recipe_path: recipes/inference/
+    script: examples/run_inference.sh
+  - task: train
+    description: Frontier-scale pretraining and HPO
+    recipe_path: recipes/train/
+    script: examples/run_train.sh
+
+env_vars:
+  HG_CHECKPOINT:
+    description: Path to .pk checkpoint file
+    required: true
+    default: null
+  HG_CONFIG:
+    description: Matching config.json for the checkpoint
+    required: true
+    default: null
+  HG_OUTPUT_DIR:
+    description: Prediction output directory
+    required: false
+    default: /workspace/results
+  HG_EXAMPLE:
+    description: Upstream example folder name (train task)
+    required: false
+    default: multidataset_hpo
+  HG_DATA_DIR:
+    description: Dataset staging directory (train task)
+    required: false
+    default: /data

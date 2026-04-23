@@ -1,0 +1,31 @@
+name: REINVENT4
+hf_id: N/A
+license: Apache-2.0
+task: Reinforcement learning for molecular design (transfer learning, scoring, linking)
+domain: healthcare
+upstream_code: https://github.com/MolecularAI/REINVENT4
+paper: null
+weight_source: Bundled with upstream repo (ChEMBL35 prior)
+container_image: rocm/pytorch:rocm6.3.3_ubuntu24.04_py3.12_pytorch_release_2.6.0
+vram_gb: null
+validated_hardware: []
+
+disclaimer: >
+  Research / engineering use only. Not medical advice.
+  Must not be used with patient-identifiable data or PHI.
+
+recipes:
+  - task: finetune
+    description: Transfer learning on a focused chemical series
+    recipe_path: recipes/finetune/
+    script: examples/run_tl.sh
+
+env_vars:
+  CONFIG_FILE:
+    description: Path to TOML configuration for transfer learning
+    required: true
+    default: /workspace/tl_config.toml
+  RESULTS_DIR:
+    description: Logs and results directory
+    required: false
+    default: /workspace/results

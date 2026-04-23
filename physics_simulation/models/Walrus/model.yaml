@@ -1,0 +1,34 @@
+name: Walrus
+hf_id: polymathic-ai/walrus
+license: MIT
+task: Cross-domain surrogate simulation for continuum dynamics (1.3B-parameter space-time Transformer)
+domain: physics_simulation
+upstream_code: https://github.com/PolymathicAI/walrus
+paper: https://arxiv.org/abs/2511.15684
+container_image: rocm/pytorch:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0
+vram_gb: null
+validated_hardware: []
+
+recipes:
+  - task: inference
+    description: Autoregressive rollout across physical domains
+    recipe_path: recipes/inference/
+    script: examples/run_inference.py
+
+env_vars:
+  WALRUS_WEIGHTS_DIR:
+    description: Local directory with HF weights (auto-downloaded if missing)
+    required: false
+    default: ./walrus-weights
+  WALRUS_INPUT:
+    description: Input field file (random noise demo if unset)
+    required: false
+    default: null
+  WALRUS_STEPS:
+    description: Rollout steps
+    required: false
+    default: "50"
+  WALRUS_OUTPUT:
+    description: Output .pt file path
+    required: false
+    default: outputs/walrus_rollout.pt
