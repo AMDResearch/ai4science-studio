@@ -25,7 +25,8 @@ Add a new model to this repository following all repo conventions.
    - `docker_run.sh` — launches the container; auto-detects AMD Container Toolkit vs device passthrough; checks for existing container before launching; auto-clones the upstream repo if absent.
    - `run_inference.sh` / `run_inference.py` — runs the model; all key params overridable via env vars with sensible defaults; prints a config summary before running.
    - `preflight_<slug>.py` — smoke-test that verifies GPU access and imports before a full run.
-   - `sbatch_inference_mi300x.sh` — SLURM batch script (use `--rocm` for AMD/Apptainer GPU passthrough, not `--nv`).
+   - `sbatch_inference_amd.sh` — SLURM batch script (use `--rocm` for AMD/Apptainer GPU passthrough, not `--nv`). Named `_amd.sh` (not `_mi300x.sh`) — the same script covers MI250X, MI300X, and MI350X with a `rocm7.2.x` image.
+   - `build_overlay_amd.sh` — (for HPC models with heavy pip deps, e.g. >1 GB of packages) builds a persistent Apptainer ext3 overlay pre-loaded with pip deps; mount `:ro` in inference jobs to skip the install phase.
    - Add `run_ensemble.py`, `run_finetune.sh`, etc. as applicable.
    - All scripts must be `chmod +x`.
 

@@ -20,7 +20,19 @@ Always align the **YAML config** with the **checkpoint** (matching model scale a
 
 - **Frontier (OLCF):** edit `examples/launch_visualize.sh` (allocation account, conda path, config path), then `sbatch launch_visualize.sh`. See the upstream "Tutorial Example → Frontier → Step 4: Visualize Results".
 - **Other clusters / interactive nodes:** run the same `visualize.py` invocation the launch script uses, with your scheduler or `mpirun` layout as appropriate for that system.
-- **Studio examples (AI4Science Studio checkout):** in [`../../examples/`](../../examples/), **`run_visualize.py`** runs upstream `visualize.py` with `ORBIT2_ROOT` set to your clone; **`preflight_orbit2.py`** checks the environment without SLURM; **`sbatch_infer_mi2508x.sh`** is a sample SLURM job for an **`mi2508x`**-style partition; **`docker_run.sh`** launches a single-node container for interactive inference. See [../compute/README.md](../compute/README.md).
+- **Studio examples (AI4Science Studio checkout):** in [`../../examples/`](../../examples/), **`run_visualize.py`** runs upstream `visualize.py` with `ORBIT2_ROOT` set to your clone; **`make_synthetic_data.py`** generates a ~2 MB synthetic dataset so you can smoke-test the full pipeline without ERA5/PRISM data; **`preflight_orbit2.py`** checks the environment without SLURM; **`sbatch_infer_amd.sh`** is a SLURM job that works on any AMD Instinct partition (MI250X, MI300X, MI350X) and supports synthetic data via `ORBIT2_USE_SYNTHETIC=1`; **`build_overlay_amd.sh`** pre-bakes pip deps into a persistent ext3 overlay (~15 min once, skipped on every subsequent job); **`docker_run.sh`** launches a single-node container for interactive inference. See [../compute/README.md](../compute/README.md).
+
+### Quick smoke-test (no real data needed)
+
+```bash
+export ORBIT2_ROOT=/path/to/ORBIT-2-clone
+export ORBIT2_SIF=/path/to/rocm_pytorch.sif
+export ORBIT2_OVERLAY=/path/to/orbit2-overlay.img   # optional; build with build_overlay_amd.sh
+export ORBIT2_USE_SYNTHETIC=1   # auto-generates data + downloads smallest HF checkpoint
+sbatch ../../examples/sbatch_infer_amd.sh
+```
+
+Confirmed working: MI250X, MI300X, MI350X (rocm7.2.2 image). Covers 1-GPU and 8-GPU distributed runs via `srun --mpi=pmix`.
 
 Outputs typically include low-resolution inputs, high-resolution predictions, and comparison plots as described upstream.
 

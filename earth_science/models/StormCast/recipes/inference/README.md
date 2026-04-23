@@ -7,34 +7,59 @@ Source: [AMD ROCm blog — StormCast inference](https://rocm.blogs.amd.com/artif
 > **Ready-to-run scripts** live in [`../../examples/`](../../examples/).
 > Use [`run_inference.py`](../../examples/run_inference.py) directly instead of
 > copying snippets from this doc.  The SLURM driver is
-> [`sbatch_inference_mi300x.sh`](../../examples/sbatch_inference_mi300x.sh).
+> [`sbatch_inference_amd.sh`](../../examples/sbatch_inference_amd.sh).
 
 ## Environment
 
-### Option A — with AMD Container Toolkit
+**Recommended image:** `rocm/pytorch:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0`
+
+Covers MI250X (gfx90a), MI300X (gfx942), and MI350X (gfx950). For older hardware (MI100/gfx908) use a rocm6.x image.
+
+Model weights are fetched automatically from [`nvidia/stormcast-v1-era5-hrrr`](https://huggingface.co/nvidia/stormcast-v1-era5-hrrr) on first run. NOAA live data is fetched over HTTPS — no pre-staged dataset needed.
+
+### Option A — SLURM cluster (recommended for HPC)
+
+Build a persistent overlay once to skip the ~5 min pip install on every job:
 
 ```bash
+export SC_SIF=/path/to/rocm_pytorch.sif
+sbatch ../../examples/build_overlay_amd.sh        # one-time, ~10 min
+```
+
+Then submit inference jobs:
+
+```bash
+export SC_SIF=/path/to/rocm_pytorch.sif
+export SC_OVERLAY=/path/to/stormcast-overlay.img  # from build step above
+export SC_START=2025-01-01T06
+export SC_STEPS=6
+sbatch ../../examples/sbatch_inference_amd.sh
+```
+
+Without an overlay, deps install on each job start (~5 min extra); set only `SC_SIF` and submit the same script.
+
+### Option B — Docker interactive (single node)
+
+```bash
+# With AMD Container Toolkit
 docker run -d \
-    --runtime=amd \
-    -e AMD_VISIBLE_DEVICES=all \
+    --runtime=amd -e AMD_VISIBLE_DEVICES=all \
     --name stormcast \
     -v $(pwd):/workspace/ \
-    rocm/pytorch:rocm7.0.2_ubuntu24.04_py3.12_pytorch_release_2.8.0 \
+    rocm/pytorch:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0 \
     tail -f /dev/null
 
 docker exec -it stormcast /bin/bash
 ```
 
-### Option B — without AMD Container Toolkit
-
 ```bash
+# Without AMD Container Toolkit (device passthrough)
 docker run -d \
-    --device=/dev/kfd \
-    --device=/dev/dri \
+    --device=/dev/kfd --device=/dev/dri \
     --group-add video \
     --name stormcast \
     -v $(pwd):/workspace/ \
-    rocm/pytorch:rocm7.0.2_ubuntu24.04_py3.12_pytorch_release_2.8.0 \
+    rocm/pytorch:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0 \
     tail -f /dev/null
 
 docker exec -it stormcast /bin/bash
@@ -46,8 +71,6 @@ docker exec -it stormcast /bin/bash
 cd /workspace
 pip install "earth2studio[stormcast]" cartopy
 ```
-
-Model weights are fetched automatically from [`nvidia/stormcast-v1-era5-hrrr`](https://huggingface.co/nvidia/stormcast-v1-era5-hrrr) on first run.
 
 ## Running inference
 

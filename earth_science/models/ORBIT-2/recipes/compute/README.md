@@ -28,7 +28,7 @@ These are **starting points**; eligibility, capacity, and pricing change over ti
 
 After you have a node, follow the **AMD ROCm** installation path in the ORBIT-2 GitHub README (ROCm + PyTorch versions stated there) and scale **down** parallelism relative to Frontier.
 
-For **your own SLURM (or similar) cluster** with AMD Instinct GPUs, the Studio SLURM template (`examples/sbatch_infer_mi2508x.sh`) targets an `mi2508x`-style 8-GPU partition. Adapt `--partition` and node count to match your site.
+For **your own SLURM (or similar) cluster** with AMD Instinct GPUs, the Studio SLURM template (`examples/sbatch_infer_amd.sh`) works on any AMD Instinct partition (MI250X, MI300X, MI350X). Adapt `--partition`, `--account`, and `--gres` to match your site. Use `ORBIT2_USE_SYNTHETIC=1` to smoke-test the environment before staging real data. A pre-built overlay (`examples/build_overlay_amd.sh`) skips the ~15 min dep install on every subsequent job.
 
 ## Reality check
 

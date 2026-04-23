@@ -60,9 +60,19 @@ try:
     import walrus as walrus_pkg  # type: ignore
     model = walrus_pkg.load_model(WEIGHTS_DIR)
 except (ImportError, AttributeError):
-    # Fallback: load via torch.load if the package API differs
+    # Fallback: load via torch.load if the package API differs.
+    # HF repo (polymathic-ai/walrus) ships the checkpoint as walrus.pt;
+    # fall back to model.pt for any older layout.
     print("Falling back to torch.load …")
-    ckpt = torch.load(os.path.join(WEIGHTS_DIR, "model.pt"), map_location=device)
+    for candidate in ("walrus.pt", "model.pt"):
+        ckpt_path = os.path.join(WEIGHTS_DIR, candidate)
+        if os.path.exists(ckpt_path):
+            break
+    else:
+        print(f"error: no checkpoint found in {WEIGHTS_DIR}", file=sys.stderr)
+        sys.exit(1)
+    print(f"  loading {ckpt_path}")
+    ckpt = torch.load(ckpt_path, map_location=device)
     model = ckpt
 
 model = model.to(device)

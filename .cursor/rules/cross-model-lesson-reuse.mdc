@@ -1,0 +1,33 @@
+---
+description: When discovering any issue during a session, organically update skills, rules, recipes, and scripts across all models and runtimes as a side-effect of the fix.
+alwaysApply: true
+---
+
+# Organic lesson capture and propagation
+
+Every bug fix, workaround, or pattern discovery is a lesson. **Do not treat skill/rule/recipe updates as a separate task.** Fold them into the fix itself.
+
+## When you fix anything, do ALL of these in the same pass
+
+1. **Fix the immediate script.** Apply the fix to the file that failed.
+2. **Propagate to sibling models.** Scan `*/models/*/examples/` for the same pattern. Fix them now, not later.
+3. **Propagate across runtimes.** If the fix was in an Apptainer script, check the Docker equivalent (and vice versa). Common cross-runtime issues:
+   - SCRIPT_DIR resolution, read-only FS handling, dep lists, env var clobbering, torch protection
+4. **Update the relevant SKILL.md.** Add the lesson to the right skill file:
+   - Repo-wide → `.cursor/skills/ai4science-studio/SKILL.md`
+   - Domain-specific → `.cursor/skills/ai4science-<domain>/SKILL.md`
+5. **Update or create a rule** if the lesson is a recurring process mistake (not just a technical fix).
+
+## The test: would a future session make the same mistake?
+
+If you fixed something and a fresh agent session working on a different model could hit the same issue, you haven't finished. The fix must be discoverable in a skill or rule before the task is done.
+
+## Examples
+
+| Discovery | Immediate fix | Must also do |
+|---|---|---|
+| `--no-deps` drops transitive runtime deps | Switch to `--extra-index-url` + strip for StormCast | Apply same approach to ORBIT-2 install-to-tmp; update studio SKILL.md to say "prefer `--extra-index-url` + strip over `--no-deps` for runtime installs" |
+| SCRIPT_DIR resolves to SLURM spool | Add `scontrol` trick to StormCast | Add to ORBIT-2, GP-MoLFormer, any future model; already in studio SKILL.md — verify it's there |
+| `run_generation.sh` has CRLF endings | `sed -i 's/\r$//'` | Check all `.sh` files in the repo; add a note to SKILL.md about verifying line endings |
+| SIF is read-only, pip install fails | Add install-to-tmp + bind-mount | Apply to every model that does inline pip install in Apptainer; update SKILL.md with the pattern |
+| `rdkit-pypi` has no cp312 wheels | Graceful fallback with `\|\| echo` | Note py3.12 incompatibility in healthcare SKILL.md; check other models for similar version-gated deps |
