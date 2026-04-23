@@ -21,7 +21,7 @@ Or use a slash command (Claude Code):
 /run-gpmolformer scaffold c1ccccc1
 ```
 
-All 10 models have a `/run-*` command: `stormcast`, `orbit2`, `mattergen`, `hydragnn`, `gpmolformer`, `swinunetr`, `semlaflow`, `reinvent4`, `matey`, `walrus`.
+All 15 models have a `/run-*` command: `stormcast`, `orbit2`, `archesweather`, `aurora`, `gencast`, `neuralgcm`, `panguweather`, `mattergen`, `hydragnn`, `gpmolformer`, `swinunetr`, `semlaflow`, `reinvent4`, `matey`, `walrus`.
 
 ### Discover and compare models
 
@@ -52,7 +52,7 @@ Agents read these files to understand the repo:
 
 | File | Purpose |
 |------|---------|
-| [`models.yaml`](models.yaml) | Index of all 10 models across 5 domains |
+| [`models.yaml`](models.yaml) | Index of all 15 models across 5 domains |
 | `<model>/model.yaml` | Per-model manifest: HF id, license, recipes, env vars, hardware |
 | `.cursor/skills/` | Agent skills for Cursor (run models, discover, domain conventions) |
 | `.cursor/rules/` | Contextual rules that fire when editing specific file types |

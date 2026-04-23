@@ -2,11 +2,37 @@
 
 Run deterministic global weather forecasts at 0.1° resolution (the highest resolution of the AMD-validated weather models).
 
+> **Ready-to-run scripts** live in [`../../examples/`](../../examples/).
+> Use [`run_inference.sh`](../../examples/run_inference.sh) directly instead of
+> copying snippets from this doc.
+
 ## Prerequisites
 
-- AMD Instinct GPU with ROCm kernel-mode driver (`amdgpu-dkms`); MI300X recommended for 0.1° memory footprint
-- Docker
-- Free [Copernicus CDS account](https://cds.climate.copernicus.eu/) (for ERA5 initial conditions)
+| Requirement | Detail |
+|-------------|--------|
+| **Container** | `pytorchweather:latest` from silogen/ai-samples (separate from JAX image) |
+| **GPU** | AMD Instinct MI300X recommended (192 GB HBM3 for 0.1° resolution) |
+| **Runtime** | Docker with ROCm kernel-mode driver (`amdgpu-dkms`) |
+| **Data** | Free [Copernicus CDS account](https://cds.climate.copernicus.eu/) for ERA5 initial conditions |
+
+## Environment Variables
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `CDSAPI_KEY` | **Yes** | — | CDS API key (set in `env_file`) |
+| `DATE` | No | Yesterday | Forecast start date (`YYYYMMDD`) |
+| `TIME` | No | `0000` | Forecast start time (`HHMM`) |
+| `LEAD_TIME` | No | `24` | Forecast horizon in hours (6h rollout steps) |
+
+## Quick Start
+
+```bash
+cp examples/env_file.template examples/env_file
+# Edit env_file: set CDSAPI_KEY
+bash examples/docker_run.sh
+# Inside container:
+bash /examples/run_inference.sh
+```
 
 ## Step 1 — Configure credentials
 

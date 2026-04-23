@@ -81,6 +81,11 @@ Slash commands for Claude Code live in `.claude/commands/`:
 | `/status` | Readiness audit for all models (scripts, preflight, recipes) |
 | `/run-stormcast` | Run StormCast inference on an AMD cluster |
 | `/run-orbit2` | Run ORBIT-2 inference on an AMD cluster |
+| `/run-archesweather` | Run ArchesWeather inference or training on an AMD cluster |
+| `/run-aurora` | Run Aurora 0.1° weather forecast on an AMD cluster |
+| `/run-gencast` | Run GenCast ensemble forecast on an AMD cluster |
+| `/run-neuralgcm` | Run NeuralGCM hybrid physics+ML forecast on an AMD cluster |
+| `/run-panguweather` | Run PanguWeather deterministic forecast on an AMD cluster |
 | `/run-gpmolformer` | Run GP-MoLFormer molecule generation on an AMD cluster |
 | `/run-mattergen` | Run MatterGen crystal generation on an AMD cluster |
 | `/run-hydragnn` | Run HydraGNN ensemble inference on an AMD cluster |

@@ -1,0 +1,51 @@
+name: GenCast
+hf_id: N/A
+license: CC-BY-NC-SA-4.0
+task: Diffusion-based probabilistic ensemble weather forecasting at 0.25°
+domain: earth_science
+upstream_code: https://github.com/google-deepmind/graphcast
+paper: https://www.nature.com/articles/s41586-024-08252-9
+container_image: jaxweather:latest
+vram_gb: 192
+validated_hardware:
+  - MI300X
+
+recipes:
+  - task: inference
+    description: Run probabilistic ensemble forecasts from CDS initial conditions
+    recipe_path: recipes/inference/
+    script: examples/run_inference.sh
+
+env_vars:
+  CDSAPI_KEY:
+    description: Copernicus CDS API key (set in env_file)
+    required: true
+    default: null
+  MODEL_VARIANT:
+    description: "Checkpoint variant: gencast-0.25, gencast-0.25-Oper, gencast-1.0, gencast-1.0-Mini"
+    required: false
+    default: gencast-0.25
+  DATE:
+    description: Forecast start date (YYYYMMDD)
+    required: false
+    default: yesterday
+  TIME:
+    description: Forecast start time (HHMM)
+    required: false
+    default: "0000"
+  LEAD_TIME:
+    description: Forecast horizon in hours (max 240 = 10 days)
+    required: false
+    default: "240"
+  NUM_ENSEMBLE_MEMBERS:
+    description: Ensemble size (must be multiple of GPU count)
+    required: false
+    default: "1"
+  CACHE_DIR:
+    description: Host path for ERA5 data cache
+    required: false
+    default: /tmp/earthkit-cache
+  AI_SAMPLES_DIR:
+    description: Where to clone silogen/ai-samples
+    required: false
+    default: null

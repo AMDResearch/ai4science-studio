@@ -22,6 +22,46 @@ models:
     tasks_available: [inference]
     path: earth_science/models/ORBIT-2
 
+  - slug: ArchesWeather
+    domain: earth_science
+    hf_id: gcouairon/ArchesWeather
+    license: See upstream repository and Hugging Face model card
+    task: Global AI weather forecasting at 1.5° resolution
+    tasks_available: [inference, train]
+    path: earth_science/models/ArchesWeather
+
+  - slug: Aurora
+    domain: earth_science
+    hf_id: microsoft/aurora
+    license: CC-BY-NC-SA-4.0
+    task: Foundation model for Earth system forecasting at 0.1° resolution
+    tasks_available: [inference]
+    path: earth_science/models/Aurora
+
+  - slug: GenCast
+    domain: earth_science
+    hf_id: N/A
+    license: CC-BY-NC-SA-4.0
+    task: Diffusion-based probabilistic ensemble weather forecasting
+    tasks_available: [inference]
+    path: earth_science/models/GenCast
+
+  - slug: NeuralGCM
+    domain: earth_science
+    hf_id: N/A
+    license: "Code: Apache-2.0 · Weights: CC-BY-SA-4.0"
+    task: Hybrid physics + ML atmospheric model
+    tasks_available: [inference]
+    path: earth_science/models/NeuralGCM
+
+  - slug: PanguWeather
+    domain: earth_science
+    hf_id: N/A
+    license: CC-BY-NC-SA-4.0
+    task: Transformer-based deterministic global weather forecasting
+    tasks_available: [inference]
+    path: earth_science/models/PanguWeather
+
   # --- Material Science ---
   - slug: MatterGen
     domain: material_science

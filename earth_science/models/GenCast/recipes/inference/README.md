@@ -2,11 +2,39 @@
 
 Run probabilistic ensemble global weather forecasts up to 10 days ahead.
 
+> **Ready-to-run scripts** live in [`../../examples/`](../../examples/).
+> Use [`run_inference.sh`](../../examples/run_inference.sh) directly instead of
+> copying snippets from this doc.
+
 ## Prerequisites
 
-- AMD Instinct GPU with ROCm kernel-mode driver (`amdgpu-dkms`)
-- Docker
-- Free [Copernicus CDS account](https://cds.climate.copernicus.eu/) (for ERA5 initial conditions)
+| Requirement | Detail |
+|-------------|--------|
+| **Container** | `jaxweather:latest` from silogen/ai-samples (shared with PanguWeather) |
+| **GPU** | AMD Instinct with ROCm kernel-mode driver (`amdgpu-dkms`) |
+| **Runtime** | Docker |
+| **Data** | Free [Copernicus CDS account](https://cds.climate.copernicus.eu/) for ERA5 initial conditions |
+
+## Environment Variables
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `CDSAPI_KEY` | **Yes** | — | CDS API key (set in `env_file`) |
+| `MODEL_VARIANT` | No | `gencast-0.25` | Checkpoint variant |
+| `DATE` | No | Yesterday | Forecast start date (`YYYYMMDD`) |
+| `TIME` | No | `0000` | Forecast start time (`HHMM`) |
+| `LEAD_TIME` | No | `240` | Forecast horizon in hours (10 days) |
+| `NUM_ENSEMBLE_MEMBERS` | No | `1` | Ensemble size (must be multiple of GPU count) |
+
+## Quick Start
+
+```bash
+cp examples/env_file.template examples/env_file
+# Edit env_file: set CDSAPI_KEY
+bash examples/docker_run.sh
+# Inside container:
+bash /examples/run_inference.sh
+```
 
 ## Step 1 — Configure credentials
 

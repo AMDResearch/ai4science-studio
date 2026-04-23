@@ -59,6 +59,23 @@ The `earth_science/` domain covers **climate**, **weather**, and broader **Earth
 - **CLI syntax:** `geoarches.inference.encode_dataset` uses argparse (`--uids`, `--input-path`, `--output-path`), not Hydra `++` overrides.
 - **Environment:** installs cleanly; checkpoint downloads from HF (`gcouairon/ArchesWeather`). Only the data is blocked.
 
+### Aurora, GenCast, PanguWeather (ai-models framework)
+
+- **Shared recipe repo:** all three use `silogen/ai-samples` (`ai4sciences/ai-weather-forecasting`).
+- **Two Docker images:** Aurora uses `pytorchweather:latest` (PyTorch); GenCast and PanguWeather share `jaxweather:latest` (JAX).
+- **CDS credentials required:** all three fetch ERA5 initial conditions from the Copernicus Climate Data Store. Users must configure `env_file` with their `CDSAPI_KEY`.
+- **PanguWeather ONNX patch:** one-line patch adds the ROCm execution provider — handled automatically by the Docker image.
+- **GenCast ensemble sizing:** `NUM_ENSEMBLE_MEMBERS` must be a multiple of the GPU count.
+- **Aurora memory:** 0.1° resolution (~6× more grid points than 0.25°) demands the MI300X's full 192 GB HBM3.
+
+### NeuralGCM (JAX + GCS)
+
+- **No CDS/HF needed:** weights from GCS (`gs://neuralgcm/models/`) and ERA5 from public ARCO-ERA5 Zarr — both anonymous, no auth required.
+- **JAX for ROCm:** requires a custom JAX ROCm wheel (`jaxlib-0.6.0`) from `ROCm/rocm-jax` GitHub releases, plus `jax-rocm7-pjrt` and `jax-rocm7-plugin`.
+- **Docker image:** `rocm/dev-ubuntu-22.04:7.0.2-complete` — deps installed at container start by `docker_run.sh`.
+- **`libdw1`:** required JAX runtime dependency on Ubuntu 22.04; installed via `apt install -y libdw1`.
+- **Performance:** 0.7° ~110s, 1.4° ~48s, 2.8° ~33s for a 4-day forecast on MI300X.
+
 ## Overlay pip install pitfalls (common to all earth science models)
 
 **`pip --target` ignores the SIF's installed packages** — it resolves everything fresh. When torch is a transitive dep, pip downloads a fresh ROCm torch wheel (~6 GB), filling the overlay before other packages install.

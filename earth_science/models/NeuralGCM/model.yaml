@@ -1,0 +1,52 @@
+name: NeuralGCM
+hf_id: N/A
+license: "Code: Apache-2.0 · Weights: CC-BY-SA-4.0"
+task: Hybrid physics + ML atmospheric model for weather and climate forecasting
+domain: earth_science
+upstream_code: https://github.com/google-research/neuralgcm
+paper: https://arxiv.org/abs/2311.07222
+container_image: rocm/dev-ubuntu-22.04:7.0.2-complete
+vram_gb: 192
+validated_hardware:
+  - MI300X
+
+recipes:
+  - task: inference
+    description: Run deterministic or stochastic forecasts from ERA5 initial conditions
+    recipe_path: recipes/inference/
+    script: examples/run_inference.py
+    slurm: examples/sbatch_inference_amd.sh
+
+env_vars:
+  NGC_CHECKPOINT:
+    description: "GCS path suffix (e.g. v1/deterministic_1_4_deg.pkl)"
+    required: false
+    default: v1/deterministic_1_4_deg.pkl
+  NGC_DATE:
+    description: Initial condition date (YYYY-MM-DD)
+    required: false
+    default: "2020-01-01"
+  NGC_HOUR:
+    description: Initial condition hour UTC (0-23)
+    required: false
+    default: "0"
+  NGC_STEPS:
+    description: Number of 6h forecast steps (16 = 4 days)
+    required: false
+    default: "16"
+  NGC_OUTPUT:
+    description: Output NetCDF path (default auto-generated)
+    required: false
+    default: null
+  NGC_SEED:
+    description: JAX PRNG seed for stochastic checkpoints
+    required: false
+    default: "0"
+  NGC_SIF:
+    description: Apptainer SIF path (if set, runs inside container)
+    required: false
+    default: null
+  ROCM_IMAGE:
+    description: Docker image for local runs
+    required: false
+    default: rocm/dev-ubuntu-22.04:7.0.2-complete
