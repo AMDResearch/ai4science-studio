@@ -78,5 +78,5 @@ model = model.to(device)
 print("")
 print("Model loaded successfully. Build your input graph and call:")
 print("  hydragnn.run_prediction(model, data)")
-print("See recipes/inference-and-visualization.md for details.")
+print("See recipes/inference/README.md for details.")
 PYEOF

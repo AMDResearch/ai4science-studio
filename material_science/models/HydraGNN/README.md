@@ -10,11 +10,11 @@ This release is an **ensemble of fifteen predictive graph foundation models (GFM
 
 Authoritative training, HPO, ensemble, and inference scripts live in **upstream HydraGNN** (branch above). This repo holds **pointers and runbook-style recipes**:
 
-- [`recipes/inference-and-visualization.md`](recipes/inference-and-visualization.md) — checkpoints from Hub + inference / ensemble workflows  
-- [`recipes/training-hpc.md`](recipes/training-hpc.md) — Frontier-scale pretraining / HPO summary  
-- [`recipes/local-cluster-amd.md`](recipes/local-cluster-amd.md) — SLURM/PBS-style runs on **your** AMD Instinct cluster  
-- [`recipes/data-access.md`](recipes/data-access.md) — Hub ADIOS bundles, Constellation, staging, and data context  
-- [`recipes/compute-and-alternatives.md`](recipes/compute-and-alternatives.md) — OLCF, AMD cloud / HPC Fund, institutional clusters  
+- [`recipes/inference/`](recipes/inference/) — checkpoints from Hub + inference / ensemble workflows  
+- [`recipes/train/`](recipes/train/) — Frontier-scale pretraining / HPO summary  
+- [`recipes/data/`](recipes/data/) — Hub ADIOS bundles, Constellation, staging, and data context  
+- [`recipes/compute/`](recipes/compute/) — OLCF, AMD cloud / HPC Fund, institutional clusters  
+- [`examples/`](examples/) — ready-to-run Docker and run scripts  
 
 ## Installation (reference)
 

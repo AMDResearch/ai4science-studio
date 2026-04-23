@@ -10,11 +10,11 @@ ORBIT-2 is a scalable **vision foundation model for global weather and climate d
 
 Training, inference, visualization, and SLURM examples are maintained in the **GitHub repository**, not in AI4Science Studio. This repo only holds **pointers and runbook-style recipes**:
 
-- [`recipes/inference-and-visualization.md`](recipes/inference-and-visualization.md) — checkpoints + visualization workflow (broad audience)  
-- [`recipes/training-hpc.md`](recipes/training-hpc.md) — large-scale / Frontier-oriented training summary  
-- [`recipes/local-cluster-amd.md`](recipes/local-cluster-amd.md) — SLURM/PBS-style runs on **your** AMD Instinct cluster  
-- [`recipes/data-access.md`](recipes/data-access.md) — Constellation / Globus / OLCF data context and staging  
-- [`recipes/compute-and-alternatives.md`](recipes/compute-and-alternatives.md) — Frontier, AMD cloud / HPC Fund, institutional clusters  
+- [`recipes/inference/`](recipes/inference/) — checkpoints + visualization workflow (broad audience)  
+- [`recipes/train/`](recipes/train/) — large-scale / Frontier-oriented training summary  
+- [`recipes/data/`](recipes/data/) — Constellation / Globus / OLCF data context and staging  
+- [`recipes/compute/`](recipes/compute/) — Frontier, AMD cloud / HPC Fund, institutional clusters  
+- [`examples/`](examples/) — ready-to-run Docker, SLURM, and smoke-test scripts  
 
 ## Installation (reference)
 
