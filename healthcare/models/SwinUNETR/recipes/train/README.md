@@ -2,7 +2,7 @@
 
 > **Research / engineering use only.** Not for clinical or diagnostic use.
 
-> **Ready-to-run scripts:** see [`../../examples/`](../../examples/) for `docker_run.sh`, `run_train.sh`, and `sbatch_train_mi300x.sh`.
+> **Ready-to-run scripts:** see [`../../examples/`](../../examples/) for `docker_run.sh`, `run_train.sh`, and `sbatch_train_amd.sh`.
 
 Train SwinUNETR for 3D lung tumor segmentation on the NSCLC-Radiomics dataset.
 

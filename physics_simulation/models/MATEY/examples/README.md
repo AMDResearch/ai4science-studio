@@ -13,7 +13,7 @@ launch, Apptainer SIF build, and SLURM support.
 | [`run_inference.py`](run_inference.py) | Autoregressive rollout from initial condition |
 | [`docker_run.sh`](docker_run.sh) | Docker launcher (clones MATEY, installs deps) |
 | [`build_sif.sh`](build_sif.sh) | Build Apptainer SIF + overlay for HPC clusters |
-| [`sbatch_train_mi300x.sh`](sbatch_train_mi300x.sh) | SLURM driver for training on AMD Instinct |
+| [`sbatch_train_amd.sh`](sbatch_train_amd.sh) | SLURM driver for training on AMD Instinct |
 
 ## Quick start — Docker
 
@@ -32,7 +32,7 @@ launch, Apptainer SIF build, and SLURM support.
 
 ```bash
 # Edit #SBATCH directives first, then:
-sbatch sbatch_train_mi300x.sh
+sbatch sbatch_train_amd.sh
 ```
 
 ## Environment variables (training)

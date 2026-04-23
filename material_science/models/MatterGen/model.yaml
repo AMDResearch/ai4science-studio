@@ -23,12 +23,12 @@ recipes:
     description: Generate novel crystal structures (unconditional or property-conditioned)
     recipe_path: recipes/inference/
     script: examples/run_inference.sh
-    slurm: examples/sbatch_inference_mi300x.sh
+    slurm: examples/sbatch_inference_amd.sh
   - task: train
     description: Train or fine-tune MatterGen on property datasets
     recipe_path: recipes/train/
     script: examples/run_train.sh
-    slurm: examples/sbatch_train_mi300x.sh
+    slurm: examples/sbatch_train_amd.sh
 
 env_vars:
   PRETRAINED_NAME:

@@ -39,10 +39,10 @@ cd healthcare/models/SwinUNETR/examples
 ### Apptainer
 ```bash
 export SU_SIF=<path>
-sbatch healthcare/models/SwinUNETR/examples/sbatch_train_mi300x.sh
+sbatch healthcare/models/SwinUNETR/examples/sbatch_train_amd.sh
 # or
 export SU_CHECKPOINT=<path>
-sbatch healthcare/models/SwinUNETR/examples/sbatch_inference_mi300x.sh
+sbatch healthcare/models/SwinUNETR/examples/sbatch_inference_amd.sh
 ```
 
 ## Step 3 — Monitor

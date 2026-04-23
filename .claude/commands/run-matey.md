@@ -45,7 +45,7 @@ bash physics_simulation/models/MATEY/examples/build_sif.sh
 ### SLURM
 ```bash
 # Edit #SBATCH directives first
-sbatch physics_simulation/models/MATEY/examples/sbatch_train_mi300x.sh
+sbatch physics_simulation/models/MATEY/examples/sbatch_train_amd.sh
 ```
 
 ## Step 3 — Submit

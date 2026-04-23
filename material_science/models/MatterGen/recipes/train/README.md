@@ -1,6 +1,6 @@
 # MatterGen — Training Recipe
 
-> **Ready-to-run scripts:** see [`../../examples/`](../../examples/) for `docker_run.sh`, `run_train.sh`, and `sbatch_train_mi300x.sh`.
+> **Ready-to-run scripts:** see [`../../examples/`](../../examples/) for `docker_run.sh`, `run_train.sh`, and `sbatch_train_amd.sh`.
 
 Train MatterGen from scratch or fine-tune a pretrained checkpoint on a new property dataset.
 

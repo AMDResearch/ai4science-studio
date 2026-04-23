@@ -20,12 +20,12 @@ recipes:
     description: Train SwinUNETR on NSCLC-Radiomics via MONAI
     recipe_path: recipes/train/
     script: examples/run_train.sh
-    slurm: examples/sbatch_train_mi300x.sh
+    slurm: examples/sbatch_train_amd.sh
   - task: inference
     description: Sliding-window inference with optional torch.compile
     recipe_path: recipes/inference/
     script: examples/run_inference.sh
-    slurm: examples/sbatch_inference_mi300x.sh
+    slurm: examples/sbatch_inference_amd.sh
 
 env_vars:
   CHECKPOINT:

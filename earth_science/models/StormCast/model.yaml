@@ -20,7 +20,7 @@ recipes:
     description: Multi-member ensemble with uncertainty quantification
     recipe_path: recipes/ensemble/
     script: examples/run_ensemble.py
-    slurm: examples/sbatch_ensemble_mi300x.sh
+    slurm: examples/sbatch_ensemble_amd.sh
 
 env_vars:
   SC_SIF:

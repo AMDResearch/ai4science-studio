@@ -18,10 +18,10 @@
 # Submit:
 #   export MATEY_SIF=/path/to/matey.sif
 #   export MATEY_OVERLAY=/path/to/matey_overlay.img   # optional, created by build_sif.sh
-#   sbatch sbatch_train_mi300x.sh
+#   sbatch sbatch_train_amd.sh
 #
 # Bare-metal fallback (no container):
-#   MATEY_BARE_METAL=1 sbatch sbatch_train_mi300x.sh
+#   MATEY_BARE_METAL=1 sbatch sbatch_train_amd.sh
 #   (You must activate your ROCm environment before submitting.)
 
 #SBATCH --job-name=matey-train
@@ -67,10 +67,10 @@ if [[ "${MATEY_BARE_METAL}" != "1" && -z "${MATEY_SIF}" ]]; then
     echo "  Then submit:" >&2
     echo "    export MATEY_SIF=/path/to/matey.sif" >&2
     echo "    export MATEY_OVERLAY=/path/to/matey_overlay.img  # if using overlay" >&2
-    echo "    sbatch sbatch_train_mi300x.sh" >&2
+    echo "    sbatch sbatch_train_amd.sh" >&2
     echo "" >&2
     echo "  To skip Apptainer and use a bare-metal env instead:" >&2
-    echo "    MATEY_BARE_METAL=1 sbatch sbatch_train_mi300x.sh" >&2
+    echo "    MATEY_BARE_METAL=1 sbatch sbatch_train_amd.sh" >&2
     exit 1
 fi
 

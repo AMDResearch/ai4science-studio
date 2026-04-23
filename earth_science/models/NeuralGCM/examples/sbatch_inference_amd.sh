@@ -23,10 +23,10 @@
 #   NGC_SIF          Apptainer/Singularity SIF path; if set, runs inside container
 #
 # Example — bare metal (modules loaded by your site):
-#   NGC_DATE=2020-06-15 NGC_STEPS=40 sbatch sbatch_inference_mi300x.sh
+#   NGC_DATE=2020-06-15 NGC_STEPS=40 sbatch sbatch_inference_amd.sh
 #
 # Example — Apptainer container:
-#   NGC_SIF=/path/to/neuralgcm.sif NGC_STEPS=16 sbatch sbatch_inference_mi300x.sh
+#   NGC_SIF=/path/to/neuralgcm.sif NGC_STEPS=16 sbatch sbatch_inference_amd.sh
 
 set -euo pipefail
 

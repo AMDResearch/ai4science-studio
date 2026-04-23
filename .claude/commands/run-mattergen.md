@@ -48,7 +48,7 @@ export MG_BATCH_SIZE=<n>               # default: 16
 export MG_NUM_BATCHES=<n>              # default: 1
 export MG_PROPERTIES=<dict>            # empty for unconditional
 export MG_GUIDANCE_FACTOR=<n>          # default: 2.0
-sbatch material_science/models/MatterGen/examples/sbatch_inference_mi300x.sh
+sbatch material_science/models/MatterGen/examples/sbatch_inference_amd.sh
 ```
 
 ### Training (Docker)

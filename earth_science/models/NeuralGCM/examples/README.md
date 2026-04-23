@@ -11,7 +11,7 @@ Zarr store — no manual downloads required.
 | [`preflight_neuralgcm.py`](preflight_neuralgcm.py) | Check your environment before submitting jobs |
 | [`run_inference.py`](run_inference.py) | Deterministic or stochastic global forecast from ERA5 |
 | [`docker_run.sh`](docker_run.sh) | Docker launcher for local workstations and interactive nodes |
-| [`sbatch_inference_mi300x.sh`](sbatch_inference_mi300x.sh) | SLURM driver for `run_inference.py` on MI300X |
+| [`sbatch_inference_amd.sh`](sbatch_inference_amd.sh) | SLURM driver for `run_inference.py` on MI300X |
 
 ## Quick start — Docker (local workstation / interactive node)
 
@@ -53,17 +53,17 @@ python run_inference.py --date 2020-01-01 --steps 16
 ## SLURM submission
 
 Edit the `#SBATCH` directives (`--partition`, `--account`) in
-`sbatch_inference_mi300x.sh`, then submit:
+`sbatch_inference_amd.sh`, then submit:
 
 ```bash
-NGC_DATE=2020-01-01 NGC_STEPS=16 sbatch sbatch_inference_mi300x.sh
+NGC_DATE=2020-01-01 NGC_STEPS=16 sbatch sbatch_inference_amd.sh
 ```
 
 To run inside an Apptainer/Singularity container built from
 `rocm/dev-ubuntu-22.04:7.0.2-complete`:
 
 ```bash
-NGC_SIF=/path/to/neuralgcm.sif NGC_STEPS=16 sbatch sbatch_inference_mi300x.sh
+NGC_SIF=/path/to/neuralgcm.sif NGC_STEPS=16 sbatch sbatch_inference_amd.sh
 ```
 
 ## Checkpoint selection

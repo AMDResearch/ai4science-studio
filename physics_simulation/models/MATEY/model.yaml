@@ -17,7 +17,7 @@ recipes:
     description: Single-GPU or multi-node DDP training on simulation datasets
     recipe_path: recipes/train/
     script: examples/run_train.sh
-    slurm: examples/sbatch_train_mi300x.sh
+    slurm: examples/sbatch_train_amd.sh
   - task: inference
     description: Autoregressive rollout from initial condition
     recipe_path: recipes/inference/

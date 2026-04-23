@@ -7,7 +7,7 @@ Source: [AMD ROCm blog — StormCast ensembles](https://rocm.blogs.amd.com/artif
 > **Ready-to-run scripts** live in [`../../examples/`](../../examples/).
 > Use [`run_ensemble.py`](../../examples/run_ensemble.py) directly instead of
 > copying snippets from this doc.  The SLURM driver is
-> [`sbatch_ensemble_mi300x.sh`](../../examples/sbatch_ensemble_mi300x.sh).
+> [`sbatch_ensemble_amd.sh`](../../examples/sbatch_ensemble_amd.sh).
 
 ## How this differs from deterministic inference
 

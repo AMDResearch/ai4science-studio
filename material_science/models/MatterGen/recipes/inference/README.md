@@ -1,6 +1,6 @@
 # MatterGen — Inference Recipe
 
-> **Ready-to-run scripts:** see [`../../examples/`](../../examples/) for `docker_run.sh`, `run_inference.sh`, and `sbatch_inference_mi300x.sh`.
+> **Ready-to-run scripts:** see [`../../examples/`](../../examples/) for `docker_run.sh`, `run_inference.sh`, and `sbatch_inference_amd.sh`.
 
 Generate novel inorganic crystal structures using pretrained MatterGen checkpoints.
 
