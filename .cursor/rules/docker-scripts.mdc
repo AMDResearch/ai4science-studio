@@ -1,0 +1,46 @@
+---
+description: Conventions for docker_run.sh scripts in model examples
+globs: "**/examples/docker_run.sh"
+alwaysApply: false
+---
+
+# Docker launch script conventions
+
+When creating or editing `docker_run.sh` under any model's `examples/` directory:
+
+## Required patterns
+
+1. **AMD Container Toolkit detection** — Auto-detect `--runtime=amd` vs raw device passthrough:
+   ```bash
+   GPU_ARGS=()
+   if docker info 2>/dev/null | grep -qi "amd"; then
+       GPU_ARGS=(--runtime=amd -e AMD_VISIBLE_DEVICES=all)
+   else
+       GPU_ARGS=(--device=/dev/kfd)
+       for dev in /dev/dri/renderD*; do
+           [[ -e "$dev" ]] && GPU_ARGS+=(--device="$dev")
+       done
+       GPU_ARGS+=(--group-add video)
+   fi
+   ```
+
+2. **Existing container check** — Before creating a new container, check if one already exists:
+   ```bash
+   if docker ps -a --format '{{.Names}}' | grep -qx "$CONTAINER_NAME"; then
+       echo "Container '$CONTAINER_NAME' already exists. Attach with: docker exec -it $CONTAINER_NAME bash"
+       exit 0
+   fi
+   ```
+
+3. **Auto-clone upstream** — If the model depends on an upstream repo, clone it automatically if absent:
+   ```bash
+   if [[ ! -d "$WORKSPACE_DIR/<repo>" ]]; then
+       git clone https://github.com/<org>/<repo>.git "$WORKSPACE_DIR/<repo>"
+   fi
+   ```
+
+4. **Mode argument** — Support at least `inference`, `shell`, and `stop` modes via a positional argument.
+
+5. **Env vars: never clobber via `-e`** — Only use `docker run -e` for variables you are introducing. Append to `LD_LIBRARY_PATH`, `PYTHONPATH`, `PATH` inside the container script, not via `-e`.
+
+6. **Use the canonical ROCm image** — `rocm/pytorch:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0` unless upstream requires a specific version.

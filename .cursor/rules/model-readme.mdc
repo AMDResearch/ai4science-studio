@@ -1,0 +1,40 @@
+---
+description: Structure requirements for model README.md files
+globs: "**/models/*/README.md"
+alwaysApply: false
+---
+
+# Model README conventions
+
+When creating or editing a `README.md` at `<domain>/models/<slug>/README.md`:
+
+## Required fields
+
+Every model README must include these fields near the top, either as bold-label lines or a YAML-style table:
+
+1. **Hugging Face model id** — The canonical HF id (e.g. `nvidia/stormcast-v1-era5-hrrr`) or `N/A` with an "Obtaining model weights" section
+2. **License** — SPDX identifier or link to the license
+3. **Upstream code** — Link to the GitHub repository
+4. **Paper** — Link to the paper (arXiv, journal, etc.) or "N/A"
+5. **Task description** — What the model does, in 1-2 sentences
+
+## Required sections
+
+1. **Recipes table** — List all available recipes with links:
+   ```markdown
+   ## Recipes
+   | Recipe | Summary |
+   |--------|---------|
+   | [`recipes/inference/`](recipes/inference/) | ... |
+   ```
+
+2. **AMD / ROCm notes** — Only what has actually been validated. Include container image, hardware tested, and any ROCm-specific findings.
+
+3. **On-disk folder name** — If the folder name differs from the HF slug, document the mapping.
+
+## Companion files
+
+Every model folder should also have:
+- `model.yaml` — Machine-readable manifest with the same metadata
+- `recipes/` — At least one recipe subfolder
+- `examples/` — Ready-to-run scripts with `README.md`

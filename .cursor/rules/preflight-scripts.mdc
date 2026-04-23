@@ -1,0 +1,44 @@
+---
+description: Conventions for preflight check scripts
+globs: "**/examples/preflight_*.py"
+alwaysApply: false
+---
+
+# Preflight script conventions
+
+When creating or editing `preflight_<slug>.py` under any model's `examples/` directory:
+
+## Required pattern
+
+Use the standard `check()` helper with colored PASS/FAIL output:
+
+```python
+PASS = "\033[32mPASS\033[0m"
+FAIL = "\033[31mFAIL\033[0m"
+errors = 0
+
+def check(label, fn):
+    global errors
+    try:
+        result = fn()
+        print(f"[{PASS}] {label}" + (f": {result}" if result else ""))
+    except Exception as exc:
+        print(f"[{FAIL}] {label}: {exc}")
+        errors += 1
+```
+
+## Required checks (in order)
+
+1. `import torch` — Report version
+2. GPU accessible — `torch.cuda.is_available()` must be True; report device name
+3. GPU tensor ops — Create a tensor on GPU, do a matmul, report result
+4. Model-specific imports — Import the key packages the model needs
+5. Optional deps — Use try/except and report "not installed (optional)" rather than failing
+
+## Exit code
+
+Exit with code 1 if any required check failed; 0 if all passed. Print a summary line at the end.
+
+## Naming
+
+File: `preflight_<slug>.py` where `<slug>` matches the model folder name (lowercase, hyphens to underscores).

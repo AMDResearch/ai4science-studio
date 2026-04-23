@@ -1,0 +1,28 @@
+---
+description: Guardrails for healthcare and life sciences content
+globs: "healthcare/**"
+alwaysApply: false
+---
+
+# Healthcare & Life Sciences guardrails
+
+When working in the `healthcare/` domain:
+
+## Mandatory disclaimer
+
+Every recipe README, model README, and examples README must include:
+```markdown
+> **Research / engineering use only.** Not for clinical or diagnostic use.
+```
+
+## PHI prohibition
+
+- Never commit patient-identifiable data, protected health information (PHI), or internal hospital artifacts
+- Use only public benchmarks (e.g. NSCLC-Radiomics via MONAI, ChEMBL, QM9, GEOM-Drugs), toy examples, or synthetic data
+- If a user provides real patient data paths, warn them not to commit those paths to the repository
+
+## Intended use
+
+- Copy the "Intended Use" and "Limitations" sections from the upstream model card into the model README
+- Never imply clinical applicability beyond what the model card states
+- Drug discovery models (GP-MoLFormer, REINVENT4, SemlaFlow) generate candidate molecules for research — not approved therapeutics
