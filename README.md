@@ -1,7 +1,7 @@
 # AI4Science Studio
 
-> **AMD's open recipe collection for AI across the sciences.**
-> Runnable recipes for leading open models—on AMD Instinct accelerators or wherever you work.
+> **Agent-first recipes for open AI-for-science models.**
+> Tell your AI coding agent what to run — it reads the metadata, picks the scripts, and handles the rest. Works on AMD Instinct accelerators or wherever you work.
 
 ## What is this?
 
