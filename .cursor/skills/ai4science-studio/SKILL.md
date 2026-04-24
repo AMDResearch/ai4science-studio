@@ -351,3 +351,15 @@ export PYTHONPATH="/tmp/mpi4py_stub:\${PYTHONPATH:-}"
 ## apt-get may be blocked
 
 On some clusters, port 80 to Ubuntu mirrors is blocked from containers. Only HTTPS endpoints (PyPI, HuggingFace, NOAA) work. Install everything via `pip`.
+
+## Docker: LD_LIBRARY_PATH must be appended, not set via `-e`
+
+Unlike Apptainer's `--rocm` flag (which injects `/opt/rocm/lib` independently of `LD_LIBRARY_PATH`), Docker has no equivalent mechanism. Passing `docker run -e LD_LIBRARY_PATH=X` replaces the image default entirely, dropping `/opt/rocm/lib` from the search path → `libhsa-runtime64.so` and `libamdhip64.so` unfindable → `torch.cuda.device_count()=0` → silent CPU fallback.
+
+**Always append inside the container script:**
+```bash
+# Inside the bash -c '...' block, after source /opt/venv/bin/activate:
+export LD_LIBRARY_PATH="/opt/venv/lib/python3.12/site-packages/torch/lib:${LD_LIBRARY_PATH:-}"
+```
+
+Only use `docker run -e` for variables you are **introducing** (e.g. `-e ORBIT2_ROOT=/orbit2`). Never use it for `LD_LIBRARY_PATH`.
