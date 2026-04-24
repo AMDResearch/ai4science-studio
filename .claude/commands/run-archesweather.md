@@ -57,7 +57,7 @@ bash /examples/run_train.sh
 
 ### Apptainer / SLURM path
 
-Edit `#SBATCH` directives in the relevant sbatch script, then:
+Edit the `#SBATCH` header in the relevant sbatch script — replace `YOUR_PARTITION_HERE` and `YOUR_ACCOUNT_HERE` with the user's values, then:
 
 ```bash
 # Inference

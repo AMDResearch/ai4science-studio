@@ -44,7 +44,7 @@ bash physics_simulation/models/MATEY/examples/build_sif.sh
 
 ### SLURM
 ```bash
-# Edit #SBATCH directives first
+# Edit #SBATCH directives first — replace YOUR_PARTITION_HERE and YOUR_ACCOUNT_HERE
 sbatch physics_simulation/models/MATEY/examples/sbatch_train_amd.sh
 ```
 

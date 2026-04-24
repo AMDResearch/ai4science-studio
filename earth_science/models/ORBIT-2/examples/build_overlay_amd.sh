@@ -55,8 +55,10 @@
 #                           Must match the ROCm version inside the SIF
 #                           (default: rocm7.2)
 
+# Adjust #SBATCH directives to match your site's partition, account, and runtime.
 #SBATCH --job-name=orbit2-overlay
-#SBATCH --partition=1CN192C4G1H_MI300A_Ubuntu22
+#SBATCH --partition=YOUR_PARTITION_HERE
+#SBATCH --account=YOUR_ACCOUNT_HERE
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --gres=gpu:1

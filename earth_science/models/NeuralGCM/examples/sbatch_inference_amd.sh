@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
+# Adjust #SBATCH directives to match your site's partition, account, and runtime.
 #SBATCH --job-name=neuralgcm-inference
+#SBATCH --partition=YOUR_PARTITION_HERE
+#SBATCH --account=YOUR_ACCOUNT_HERE
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --gres=gpu:1
 #SBATCH --time=01:00:00
 #SBATCH --output=logs/neuralgcm-inference-%j.log
 #SBATCH --error=logs/neuralgcm-inference-%j.log
-# Adjust --partition and --account for your cluster:
-# #SBATCH --partition=<partition>
-# #SBATCH --account=<account>
 
 # NeuralGCM deterministic inference — AMD MI300X / SLURM driver
 #
