@@ -61,21 +61,20 @@ Many issues (dep lists, version pins, env vars, torch protection) are already so
 - For older hardware (MI100/gfx908): use a `rocm6.x` image
 - For future hardware: update image tag + `ROCM_WHL_TAG` together
 
-## Never clobber inherited env vars
+## LD_LIBRARY_PATH: Apptainer vs Docker behave differently
 
-Always **append** to `LD_LIBRARY_PATH`, `PYTHONPATH`, `PATH`, `LD_PRELOAD` using `${VAR:-}`. This applies to both runtimes:
-- Apptainer `--env LD_LIBRARY_PATH=X` replaces the image default
-- Docker `-e LD_LIBRARY_PATH=X` replaces the image default
+**Apptainer + `--rocm`:** `--env LD_LIBRARY_PATH=X` replaces the image default, but `--rocm` separately injects `/opt/rocm/lib` via bind-mount and device injection — so ROCm libs remain reachable even when `LD_LIBRARY_PATH` is overwritten. The validated Apptainer scripts in this repo use `--env LD_LIBRARY_PATH=/opt/venv/.../torch/lib` (set, not append) and work correctly.
 
-The `rocm/pytorch` image sets `LD_LIBRARY_PATH=/opt/rocm/lib`. Clobbering it makes `libhsa-runtime64.so` and `libamdhip64.so` unfindable → `torch.cuda.device_count()=0` → silent CPU fallback.
+**Docker (no `--rocm` equivalent):** `-e LD_LIBRARY_PATH=X` replaces the image default and there is no separate ROCm injection mechanism. Clobbering `/opt/rocm/lib` makes `libhsa-runtime64.so` and `libamdhip64.so` unfindable → `torch.cuda.device_count()=0` → silent CPU fallback.
 
-**Correct pattern** — append inside the container script:
+**Rule for Docker:** always **append** inside the container script using `${VAR:-}`:
 ```bash
 export LD_LIBRARY_PATH="/opt/venv/lib/python3.12/site-packages/torch/lib:${LD_LIBRARY_PATH:-}"
 export PYTHONPATH="/my/paths:${PYTHONPATH:-}"
 ```
+Never pass `LD_LIBRARY_PATH` via `docker run -e`. Only use `-e` for variables you are **introducing** (e.g. `-e ORBIT2_ROOT=/orbit2`).
 
-Only use `-e` / `--env` for variables you are **introducing** (e.g. `-e ORBIT2_ROOT=/orbit2`).
+**Rule for `PYTHONPATH` in both runtimes:** always append with `${PYTHONPATH:-}` — there is no `--rocm`-style safety net for Python paths.
 
 ## SLURM spool dir workaround
 
