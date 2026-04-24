@@ -29,7 +29,7 @@ All 15 models have a `/run-*` command: `stormcast`, `orbit2`, `archesweather`, `
 /list-models                          # show all models
 /list-models earth_science            # filter by domain
 /list-models finetune                 # filter by task
-/status                               # readiness audit for all models
+/audit-models                         # readiness audit for all models
 ```
 
 Or just ask:
