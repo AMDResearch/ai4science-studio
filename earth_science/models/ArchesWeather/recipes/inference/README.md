@@ -2,10 +2,34 @@
 
 Run deterministic and ensemble weather forecasts using pretrained ArchesWeather / ArchesWeatherGen checkpoints from Hugging Face.
 
+> **Ready-to-run scripts** live in [`../../examples/`](../../examples/).
+> Use [`run_inference.sh`](../../examples/run_inference.sh) directly instead of
+> copying snippets from this doc. The SLURM driver is
+> [`sbatch_inference_amd.sh`](../../examples/sbatch_inference_amd.sh).
+
 ## Prerequisites
 
-- AMD Instinct GPU with ROCm driver
-- Docker with GPU device access
+| Requirement | Detail |
+|-------------|--------|
+| **Container** | `pytorch_training_geoarches:latest` from silogen/ai-samples |
+| **GPU** | AMD Instinct with ROCm driver |
+| **Weights** | Auto-downloaded from HF `gcouairon/ArchesWeather` |
+
+## Environment Variables
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `MODEL_NAME` | No | `archesweather-m-seed0` | Checkpoint variant (seed0–seed3, or archesweathergen) |
+| `CHECKPOINT` | No | *(auto-download)* | Path to trained checkpoint |
+| `DATA_PATH` | No | `/data/era5_240/full` | ERA5 dataset path inside container |
+| `YEAR` | No | `2020` | Test year for evaluation |
+| `OUTPUT_PATH` | No | `/workspace/results/predictions` | Where to write predictions |
+
+## Quick Start
+
+```bash
+bash examples/run_inference.sh
+```
 
 ## Setup
 

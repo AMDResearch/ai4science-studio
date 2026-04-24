@@ -7,7 +7,7 @@
 #    (ai4sciences/geoarches-training) or use Docker on an interactive node.
 # 2. Stage the ERA5 test dataset (~35 GB for one year) at $DATA_PATH.
 # 3. Download or train a checkpoint; set AW_CHECKPOINT before submitting:
-#       AW_CHECKPOINT=/path/to/checkpoint sbatch sbatch_inference_mi300x.sh
+#       AW_CHECKPOINT=/path/to/checkpoint sbatch sbatch_inference_amd.sh
 #
 # Adjust #SBATCH directives to match your site's partition, account, and runtime.
 #

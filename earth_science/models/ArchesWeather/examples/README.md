@@ -11,8 +11,8 @@ Docker image built from [silogen/ai-samples](https://github.com/silogen/ai-sampl
 | [`docker_run.sh`](docker_run.sh) | Build the Docker image and launch an interactive container |
 | [`run_inference.sh`](run_inference.sh) | Run inference and evaluation (inside container) |
 | [`run_train.sh`](run_train.sh) | Pretrain or fine-tune ArchesWeather / ArchesWeatherGen (inside container) |
-| [`sbatch_inference_mi300x.sh`](sbatch_inference_mi300x.sh) | SLURM driver for `run_inference.sh` on MI300X |
-| [`sbatch_train_mi300x.sh`](sbatch_train_mi300x.sh) | SLURM driver for `run_train.sh` on MI300X |
+| [`sbatch_inference_amd.sh`](sbatch_inference_amd.sh) | SLURM driver for `run_inference.sh` on MI300X |
+| [`sbatch_train_amd.sh`](sbatch_train_amd.sh) | SLURM driver for `run_train.sh` on MI300X |
 
 ## Quick start — Docker (local workstation / interactive node)
 
@@ -57,14 +57,14 @@ then edit the `#SBATCH` directives (`--partition`, `--account`) and submit:
 
 ```bash
 # Inference (evaluate on test year 2020)
-AW_SIF=/path/to/archesweather.sif sbatch sbatch_inference_mi300x.sh
+AW_SIF=/path/to/archesweather.sif sbatch sbatch_inference_amd.sh
 
 # Training (pretrain, 16-mixed precision)
-AW_SIF=/path/to/archesweather.sif sbatch sbatch_train_mi300x.sh
+AW_SIF=/path/to/archesweather.sif sbatch sbatch_train_amd.sh
 
 # Fine-tuning from a pretrained checkpoint
 AW_PHASE=finetune AW_LOAD_FROM=/workspace/checkpoints/archesweather-seed0 \
-    AW_SIF=/path/to/archesweather.sif sbatch sbatch_train_mi300x.sh
+    AW_SIF=/path/to/archesweather.sif sbatch sbatch_train_amd.sh
 ```
 
 Omit `AW_SIF` to use the bare-metal environment.

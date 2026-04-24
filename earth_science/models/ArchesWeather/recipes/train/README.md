@@ -2,11 +2,38 @@
 
 Train ArchesWeather (deterministic) and ArchesWeatherGen (generative) on ERA5 reanalysis data.
 
+> **Ready-to-run scripts** live in [`../../examples/`](../../examples/).
+> Use [`run_train.sh`](../../examples/run_train.sh) directly instead of
+> copying snippets from this doc. The SLURM driver is
+> [`sbatch_train_amd.sh`](../../examples/sbatch_train_amd.sh).
+
 ## Prerequisites
 
-- AMD Instinct GPU (MI300X recommended; 192 GB HBM3)
-- Docker with ROCm kernel-mode driver (`amdgpu-dkms`)
-- ~735 GB disk space for full ERA5 dataset
+| Requirement | Detail |
+|-------------|--------|
+| **Container** | `pytorch_training_geoarches:latest` from silogen/ai-samples |
+| **GPU** | AMD Instinct MI300X (192 GB HBM3) recommended |
+| **Runtime** | Docker with ROCm kernel-mode driver (`amdgpu-dkms`) |
+| **Data** | ~735 GB disk space for full ERA5 dataset |
+
+## Environment Variables
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `MODEL` | No | `archesweather` | `archesweather` or `archesweathergen` |
+| `PHASE` | No | `pretrain` | `pretrain` or `finetune` |
+| `SEED` | No | `0` | Seed index 0–3 for ensemble diversity |
+| `PRECISION` | No | `16-mixed` | `32-true`, `16-mixed`, or `bf16-mixed` |
+| `BATCH_SIZE` | No | `8` | Per-GPU batch size (5 at 32-true, 8 at 16/bf16-mixed on MI300X) |
+| `MAX_STEPS` | No | Model-dependent | Training steps (250K pretrain, 50K finetune for ArchesWeather) |
+| `DATA_PATH` | No | `/data/era5_240/full` | ERA5 dataset path inside container |
+| `LOAD_FROM` | Finetune only | — | Checkpoint path for fine-tuning phase |
+
+## Quick Start
+
+```bash
+bash examples/run_train.sh
+```
 
 ## Setup
 

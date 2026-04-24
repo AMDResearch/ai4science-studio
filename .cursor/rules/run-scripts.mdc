@@ -1,0 +1,42 @@
+---
+description: Conventions for run_*.sh and run_*.py scripts in model examples
+globs: "**/examples/run_*.{sh,py}"
+alwaysApply: false
+---
+
+# Run script conventions
+
+When creating or editing `run_*.sh` or `run_*.py` under any model's `examples/` directory:
+
+## Required patterns
+
+1. **Env-var defaults** — Every user-configurable parameter must be overridable via an environment variable with a sensible default:
+   ```bash
+   SC_STEPS="${SC_STEPS:-6}"
+   ```
+   ```python
+   steps = int(os.environ.get("SC_STEPS", "6"))
+   ```
+
+2. **Config summary** — Print all effective settings before the main run:
+   ```bash
+   echo "=== Configuration ==="
+   echo "  Steps:  $SC_STEPS"
+   echo "  Output: $SC_OUTPUT"
+   ```
+
+3. **Fail on missing required inputs** — If a variable is required (no default), exit with a clear message:
+   ```bash
+   : "${ORBIT2_ROOT:?Set ORBIT2_ROOT to the ORBIT-2 clone directory}"
+   ```
+
+4. **No hardcoded paths** — Paths to checkpoints, data, and output directories must always come from env vars, never from hardcoded absolute paths.
+
+5. **Shebang line** — Shell scripts: `#!/usr/bin/env bash` with `set -euo pipefail`. Python scripts: `#!/usr/bin/env python3`.
+
+6. **chmod +x** — All scripts must be executable.
+
+## Naming
+
+- Use the model's env-var prefix consistently (e.g. `SC_*` for StormCast, `ORBIT2_*` for ORBIT-2, `MG_*` or bare names for MatterGen).
+- Name scripts `run_<task>.sh` or `run_<task>.py` where task is `inference`, `train`, `ensemble`, `generation`, etc.

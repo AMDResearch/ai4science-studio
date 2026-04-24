@@ -40,7 +40,7 @@ SU_USE_COMPILE="${SU_USE_COMPILE:-1}"  # 1 = torch.compile max-autotune (~2.9× 
 if [[ -z "${SU_CHECKPOINT}" ]]; then
     echo "ERROR: SU_CHECKPOINT is not set."
     echo "  Export it before submitting, e.g.:"
-    echo "  SU_CHECKPOINT=/path/to/model.pth sbatch sbatch_inference_mi300x.sh"
+    echo "  SU_CHECKPOINT=/path/to/model.pth sbatch sbatch_inference_amd.sh"
     exit 1
 fi
 

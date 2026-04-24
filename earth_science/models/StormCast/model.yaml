@@ -1,0 +1,49 @@
+name: StormCast
+hf_id: nvidia/stormcast-v1-era5-hrrr
+license: Apache-2.0
+task: High-resolution convection-allowing weather prediction (3 km, 1-hour steps)
+domain: earth_science
+upstream_code: https://github.com/NVIDIA/earth2studio
+paper: https://arxiv.org/abs/2408.10958
+container_image: rocm/pytorch:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0
+vram_gb: 9.6
+validated_hardware:
+  - MI300X
+
+recipes:
+  - task: inference
+    description: Deterministic single-member forecast
+    recipe_path: recipes/inference/
+    script: examples/run_inference.py
+    slurm: examples/sbatch_inference_amd.sh
+  - task: ensemble
+    description: Multi-member ensemble with uncertainty quantification
+    recipe_path: recipes/ensemble/
+    script: examples/run_ensemble.py
+    slurm: examples/sbatch_ensemble_amd.sh
+
+env_vars:
+  SC_SIF:
+    description: Path to Apptainer SIF file
+    required: false
+    default: null
+  SC_OVERLAY:
+    description: Pre-built ext3 overlay (skips ~5 min pip install per job)
+    required: false
+    default: null
+  SC_START:
+    description: Forecast start time (ISO-8601)
+    required: false
+    default: "2025-01-01T06"
+  SC_STEPS:
+    description: Number of 1-hour forecast steps
+    required: false
+    default: "6"
+  SC_OUTPUT:
+    description: Output zarr path
+    required: false
+    default: null
+  SC_MEMBERS:
+    description: Ensemble size (ensemble task only)
+    required: false
+    default: "4"

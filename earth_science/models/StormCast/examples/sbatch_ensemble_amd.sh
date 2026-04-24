@@ -7,7 +7,7 @@
 #    use Docker directly on an interactive node (see recipes/ensemble/README.md).
 # 2. pip install "earth2studio[stormcast]" cartopy   (inside the container)
 # 3. Set SC_START, SC_STEPS, SC_MEMBERS below, or export them before submitting:
-#       SC_START=2025-08-09T12 SC_STEPS=12 SC_MEMBERS=8 sbatch sbatch_ensemble_mi300x.sh
+#       SC_START=2025-08-09T12 SC_STEPS=12 SC_MEMBERS=8 sbatch sbatch_ensemble_amd.sh
 #
 # Memory note: each additional ensemble member adds ~9.6 GiB VRAM.
 # The MI300X has 192 GiB HBM — up to ~16 members fit comfortably.

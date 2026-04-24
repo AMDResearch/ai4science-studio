@@ -1,0 +1,78 @@
+name: MATEY
+hf_id: N/A
+license: MIT
+task: Spatiotemporal surrogate modeling for multiphysics systems (turbulence, plasma, fluid dynamics)
+domain: physics_simulation
+upstream_code: https://github.com/ORNL/MATEY
+paper: https://arxiv.org/abs/2412.20601
+weight_source: Trained from scratch (no public pretrained checkpoints)
+container_image: rocm/pytorch:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0
+vram_gb: null
+validated_hardware:
+  - MI250X
+  - MI300X
+
+recipes:
+  - task: train
+    description: Single-GPU or multi-node DDP training on simulation datasets
+    recipe_path: recipes/train/
+    script: examples/run_train.sh
+    slurm: examples/sbatch_train_amd.sh
+  - task: inference
+    description: Autoregressive rollout from initial condition
+    recipe_path: recipes/inference/
+    script: examples/run_inference.py
+
+env_vars:
+  MATEY_RUN_NAME:
+    description: Run name for logging
+    required: false
+    default: my_run
+  MATEY_CONFIG:
+    description: Config preset name
+    required: false
+    default: basic_config
+  MATEY_YAML:
+    description: YAML configuration file path
+    required: true
+    default: null
+  MATEY_DATA_DIR:
+    description: Training data directory
+    required: false
+    default: /data/JHTDB
+  MATEY_EPOCHS:
+    description: Training epochs
+    required: false
+    default: "100"
+  MATEY_BATCH_SIZE:
+    description: Per-GPU batch size
+    required: false
+    default: "4"
+  MATEY_LR:
+    description: Learning rate
+    required: false
+    default: "1e-4"
+  MATEY_USE_DDP:
+    description: Enable multi-GPU DDP via torchrun (1=on)
+    required: false
+    default: "0"
+  MATEY_NUM_GPUS:
+    description: Number of GPUs when DDP is enabled
+    required: false
+    default: "1"
+  MATEY_CHECKPOINT:
+    description: Path to trained .pt checkpoint (inference)
+    required: true
+    default: null
+  MATEY_INPUT:
+    description: HDF5 initial condition file (inference)
+    required: true
+    default: null
+  MATEY_STEPS:
+    description: Rollout steps (inference)
+    required: false
+    default: "100"
+  MATEY_OUTPUT:
+    description: Output HDF5 path (inference)
+    required: false
+    default: outputs/rollout.h5

@@ -2,12 +2,30 @@
 
 > **Research / engineering use only.** Not for clinical or diagnostic use.
 
+> **Ready-to-run scripts:** see [`../../examples/`](../../examples/) for `docker_run.sh`, `run_train.sh`, and `sbatch_train_amd.sh`.
+
 Train SwinUNETR for 3D lung tumor segmentation on the NSCLC-Radiomics dataset.
 
 ## Prerequisites
 
-- AMD Instinct GPU with ROCm 6.4+ driver
-- Docker with GPU device access
+- Container: `rocm/pytorch:rocm6.4_ubuntu22.04_py3.10_pytorch_release_2.6.0` (training) or `rocm/pytorch:rocm7.0.2_ubuntu24.04_py3.12_pytorch_release_2.8.0` (inference)
+- GPU: AMD Instinct with ROCm 6.4+ driver
+- Runtime: Docker with GPU device access
+- Data: NSCLC-Radiomics (auto-downloaded by MONAI)
+
+## Environment Variables
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `DATA_DIR` | No | `/data` | NSCLC-Radiomics data root |
+| `CKPT_DIR` | No | `/workspace/checkpoints` | Checkpoint / log directory |
+| `MAX_EPOCHS` | No | `700` | Training epochs |
+| `ROI_X` | No | `96` | Patch size X (up to 480 on MI300X) |
+| `ROI_Y` | No | `96` | Patch size Y (up to 480 on MI300X) |
+| `ROI_Z` | No | `96` | Patch size Z |
+| `FEATURE_SIZE` | No | `48` | Encoder feature size |
+| `NUM_WORKERS` | No | `64` | DataLoader workers |
+| `AMP_DTYPE` | No | `float16` | AMP dtype (float16 recommended, bfloat16 underperforms) |
 
 ## Setup
 

@@ -7,7 +7,7 @@
 # 2. Creates a writable ext3 overlay image (default 8 GB).
 # 3. Installs MATEY (cloned from GitHub) into the overlay via `apptainer exec`.
 #
-# The resulting pair (SIF + overlay) is then referenced in sbatch_train_mi300x.sh.
+# The resulting pair (SIF + overlay) is then referenced in sbatch_train_amd.sh.
 #
 # Usage
 # -----
@@ -102,7 +102,7 @@ echo "  export MATEY_SIF=${MATEY_SIF}"
 echo "  export MATEY_OVERLAY=${MATEY_OVERLAY}"
 echo ""
 echo "Then submit:"
-echo "  sbatch sbatch_train_mi300x.sh"
+echo "  sbatch sbatch_train_amd.sh"
 echo ""
 echo "To update MATEY after a git pull (without rebuilding the SIF):"
 echo "  ${0} --update-only"

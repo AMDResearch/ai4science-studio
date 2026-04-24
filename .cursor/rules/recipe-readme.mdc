@@ -1,0 +1,47 @@
+---
+description: Structure requirements for recipe README.md files
+globs: "**/recipes/**/README.md"
+alwaysApply: false
+---
+
+# Recipe README conventions
+
+When creating or editing a `README.md` under any model's `recipes/<task>/` directory:
+
+## Required sections (in order)
+
+1. **Title** — `# <Model> — <Task> Recipe`
+
+2. **Callout box** — Link to ready-to-run scripts:
+   ```markdown
+   > **Ready-to-run scripts:** see [`../../examples/`](../../examples/) for `docker_run.sh` and `run_<task>.sh`.
+   ```
+
+3. **Prerequisites** — Structured list (not prose paragraph):
+   ```markdown
+   ## Prerequisites
+   - Container: `<image tag>`
+   - GPU: <hardware requirement>
+   - Runtime: <Docker/Apptainer>
+   - Weights: <how to get them>
+   - Data: <how to get it>
+   ```
+
+4. **Environment Variables table**:
+   ```markdown
+   ## Environment Variables
+   | Variable | Required | Default | Description |
+   |----------|----------|---------|-------------|
+   | `VAR` | Yes/No | `default` or -- | What it does |
+   ```
+
+5. **Quick Start** — One-liner to run the task.
+
+6. **Details** — Prose explanation, code samples, etc.
+
+## Healthcare disclaimer
+
+All `healthcare/` recipe READMEs must include at the top:
+```markdown
+> **Research / engineering use only.** Not for clinical or diagnostic use.
+```

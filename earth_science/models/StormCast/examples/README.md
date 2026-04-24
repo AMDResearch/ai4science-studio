@@ -11,8 +11,8 @@ Ready-to-run scripts for [StormCast](../README.md).  All scripts call
 | [`run_inference.py`](run_inference.py) | Deterministic single-member forecast |
 | [`run_ensemble.py`](run_ensemble.py) | Multi-member ensemble forecast |
 | [`docker_run.sh`](docker_run.sh) | Docker launcher for local workstations and interactive nodes |
-| [`sbatch_inference_mi300x.sh`](sbatch_inference_mi300x.sh) | SLURM driver for `run_inference.py` on MI300X |
-| [`sbatch_ensemble_mi300x.sh`](sbatch_ensemble_mi300x.sh) | SLURM driver for `run_ensemble.py` on MI300X |
+| [`sbatch_inference_amd.sh`](sbatch_inference_amd.sh) | SLURM driver for `run_inference.py` on AMD Instinct |
+| [`sbatch_ensemble_amd.sh`](sbatch_ensemble_amd.sh) | SLURM driver for `run_ensemble.py` on MI300X |
 
 ## Quick start — Docker (local workstation / interactive node)
 
@@ -56,10 +56,11 @@ script, then submit:
 
 ```bash
 # Deterministic
-SC_START=2025-01-01T06 SC_STEPS=6 sbatch sbatch_inference_mi300x.sh
+SC_START=2025-01-01T06 SC_STEPS=6 sbatch sbatch_inference_amd.sh
 
 # Ensemble
-SC_START=2025-08-09T12 SC_STEPS=12 SC_MEMBERS=4 sbatch sbatch_ensemble_mi300x.sh
+SC_START=2025-08-09T12 SC_STEPS=12 SC_MEMBERS=4 sbatch sbatch_ensemble_amd.sh
+
 ```
 
 Set `SC_SIF=/path/to/stormcast.sif` to run inside a Singularity/Apptainer

@@ -1,12 +1,24 @@
 # MatterGen — Training Recipe
 
+> **Ready-to-run scripts:** see [`../../examples/`](../../examples/) for `docker_run.sh`, `run_train.sh`, and `sbatch_train_amd.sh`.
+
 Train MatterGen from scratch or fine-tune a pretrained checkpoint on a new property dataset.
 
 ## Prerequisites
 
-- AMD Instinct GPU (MI300X recommended; 192 GB HBM enables large batch sizes)
-- Docker with AMD Container Toolkit
-- ~50 GB disk space for `mp_20` dataset
+- Container: `rocm/pytorch:rocm7.0_ubuntu22.04_py3.10_pytorch_release_2.7.1`
+- GPU: AMD Instinct MI300X recommended (192 GB HBM enables large batch sizes)
+- Runtime: Docker with AMD Container Toolkit
+- Disk: ~50 GB for `mp_20` dataset
+
+## Environment Variables
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `DATA_DIR` | No | `/workspace/mattergen/datasets` | Dataset cache / prep location |
+| `OUTPUT_DIR` | No | `/workspace/mattergen/checkpoints` | Checkpoint directory |
+| `MAX_EPOCHS` | No | `900` | Training epochs (~15h on single MI300X) |
+| `MG_SIF` | No | -- | Apptainer SIF path (SLURM scripts) |
 
 ## Setup
 

@@ -10,8 +10,8 @@ GPUs via ROCm and use ROCm-compatible forks of `pytorch_scatter` / `pytorch_spar
 | [`docker_run.sh`](docker_run.sh) | Launch container, clone, and install MatterGen |
 | [`run_inference.sh`](run_inference.sh) | Generate novel crystal structures (inside container) |
 | [`run_train.sh`](run_train.sh) | Train MatterGen on the mp_20 dataset (inside container) |
-| [`sbatch_inference_mi300x.sh`](sbatch_inference_mi300x.sh) | SLURM driver for generation on MI300X |
-| [`sbatch_train_mi300x.sh`](sbatch_train_mi300x.sh) | SLURM driver for training on MI300X |
+| [`sbatch_inference_amd.sh`](sbatch_inference_amd.sh) | SLURM driver for generation on MI300X |
+| [`sbatch_train_amd.sh`](sbatch_train_amd.sh) | SLURM driver for training on MI300X |
 
 ## Quick start — Docker (local workstation / interactive node)
 
@@ -56,16 +56,16 @@ installed, then edit the `#SBATCH` directives (`--partition`, `--account`) and s
 
 ```bash
 # Generate 16 structures (unconditional)
-MG_SIF=/path/to/mattergen.sif sbatch sbatch_inference_mi300x.sh
+MG_SIF=/path/to/mattergen.sif sbatch sbatch_inference_amd.sh
 
 # Property-conditioned generation (magnetic density)
 MG_SIF=/path/to/mattergen.sif \
 MG_PRETRAINED_NAME=dft_mag_density \
 MG_PROPERTIES="{'dft_mag_density': 0.15}" \
-    sbatch sbatch_inference_mi300x.sh
+    sbatch sbatch_inference_amd.sh
 
 # Training (900 epochs, ~15 hours on MI300X)
-MG_SIF=/path/to/mattergen.sif sbatch sbatch_train_mi300x.sh
+MG_SIF=/path/to/mattergen.sif sbatch sbatch_train_amd.sh
 ```
 
 Omit `MG_SIF` to use the bare-metal environment.

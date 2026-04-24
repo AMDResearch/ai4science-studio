@@ -1,0 +1,69 @@
+name: ArchesWeather
+hf_id: gcouairon/ArchesWeather
+license: See upstream repository and Hugging Face model card
+task: Global AI weather forecasting at 1.5° resolution (deterministic and generative)
+domain: earth_science
+upstream_code: https://github.com/silogen/ai-samples
+paper: https://arxiv.org/abs/2412.12971
+container_image: pytorch_training_geoarches:latest
+vram_gb: 192
+validated_hardware:
+  - MI300X
+
+recipes:
+  - task: inference
+    description: Run deterministic and ensemble forecasts with pretrained HF checkpoints
+    recipe_path: recipes/inference/
+    script: examples/run_inference.sh
+    slurm: examples/sbatch_inference_amd.sh
+  - task: train
+    description: Pretrain and fine-tune ArchesWeather / ArchesWeatherGen on ERA5
+    recipe_path: recipes/train/
+    script: examples/run_train.sh
+    slurm: examples/sbatch_train_amd.sh
+
+env_vars:
+  MODEL_NAME:
+    description: Checkpoint variant (archesweather-m-seed0 through seed3, or archesweathergen)
+    required: false
+    default: archesweather-m-seed0
+  DATA_PATH:
+    description: ERA5 dataset path inside container
+    required: false
+    default: /data/era5_240/full
+  YEAR:
+    description: Test year for inference evaluation
+    required: false
+    default: "2020"
+  CHECKPOINT:
+    description: Path to trained checkpoint (empty = auto-download from HF)
+    required: false
+    default: null
+  OUTPUT_PATH:
+    description: Where to write predictions
+    required: false
+    default: /workspace/results/predictions
+  MODEL:
+    description: "Training: archesweather or archesweathergen"
+    required: false
+    default: archesweather
+  PHASE:
+    description: "Training phase: pretrain or finetune"
+    required: false
+    default: pretrain
+  SEED:
+    description: Seed index 0-3 for ArchesWeather training
+    required: false
+    default: "0"
+  PRECISION:
+    description: "Training precision: 32-true, 16-mixed, or bf16-mixed"
+    required: false
+    default: 16-mixed
+  BATCH_SIZE:
+    description: Per-GPU training batch size
+    required: false
+    default: "8"
+  AW_SIF:
+    description: Path to Apptainer SIF file (SLURM)
+    required: false
+    default: null

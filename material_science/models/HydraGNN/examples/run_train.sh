@@ -7,7 +7,7 @@
 # NOTE: Published GFM 2024 pretraining used Frontier (OLCM) at very large scale
 # with ADIOS preprocessed datasets. This script targets smaller-scale experiments
 # (e.g. reproducing a single HPO trial) using the open datasets in the HydraGNN repo.
-# See recipes/training-hpc.md for the full Frontier workflow.
+# See recipes/train/README.md for the full Frontier workflow.
 #
 # OPTIONAL EDITS:
 #   HG_EXAMPLE     — which upstream example to run (default: multidataset_hpo)
@@ -31,7 +31,7 @@ echo "  Data dir   : $HG_DATA_DIR"
 echo "  Output dir : $HG_OUTPUT_DIR"
 echo ""
 echo "NOTE: Full GFM 2024 pretraining requires staged ADIOS data from Constellation"
-echo "  and large-scale compute (see recipes/training-hpc.md)."
+echo "  and large-scale compute (see recipes/train/README.md)."
 echo "  For local experiments, use one of the smaller datasets bundled in the repo."
 echo ""
 

@@ -1,13 +1,13 @@
 # AI4Science Studio
 
-> **AMD's open recipe collection for AI across the sciences.**
-> Runnable recipes for leading open models—on AMD Instinct accelerators or wherever you work.
+> **Agent-first recipes for open AI-for-science models.**
+> Tell your AI coding agent what to run — it reads the metadata, picks the scripts, and handles the rest. Works on AMD Instinct accelerators or wherever you work.
 
 ## What is this?
 
-AI4Science Studio connects **open AI models** with **clear, reproducible recipes** across science domains. Whether you want to run a state-of-the-art weather forecast, generate novel crystal structures, fold a protein, or train a molecular design agent, you'll find working scripts, container setups, and AMD/ROCm notes here.
+AI4Science Studio is an **agent-first** collection of runnable recipes for open AI-for-science models. Point an AI coding agent — [Cursor](https://cursor.sh), [Claude Code](https://claude.ai/code), or similar — at this repo and tell it what you want: run a weather forecast, generate novel crystals, fold a protein, or train a molecular design agent. The agent reads machine-readable metadata (`model.yaml`), picks the right scripts, and handles the rest.
 
-Models are sourced from [Hugging Face](https://huggingface.co/) and leading research groups. Each recipe folder is self-contained: a model card, runnable examples, and optional AMD-specific tuning notes validated on real hardware.
+Every model comes from [Hugging Face](https://huggingface.co/) or leading research groups, with self-contained recipe folders: a model card, ready-to-run examples, container setups, and optional AMD/ROCm tuning notes validated on real hardware. You can also use the repo without an agent — see [Manual usage (without an agent)](#manual-usage-without-an-agent) below.
 
 
 ## Science domains
@@ -62,7 +62,7 @@ Models: **REINVENT4**, **SemlaFlow**, **SwinUNETR**, **GP-MoLFormer**.
 
 [Browse healthcare & life sciences recipes →](healthcare/)
 
-> ⚠️ Content is for **research and engineering only**—not medical advice or clinical use.
+> Content is for **research and engineering only**—not medical advice or clinical use.
 
 </td>
 </tr>
@@ -82,47 +82,66 @@ Surrogate models and neural operators for continuum dynamics, fluid mechanics, t
 </tr>
 </table>
 
+---
 
-## Use Claude Code or Cursor to add and run models
+## Using this repo with an agent
 
-AI4Science Studio ships with **agent skills** for [Claude Code](https://claude.ai/code) and [Cursor](https://cursor.sh). You can talk to your AI coding assistant in plain language to get things done:
+Here's what agents can do for you out of the box.
 
-### Add a new model
+### Run any model
+
+Just describe what you want:
+
+> *"Run StormCast ensemble inference on MI300X with 4 members for 12 hours starting 2025-08-09T12"*
+
+Or use a slash command (Claude Code):
+
+```
+/run-stormcast SC_SIF=/path/to/sif
+/run-mattergen unconditional generation
+/run-gpmolformer scaffold c1ccccc1
+```
+
+All 15 models have a `/run-*` command: `stormcast`, `orbit2`, `archesweather`, `aurora`, `gencast`, `neuralgcm`, `panguweather`, `mattergen`, `hydragnn`, `gpmolformer`, `swinunetr`, `semlaflow`, `reinvent4`, `matey`, `walrus`.
+
+### Discover and compare models
+
+```
+/list-models                          # show all models
+/list-models earth_science            # filter by domain
+/list-models finetune                 # filter by task
+/audit-models                         # readiness audit for all models
+```
+
+Or just ask:
+
+> *"What models in this repo support fine-tuning?"*
+> *"Which models are MIT licensed?"*
+> *"Compare StormCast and ORBIT-2"*
+
+### Add and audit models
 
 ```
 /add-model microsoft/aurora → earth_science
-```
-
-The agent will scaffold the folder, populate the README with the HF model card details, and stub out recipe files—ready for you to fill in the scripts.
-
-### Add a recipe to an existing model
-
-```
 /add-recipe StormCast ensemble inference on MI300X
-```
-
-Describe what you want, and the agent will generate a runnable script, Docker launch wrapper, and optional SLURM batch script following the repo's conventions.
-
-### Audit a model folder
-
-```
 /check-model NeuralGCM
 ```
 
-The agent reviews the folder for completeness: HF id, license, upstream links, recipe coverage, and AMD/ROCm notes. It returns a checklist and flags anything missing.
+### Machine-readable metadata
 
-### Ask open-ended questions
+Agents read these files to understand the repo:
 
-You don't need a slash command. Just ask:
+| File | Purpose |
+|------|---------|
+| [`models.yaml`](models.yaml) | Index of all 15 models across 5 domains |
+| `<model>/model.yaml` | Per-model manifest: HF id, license, recipes, env vars, hardware |
+| `.cursor/skills/` | Agent skills for Cursor (run models, discover, domain conventions) |
+| `.cursor/rules/` | Contextual rules that fire when editing specific file types |
+| `.claude/commands/` | Slash commands for Claude Code |
 
-> *"How do I run StormCast ensemble inference on a single MI300X node?"*
-> *"What models in this repo support fine-tuning?"*
-> *"Show me the ROCm tuning notes for MatterGen."*
+---
 
-The agent reads the repo and answers from the actual recipe files.
-
-
-## Quick start (without an agent)
+## Manual usage (without an agent)
 
 1. **Browse** the domain folder for the model you want.
 2. **Read** `models/<model>/README.md` for the HF model id, license, and upstream links.
@@ -139,10 +158,21 @@ No build step, no compiled code. The scripts pull public container images and mo
 
 ## Contributing
 
+The fastest way to add a model is to let the agent do it:
+
+```
+/add-model microsoft/aurora → earth_science
+```
+
+This walks through folder creation, `README.md`, `model.yaml`, recipe stubs, example scripts, and `models.yaml` registration — all in one pass.
+
+If you prefer to do it manually:
+
 1. Fork the repo and create a branch.
 2. Copy [`_template/`](_template/) to your domain and model folder.
-3. Fill in the model README and add at minimum one runnable recipe.
-4. Open a pull request—or just use `/add-model` in Claude Code and let the agent do it.
+3. Fill in the model README, create a `model.yaml`, and add at minimum one runnable recipe.
+4. Add the model to [`models.yaml`](models.yaml).
+5. Open a pull request.
 
 See each domain's `models/README.md` for slug conventions and domain-specific notes.
 

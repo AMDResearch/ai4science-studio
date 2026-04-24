@@ -1,6 +1,6 @@
 # MATEY — Training
 
-> **Ready-to-run scripts:** see [`../../examples/`](../../examples/) for `docker_run.sh`, `run_train.sh`, and `sbatch_train_mi300x.sh`.
+> **Ready-to-run scripts:** see [`../../examples/`](../../examples/) for `docker_run.sh`, `run_train.sh`, and `sbatch_train_amd.sh`.
 
 ## Overview
 
@@ -50,7 +50,7 @@ The Frontier SLURM script in `examples/` closely follows the [upstream demo subm
 
 ```bash
 # 2 nodes × 8 GPUs = 16 tasks total
-sbatch sbatch_train_mi300x.sh
+sbatch sbatch_train_amd.sh
 ```
 
 Key SLURM settings used at ORNL on Frontier:
@@ -94,7 +94,7 @@ The upstream Frontier script is a good baseline for profiling:
 
 ```bash
 # Profile a short run (adjust --time to 10 min)
-sbatch --time=0:10:00 sbatch_train_mi300x.sh
+sbatch --time=0:10:00 sbatch_train_amd.sh
 ```
 
 ROCm profiling tools:

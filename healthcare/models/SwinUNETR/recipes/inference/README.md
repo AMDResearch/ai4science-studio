@@ -6,9 +6,23 @@ Optimized inference for 3D lung tumor segmentation using a trained SwinUNETR che
 
 ## Prerequisites
 
-- AMD Instinct GPU with ROCm 7.0+ driver
-- Docker with GPU device access
-- Trained SwinUNETR checkpoint
+- Container: `rocm/pytorch:rocm7.0.2_ubuntu24.04_py3.12_pytorch_release_2.8.0`
+- GPU: AMD Instinct with ROCm 7.0+ driver
+- Runtime: Docker with GPU device access
+- Weights: trained SwinUNETR `.pth` checkpoint (see [../train/](../train/))
+
+## Environment Variables
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `CHECKPOINT` | Yes | -- | Path to trained `.pth` checkpoint |
+| `INPUT_DIR` | No | `/data/test` | Input NIfTI directory |
+| `OUTPUT_DIR` | No | `/workspace/results` | Output segmentation masks |
+| `ROI_X` | No | `96` | Sliding-window patch size X |
+| `ROI_Y` | No | `96` | Sliding-window patch size Y |
+| `ROI_Z` | No | `96` | Sliding-window patch size Z |
+| `USE_COMPILE` | No | `1` | Enable `torch.compile` max-autotune |
+| `AMP_DTYPE` | No | `float16` | AMP dtype |
 
 ## Setup
 

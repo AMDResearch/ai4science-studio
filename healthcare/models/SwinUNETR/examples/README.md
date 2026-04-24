@@ -10,8 +10,8 @@ Ready-to-run scripts for [SwinUNETR](../README.md). Training and inference use
 | [`docker_run.sh`](docker_run.sh) | Launch training or inference container (pass `train` or `infer`) |
 | [`run_train.sh`](run_train.sh) | Train SwinUNETR on NSCLC-Radiomics with MIOpen auto-tuning (inside container) |
 | [`run_inference.sh`](run_inference.sh) | Optimized inference with AMP + torch.compile max-autotune (inside container) |
-| [`sbatch_train_mi300x.sh`](sbatch_train_mi300x.sh) | SLURM driver for training on MI300X (ROCm 6.4) |
-| [`sbatch_inference_mi300x.sh`](sbatch_inference_mi300x.sh) | SLURM driver for inference on MI300X (ROCm 7.0) |
+| [`sbatch_train_amd.sh`](sbatch_train_amd.sh) | SLURM driver for training on MI300X (ROCm 6.4) |
+| [`sbatch_inference_amd.sh`](sbatch_inference_amd.sh) | SLURM driver for inference on MI300X (ROCm 7.0) |
 
 ## Quick start — Docker (local workstation / interactive node)
 
@@ -53,17 +53,17 @@ Build separate Apptainer/Singularity SIFs for training (ROCm 6.4) and inference
 
 ```bash
 # Training
-SU_SIF=/path/to/swinunetr-train.sif sbatch sbatch_train_mi300x.sh
+SU_SIF=/path/to/swinunetr-train.sif sbatch sbatch_train_amd.sh
 
 # Large-ROI training (up to 480×480×96 on MI300X 192 GB)
 SU_SIF=/path/to/swinunetr-train.sif \
 SU_ROI_X=480 SU_ROI_Y=480 SU_ROI_Z=96 \
-    sbatch sbatch_train_mi300x.sh
+    sbatch sbatch_train_amd.sh
 
 # Inference (with torch.compile max-autotune, ~2.9× total speedup)
 SU_SIF=/path/to/swinunetr-infer.sif \
 SU_CHECKPOINT=/path/to/model.pth \
-    sbatch sbatch_inference_mi300x.sh
+    sbatch sbatch_inference_amd.sh
 ```
 
 Omit `SU_SIF` to use the bare-metal environment.

@@ -1,0 +1,66 @@
+name: SwinUNETR
+hf_id: N/A
+license: See upstream (MONAI / silogen/ai-samples)
+task: 3D medical image segmentation (lung tumor, NSCLC-Radiomics)
+domain: healthcare
+upstream_code: https://github.com/silogen/ai-samples
+paper: null
+weight_source: Trained from scratch using MONAI SwinUNETR
+container_image: rocm/pytorch:rocm7.0.2_ubuntu24.04_py3.12_pytorch_release_2.8.0
+vram_gb: null
+validated_hardware:
+  - MI300X
+
+disclaimer: >
+  Research / engineering use only. Not medical advice.
+  Must not be used with patient-identifiable data or PHI.
+
+recipes:
+  - task: train
+    description: Train SwinUNETR on NSCLC-Radiomics via MONAI
+    recipe_path: recipes/train/
+    script: examples/run_train.sh
+    slurm: examples/sbatch_train_amd.sh
+  - task: inference
+    description: Sliding-window inference with optional torch.compile
+    recipe_path: recipes/inference/
+    script: examples/run_inference.sh
+    slurm: examples/sbatch_inference_amd.sh
+
+env_vars:
+  CHECKPOINT:
+    description: Path to trained .pth checkpoint (inference)
+    required: true
+    default: null
+  DATA_DIR:
+    description: NSCLC-Radiomics data root
+    required: false
+    default: /data
+  CKPT_DIR:
+    description: Checkpoint / log directory (training)
+    required: false
+    default: /workspace/checkpoints
+  MAX_EPOCHS:
+    description: Training epochs
+    required: false
+    default: "700"
+  ROI_X:
+    description: Patch size X dimension
+    required: false
+    default: "96"
+  ROI_Y:
+    description: Patch size Y dimension
+    required: false
+    default: "96"
+  ROI_Z:
+    description: Patch size Z dimension
+    required: false
+    default: "96"
+  USE_COMPILE:
+    description: Enable torch.compile max-autotune (1=on)
+    required: false
+    default: "1"
+  AMP_DTYPE:
+    description: AMP dtype (float16 or bfloat16)
+    required: false
+    default: float16

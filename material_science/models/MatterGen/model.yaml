@@ -1,0 +1,65 @@
+name: MatterGen
+hf_id: microsoft/mattergen
+license: MIT
+task: Diffusion-based generative model for inorganic materials design
+domain: material_science
+upstream_code: https://github.com/microsoft/mattergen
+paper: https://www.nature.com/articles/s41586-025-08628-5
+container_image: rocm/pytorch:rocm7.0_ubuntu22.04_py3.10_pytorch_release_2.7.1
+vram_gb: null
+validated_hardware:
+  - MI300X
+
+model_variants:
+  - name: mattergen_base
+    conditioning: Unconditional generation
+  - name: dft_mag_density
+    conditioning: Magnetic density
+  - name: chemical_system_energy_above_hull
+    conditioning: Composition + thermodynamic stability
+
+recipes:
+  - task: inference
+    description: Generate novel crystal structures (unconditional or property-conditioned)
+    recipe_path: recipes/inference/
+    script: examples/run_inference.sh
+    slurm: examples/sbatch_inference_amd.sh
+  - task: train
+    description: Train or fine-tune MatterGen on property datasets
+    recipe_path: recipes/train/
+    script: examples/run_train.sh
+    slurm: examples/sbatch_train_amd.sh
+
+env_vars:
+  PRETRAINED_NAME:
+    description: Checkpoint / pretrained model name
+    required: false
+    default: mattergen_base
+  BATCH_SIZE:
+    description: Structures per batch
+    required: false
+    default: "16"
+  NUM_BATCHES:
+    description: Number of batches (total structures = BATCH_SIZE * NUM_BATCHES)
+    required: false
+    default: "1"
+  OUTPUT_DIR:
+    description: Output directory for generated structures
+    required: false
+    default: /workspace/results
+  PROPERTIES:
+    description: Property dict string for conditioned generation (empty = unconditional)
+    required: false
+    default: null
+  GUIDANCE_FACTOR:
+    description: Diffusion guidance factor when conditioning
+    required: false
+    default: "2.0"
+  MAX_EPOCHS:
+    description: Training epochs (train task only)
+    required: false
+    default: "900"
+  MG_SIF:
+    description: Path to Apptainer SIF file (SLURM scripts)
+    required: false
+    default: null

@@ -6,14 +6,22 @@ Generate novel drug-like molecules unconditionally or constrained to a scaffold 
 
 ## Prerequisites
 
-- AMD Instinct GPU with ROCm 7.0+ driver
-- Apptainer (SLURM clusters) or Docker with AMD Container Toolkit / bare-device passthrough (interactive nodes)
-
-**Recommended image:** `rocm/pytorch:rocm7.0_ubuntu22.04_py3.10_pytorch_release_2.7.1`
-
-Covers MI250X (gfx90a), MI300X (gfx942), MI350X (gfx950).
+- Container: `rocm/pytorch:rocm7.0_ubuntu22.04_py3.10_pytorch_release_2.7.1`
+- GPU: AMD Instinct with ROCm 7.0+ driver (covers MI250X, MI300X, MI350X)
+- Runtime: Apptainer (SLURM clusters) or Docker with AMD Container Toolkit
+- Weights: auto-downloaded from Hugging Face on first run
 
 > The `fast_transformers` dependency is unavailable on ROCm — the code falls back to standard PyTorch transformers automatically, with no user action needed.
+
+## Environment Variables
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `GPMOL_SIF` | Yes (Apptainer) | -- | Path to Apptainer SIF file |
+| `GPMOL_WORK_DIR` | No | examples dir | Host dir bound to `/workspace` |
+| `SCAFFOLD` | No | -- | SMILES fragment for constrained generation (empty = unconditional) |
+| `NUM_BATCHES` | No | `1` | Batches of 1000 molecules |
+| `OUTPUT_FILE` | No | `/workspace/generated.csv` | Output CSV path |
 
 ## Option A — SLURM cluster (Apptainer)
 

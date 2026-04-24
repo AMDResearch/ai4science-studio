@@ -1,0 +1,43 @@
+name: Aurora
+hf_id: microsoft/aurora
+license: CC-BY-NC-SA-4.0
+task: Foundation model for Earth system forecasting at 0.1° resolution
+domain: earth_science
+upstream_code: https://github.com/microsoft/aurora
+paper: https://www.nature.com/articles/s41586-025-08897-0
+container_image: pytorchweather:latest
+vram_gb: 192
+validated_hardware:
+  - MI300X
+
+recipes:
+  - task: inference
+    description: Run 0.1° deterministic forecasts from CDS initial conditions
+    recipe_path: recipes/inference/
+    script: examples/run_inference.sh
+
+env_vars:
+  CDSAPI_KEY:
+    description: Copernicus CDS API key (set in env_file)
+    required: true
+    default: null
+  DATE:
+    description: Forecast start date (YYYYMMDD)
+    required: false
+    default: yesterday
+  TIME:
+    description: Forecast start time (HHMM)
+    required: false
+    default: "0000"
+  LEAD_TIME:
+    description: Forecast horizon in hours (rollout in 6h steps)
+    required: false
+    default: "24"
+  CACHE_DIR:
+    description: Host path for ERA5 data cache
+    required: false
+    default: /tmp/earthkit-cache
+  AI_SAMPLES_DIR:
+    description: Where to clone silogen/ai-samples
+    required: false
+    default: null

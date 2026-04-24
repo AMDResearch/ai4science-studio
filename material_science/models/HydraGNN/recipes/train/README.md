@@ -1,6 +1,17 @@
 # HydraGNN: large-scale training on HPC (Frontier-oriented)
 
+> **Ready-to-run scripts:** see [`../../examples/`](../../examples/) for `docker_run.sh` and `run_train.sh`.
+
 This recipe summarizes the **exascale-oriented** workflow described on the [Hugging Face model card](https://huggingface.co/mlupopa/HydraGNN_Predictive_GFM_2024) and implemented in [`ORNL/HydraGNN`](https://github.com/ORNL/HydraGNN) branch **`Predictive_GFM_2024`**. It is **not** something most users can run without a major HPC allocation and staged **ADIOS** datasets.
+
+## Environment Variables
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `HG_EXAMPLE` | No | `multidataset_hpo` | Upstream example folder name |
+| `HG_CONFIG` | Yes | -- | JSON config path |
+| `HG_DATA_DIR` | No | `/data` | Dataset staging directory |
+| `HG_OUTPUT_DIR` | No | `/workspace/checkpoints` | Checkpoints and logs |
 
 ## Who can run this
 

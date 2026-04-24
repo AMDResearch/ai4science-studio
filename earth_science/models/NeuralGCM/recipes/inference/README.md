@@ -7,7 +7,7 @@ Source: [AMD ROCm blog — NeuralGCM inference](https://rocm.blogs.amd.com/artif
 > **Ready-to-run scripts** live in [`../../examples/`](../../examples/).
 > Use [`run_inference.py`](../../examples/run_inference.py) directly instead of
 > copying snippets from this doc.  The SLURM driver is
-> [`sbatch_inference_mi300x.sh`](../../examples/sbatch_inference_mi300x.sh).
+> [`sbatch_inference_amd.sh`](../../examples/sbatch_inference_amd.sh).
 
 ## Environment
 

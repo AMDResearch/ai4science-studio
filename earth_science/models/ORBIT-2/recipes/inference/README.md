@@ -4,8 +4,21 @@ This is the most common **AI4Science Studio** entry point: use **published check
 
 ## Prerequisites
 
-1. Clone [`XiaoWang-Github/ORBIT-2`](https://github.com/XiaoWang-Github/ORBIT-2) and follow its **Installation** section, using the upstream steps for **AMD Instinct** with **ROCm**.
-2. Download the checkpoint(s) and matching YAML you need from [`jychoi-hpc/ORBIT-2`](https://huggingface.co/jychoi-hpc/ORBIT-2) (see the live file tree under `pretrain/`, `us-finetune/`, `global-finetune/`, etc.).
+- Container: `rocm/pytorch:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0`
+- Code: clone [`XiaoWang-Github/ORBIT-2`](https://github.com/XiaoWang-Github/ORBIT-2) and follow its Installation section (AMD Instinct + ROCm path)
+- Weights: download checkpoint(s) and matching YAML from [`jychoi-hpc/ORBIT-2`](https://huggingface.co/jychoi-hpc/ORBIT-2) (see the live file tree under `pretrain/`, `us-finetune/`, `global-finetune/`, etc.)
+
+## Environment Variables
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `ORBIT2_ROOT` | Yes | -- | Path to cloned ORBIT-2 repository |
+| `ORBIT2_SIF` | No | -- | Apptainer SIF path (bare-metal if unset) |
+| `ORBIT2_OVERLAY` | No | -- | Pre-built overlay (build with `build_overlay_amd.sh`) |
+| `ORBIT2_CHECKPOINT` | No | -- | `.ckpt` path; auto-downloaded from HF in synthetic mode |
+| `ORBIT2_CONFIG` | No | `interm_8m_ft.yaml` | Config YAML basename for real-data mode |
+| `ORBIT2_USE_SYNTHETIC` | No | `0` | Set `1` for synthetic data smoke test |
+| `ORBIT2_MASTER_PORT` | No | `29500` | Distributed master port |
 
 ## Point the code at a checkpoint
 

@@ -1,0 +1,48 @@
+---
+description: Conventions for SLURM sbatch scripts in model examples
+globs: "**/examples/sbatch_*.sh"
+alwaysApply: false
+---
+
+# SLURM sbatch script conventions
+
+When creating or editing `sbatch_*.sh` under any model's `examples/` directory:
+
+## Required patterns
+
+1. **SCRIPT_DIR resolution** — Use `scontrol` to recover the original script path (SLURM copies scripts to `/var/spool/slurmd/`):
+   ```bash
+   if [[ -n "${SLURM_JOB_ID:-}" ]]; then
+       SCRIPT_DIR=$(cd "$(dirname "$(scontrol show job "$SLURM_JOB_ID" | grep -oP 'Command=\K\S+')")" && pwd)
+   else
+       SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+   fi
+   ```
+
+2. **Use `--rocm` for AMD GPU passthrough** — Never use `--nv` (that is for NVIDIA):
+   ```bash
+   apptainer exec --rocm ...
+   ```
+
+3. **Naming convention** — Scripts are named `sbatch_<task>_amd.sh`, not `_mi300x.sh` or `_mi250x.sh`. The same `rocm7.2.x` image covers MI250X (gfx90a), MI300X (gfx942), and MI350X (gfx950).
+
+4. **Placeholder partition/account** — Use `YOUR_PARTITION_HERE` and `YOUR_ACCOUNT_HERE` in `#SBATCH` directives so users (or agents) know to replace them:
+   ```bash
+   #SBATCH --partition=YOUR_PARTITION_HERE
+   #SBATCH --account=YOUR_ACCOUNT_HERE
+   ```
+
+5. **Env vars: never clobber** — Append to `LD_LIBRARY_PATH`, `PYTHONPATH`, `PATH` inside the container, not via `--env`.
+
+6. **ROCm torch protection** — After any pip install inside the job, verify ROCm torch is intact:
+   ```bash
+   python3 -c "import torch; assert 'rocm' in torch.__version__, f'Non-ROCm torch: {torch.__version__}'"
+   ```
+
+7. **Support optional overlay** — If the model has heavy pip deps, support `<MODEL>_OVERLAY` env var for a pre-built overlay:
+   ```bash
+   OVERLAY_ARG=()
+   if [[ -n "${SC_OVERLAY:-}" ]] && [[ -f "$SC_OVERLAY" ]]; then
+       OVERLAY_ARG=(--overlay "${SC_OVERLAY}:ro")
+   fi
+   ```
