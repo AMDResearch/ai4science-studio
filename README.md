@@ -5,9 +5,9 @@
 
 ## What is this?
 
-AI4Science Studio connects **open AI models** with **clear, reproducible recipes** across science domains. Whether you want to run a state-of-the-art weather forecast, generate novel crystal structures, fold a protein, or train a molecular design agent, you'll find working scripts, container setups, and AMD/ROCm notes here.
+AI4Science Studio is an **agent-first** collection of runnable recipes for open AI-for-science models. Point an AI coding agent — [Cursor](https://cursor.sh), [Claude Code](https://claude.ai/code), or similar — at this repo and tell it what you want: run a weather forecast, generate novel crystals, fold a protein, or train a molecular design agent. The agent reads machine-readable metadata (`model.yaml`), picks the right scripts, and handles the rest.
 
-Models are sourced from [Hugging Face](https://huggingface.co/) and leading research groups. Each recipe folder is self-contained: a model card, runnable examples, and optional AMD-specific tuning notes validated on real hardware.
+Every model comes from [Hugging Face](https://huggingface.co/) or leading research groups, with self-contained recipe folders: a model card, ready-to-run examples, container setups, and optional AMD/ROCm tuning notes validated on real hardware. You can also use the repo without an agent — see [Quick start (without an agent)](#quick-start-without-an-agent) below.
 
 
 ## Science domains
