@@ -84,9 +84,9 @@ Surrogate models and neural operators for continuum dynamics, fluid mechanics, t
 
 ---
 
-## Talk to an agent — the fastest way to use this repo
+## Using this repo with an agent
 
-AI4Science Studio is **agent-first**: the primary interface is an AI coding assistant ([Cursor](https://cursor.sh), [Claude Code](https://claude.ai/code), or similar). Every model has machine-readable metadata (`model.yaml`), structured recipe docs, and ready-to-run scripts that agents can discover, configure, and launch for you.
+Here's what agents can do for you out of the box.
 
 ### Run any model
 
