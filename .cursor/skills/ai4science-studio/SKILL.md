@@ -9,9 +9,7 @@ description: Applies when working in the AI4Science Studio repository. Describes
 
 - **Domains:** `earth_science/` (includes climate and weather), `material_science/`, `protein_folding/`, `healthcare/`, `physics_simulation/`.
 - **Models:** `<domain>/models/<model-slug>/` with a `README.md` per model and `recipes/` for that model only.
-- **Model index:** Root [`models.yaml`](../../../models.yaml) — machine-readable list of all models. Read this first for discovery.
-- **Per-model manifest:** `<domain>/models/<model-slug>/model.yaml` — structured metadata (HF id, license, recipes, env vars, hardware).
-- **Human index:** Root [`README.md`](../../../README.md).
+- **Index:** Root [`README.md`](../../../README.md).
 
 ## Model slug rule
 
@@ -36,9 +34,7 @@ Hugging Face id `org/model` → directory name `org__model` (replace `/` with do
    - `sbatch_<task>_docker.sh` — SLURM + Docker batch script; uses device passthrough or `--runtime=amd`.
    - `build_overlay_amd.sh` — (Apptainer only, HPC models with heavy pip deps) builds a persistent ext3 overlay. Run once per cluster; reuse with `--overlay <path>:ro`.
    - All scripts must be `chmod +x`.
-5. Create a `model.yaml` in the model folder with structured metadata (name, hf_id, license, task, recipes, env_vars). See existing `model.yaml` files for the schema.
-6. Add the model to the root `models.yaml` index.
-7. Copy structure from [`_template/`](../../../_template/) when starting a new model folder.
+5. Copy structure from [`_template/`](../../../_template/) when starting a new model folder.
 6. For **HPC-oriented** models, consider `recipes/local-cluster-amd.md` and **`data-access.md`** sections on data staging.
 7. Write recipes around **AMD Instinct** with **PyTorch ROCm** when that matches upstream supported paths.
 8. **GPU arch naming:** Scripts are named `_amd.sh` / `_docker.sh`, not `_mi300x.sh`. The same `rocm7.2.x` image covers MI250X (gfx90a), MI300X (gfx942), and MI350X (gfx950). Only the `ROCM_WHL_TAG` env var and the image tag need to change for a different ROCm generation.
@@ -165,8 +161,6 @@ apptainer pull docker://rocm/pytorch:rocm7.2.2_ubuntu24.04_py3.12_pytorch_releas
 
 **Why `--extra-index-url` instead:** `--extra-index-url https://download.pytorch.org/whl/rocm7.2` causes pip to pick the ROCm torch wheel, which has **no** `nvidia-*` CUDA co-package deps.
 
-**Prefer `--extra-index-url` + strip over `--no-deps` for runtime installs.** Using `--no-deps` to avoid pulling CUDA torch also silently drops transitive runtime deps (e.g. `tensordict` needs `pyvers` and `treelib`). Instead, use `--extra-index-url` so pip resolves the full dep tree with ROCm torch, then strip `torch / torchvision / torchaudio / nvidia / triton` after install. The ROCm torch download (~3 GB) is wasteful but the install is correct. Reserve `--no-deps` for the overlay build (where overlay size is constrained and dep lists are manually curated).
-
 ```bash
 # Inside the container during overlay build:
 pip install -q --no-cache-dir --target "$STAGE_DIR" \
@@ -192,41 +186,9 @@ Always verify at end: `assert 'rocm' in torch.__version__`
 
 ## pip install requires --target (SIF is read-only)
 
-SIF files are squashfs (read-only). All `pip install` inside `apptainer exec` must use `--target <dir>`. Set `PYTHONPATH=<dir>:...`.
+SIF files are squashfs (read-only). All `pip install` inside `apptainer exec` must use `--target /workspace/pip-packages`. Set `PYTHONPATH=/workspace/pip-packages:...`.
 
 **Torch strip is safe** in overlay/pip-packages — the SIF's venv torch is untouched and remains the primary copy.
-
-## No-overlay install-to-tmp pattern
-
-When an sbatch script supports an optional overlay but the user doesn't provide one, deps must be installed into a **host-side temp dir** and **bind-mounted** into the container. The read-only SIF prevents `pip install` into the venv.
-
-```bash
-PKGDIR_BIND=()
-if [[ -n "$SIF" ]] && { [[ -z "$OVERLAY" ]] || [[ ! -f "$OVERLAY" ]]; }; then
-  PKGDIR="${TMPDIR:-/tmp}/<model>-pkgs-${SLURM_JOB_ID:-$$}"
-  mkdir -p "$PKGDIR"
-  PKGDIR_BIND=(--bind "${PKGDIR}:/opt/<model>-pkgs")
-
-  # Write install script to a host file (avoids quoting issues)
-  cat > "$INSTALL_SCRIPT" << 'INSTALLEOF'
-  ...pip install --target /opt/<model>-pkgs ...
-  INSTALLEOF
-
-  apptainer exec --rocm "${PKGDIR_BIND[@]}" \
-      --bind "$(dirname "$INSTALL_SCRIPT"):$(dirname "$INSTALL_SCRIPT")" \
-      "$SIF" bash "$INSTALL_SCRIPT"
-fi
-
-# Wire PKGDIR_BIND into ALL subsequent apptainer exec calls:
-apptainer exec --rocm "${OVERLAY_ARG[@]}" "${PKGDIR_BIND[@]}" ...
-```
-
-Key design points:
-- `PKGDIR_BIND` is an empty array when overlay IS present → expands to nothing
-- The host dir is bound to the same path the overlay would provide (e.g. `/opt/orbit2-pkgs`)
-- The rank script's PYTHONPATH stays the same regardless of overlay vs bind-mount
-- The install script heredoc uses a **quoted delimiter** (`<< 'EOF'`) so no escaping is needed; pass env vars via `--env`
-- **Every** `apptainer exec` in the script must include `"${PKGDIR_BIND[@]}"` — the checkpoint download, the data generation, and the inference run
 
 ## Multi-GPU distributed launch (Apptainer + SLURM)
 
