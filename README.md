@@ -158,11 +158,21 @@ No build step, no compiled code. The scripts pull public container images and mo
 
 ## Contributing
 
+The fastest way to add a model is to let the agent do it:
+
+```
+/add-model microsoft/aurora → earth_science
+```
+
+This walks through folder creation, `README.md`, `model.yaml`, recipe stubs, example scripts, and `models.yaml` registration — all in one pass.
+
+If you prefer to do it manually:
+
 1. Fork the repo and create a branch.
 2. Copy [`_template/`](_template/) to your domain and model folder.
 3. Fill in the model README, create a `model.yaml`, and add at minimum one runnable recipe.
 4. Add the model to [`models.yaml`](models.yaml).
-5. Open a pull request—or just use `/add-model` in Claude Code and let the agent do it.
+5. Open a pull request.
 
 See each domain's `models/README.md` for slug conventions and domain-specific notes.
 
