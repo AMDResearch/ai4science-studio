@@ -36,7 +36,7 @@ What is your SLURM partition name and account/project name?
 apptainer pull docker://rocm/pytorch:rocm7.0_ubuntu22.04_py3.10_pytorch_release_2.7.1
 ```
 
-**Edit the SBATCH header** in the relevant script to set partition and account.
+**Edit the SBATCH header** in the relevant script — replace `YOUR_PARTITION_HERE` and `YOUR_ACCOUNT_HERE` with the user's values.
 
 ## Step 3 — Submit
 

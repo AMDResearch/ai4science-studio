@@ -34,9 +34,10 @@
 #   GP-MoLFormer is CPU-heavy (GP inference) — 1 GPU is sufficient.
 #   For older hardware (MI100/gfx908): use a rocm6.x image.
 
+# Adjust #SBATCH directives to match your site's partition, account, and runtime.
 #SBATCH --job-name=gpmolformer-infer
-#SBATCH --partition=1CN192C4G1H_MI300A_Ubuntu22
-#SBATCH -A amd
+#SBATCH --partition=YOUR_PARTITION_HERE
+#SBATCH --account=YOUR_ACCOUNT_HERE
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1
 #SBATCH --ntasks=1

@@ -37,6 +37,7 @@ cd healthcare/models/SwinUNETR/examples
 ```
 
 ### Apptainer
+Edit the `#SBATCH` header in the relevant sbatch script — replace `YOUR_PARTITION_HERE` and `YOUR_ACCOUNT_HERE` with the user's values, then:
 ```bash
 export SU_SIF=<path>
 sbatch healthcare/models/SwinUNETR/examples/sbatch_train_amd.sh

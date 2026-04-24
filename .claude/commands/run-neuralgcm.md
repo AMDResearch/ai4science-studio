@@ -56,7 +56,7 @@ cd earth_science/models/NeuralGCM/examples
 
 ### SLURM path
 
-Edit `#SBATCH` directives in `sbatch_inference_amd.sh`, then:
+Edit `#SBATCH` directives in `sbatch_inference_amd.sh` — replace `YOUR_PARTITION_HERE` and `YOUR_ACCOUNT_HERE` with the user's values, then:
 
 ```bash
 # Bare metal

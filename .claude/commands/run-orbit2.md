@@ -66,7 +66,7 @@ sbatch earth_science/models/ORBIT-2/examples/build_overlay_amd.sh
 Tell the user to wait for the build job, note the overlay path from the log, then re-invoke with `ORBIT2_OVERLAY` set.
 
 **Edit the SBATCH header** in `earth_science/models/ORBIT-2/examples/sbatch_infer_amd.sh`:
-- Set `--partition` and `-A` to the user's values
+- Replace `YOUR_PARTITION_HERE` and `YOUR_ACCOUNT_HERE` with the user's values
 - If 1 GPU: set `--gres=gpu:1 --ntasks-per-node=1`
 - If multi-node: set `--nodes=N --ntasks=N*8`
 
