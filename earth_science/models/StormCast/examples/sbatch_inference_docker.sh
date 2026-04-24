@@ -52,13 +52,28 @@ SC_OUTPUT="${SC_OUTPUT:-}"
 CONTAINER_NAME="stormcast-${SLURM_JOB_ID:-$$}"
 
 # ---------------------------------------------------------------------------
-# Resolve output path and wipe any previous run's zarr
-# (ZarrBackend refuses to overwrite an existing store)
+# Resolve output paths.
+# SC_OUTPUT is a HOST path (for cleanup + final printout).
+# CTR_OUTPUT is the corresponding path INSIDE the container, under /workspace.
+# The container only has SCRIPT_DIR mounted at /workspace, so absolute host
+# paths outside that tree are unreachable inside Docker.
 # ---------------------------------------------------------------------------
+SAFE_START="${SC_START//[: T]/-}"
 if [[ -z "${SC_OUTPUT}" ]]; then
-    SAFE_START="${SC_START//[: T]/-}"
     SC_OUTPUT="${SCRIPT_DIR}/outputs/pred-${SAFE_START}.zarr"
 fi
+
+# Translate host path → container path (strip SCRIPT_DIR prefix, prepend /workspace)
+if [[ "${SC_OUTPUT}" == "${SCRIPT_DIR}"* ]]; then
+    CTR_OUTPUT="/workspace${SC_OUTPUT#"${SCRIPT_DIR}"}"
+else
+    echo "ERROR: SC_OUTPUT must be under SCRIPT_DIR (${SCRIPT_DIR}) so it is reachable" >&2
+    echo "       inside the container (mounted at /workspace)." >&2
+    echo "       Got: ${SC_OUTPUT}" >&2
+    exit 1
+fi
+
+# Wipe any previous zarr store (ZarrBackend refuses to overwrite)
 if [[ -e "${SC_OUTPUT}" ]]; then
     echo "  Removing previous output: ${SC_OUTPUT}"
     rm -rf "${SC_OUTPUT}"
@@ -68,7 +83,8 @@ echo "=== StormCast deterministic inference (Docker) ==="
 echo "  Image       : ${SC_IMAGE}"
 echo "  Start       : ${SC_START}"
 echo "  Steps       : ${SC_STEPS}"
-echo "  Output zarr : ${SC_OUTPUT}"
+echo "  Output zarr : ${SC_OUTPUT}  (host)"
+echo "               ${CTR_OUTPUT}  (container)"
 echo "  Container   : ${CONTAINER_NAME}"
 echo "  Job         : ${SLURM_JOB_ID:-local}"
 echo ""
@@ -134,8 +150,8 @@ fi
 python /workspace/run_inference.py \
     --start "'"${SC_START}"'" \
     --steps "'"${SC_STEPS}"'" \
-    --output "'"${SC_OUTPUT}"'"
+    --output "'"${CTR_OUTPUT}"'"
 '
 
 echo "=== Done ==="
-echo "  Output: ${SC_OUTPUT}"
+echo "  Output: ${SC_OUTPUT}"   # host path
