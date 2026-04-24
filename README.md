@@ -3,63 +3,6 @@
 > **AMD's open recipe collection for AI across the sciences.**
 > Runnable recipes for leading open models—on AMD Instinct accelerators or wherever you work.
 
-## Talk to an agent — the fastest way to use this repo
-
-AI4Science Studio is **agent-first**: the primary interface is an AI coding assistant ([Cursor](https://cursor.sh), [Claude Code](https://claude.ai/code), or similar). Every model has machine-readable metadata (`model.yaml`), structured recipe docs, and ready-to-run scripts that agents can discover, configure, and launch for you.
-
-### Run any model
-
-Just describe what you want:
-
-> *"Run StormCast ensemble inference on MI300X with 4 members for 12 hours starting 2025-08-09T12"*
-
-Or use a slash command (Claude Code):
-
-```
-/run-stormcast SC_SIF=/path/to/sif
-/run-mattergen unconditional generation
-/run-gpmolformer scaffold c1ccccc1
-```
-
-All 15 models have a `/run-*` command: `stormcast`, `orbit2`, `archesweather`, `aurora`, `gencast`, `neuralgcm`, `panguweather`, `mattergen`, `hydragnn`, `gpmolformer`, `swinunetr`, `semlaflow`, `reinvent4`, `matey`, `walrus`.
-
-### Discover and compare models
-
-```
-/list-models                          # show all models
-/list-models earth_science            # filter by domain
-/list-models finetune                 # filter by task
-/audit-models                         # readiness audit for all models
-```
-
-Or just ask:
-
-> *"What models in this repo support fine-tuning?"*
-> *"Which models are MIT licensed?"*
-> *"Compare StormCast and ORBIT-2"*
-
-### Add and audit models
-
-```
-/add-model microsoft/aurora → earth_science
-/add-recipe StormCast ensemble inference on MI300X
-/check-model NeuralGCM
-```
-
-### Machine-readable metadata
-
-Agents read these files to understand the repo:
-
-| File | Purpose |
-|------|---------|
-| [`models.yaml`](models.yaml) | Index of all 15 models across 5 domains |
-| `<model>/model.yaml` | Per-model manifest: HF id, license, recipes, env vars, hardware |
-| `.cursor/skills/` | Agent skills for Cursor (run models, discover, domain conventions) |
-| `.cursor/rules/` | Contextual rules that fire when editing specific file types |
-| `.claude/commands/` | Slash commands for Claude Code |
-
----
-
 ## What is this?
 
 AI4Science Studio connects **open AI models** with **clear, reproducible recipes** across science domains. Whether you want to run a state-of-the-art weather forecast, generate novel crystal structures, fold a protein, or train a molecular design agent, you'll find working scripts, container setups, and AMD/ROCm notes here.
@@ -139,6 +82,64 @@ Surrogate models and neural operators for continuum dynamics, fluid mechanics, t
 </tr>
 </table>
 
+---
+
+## Talk to an agent — the fastest way to use this repo
+
+AI4Science Studio is **agent-first**: the primary interface is an AI coding assistant ([Cursor](https://cursor.sh), [Claude Code](https://claude.ai/code), or similar). Every model has machine-readable metadata (`model.yaml`), structured recipe docs, and ready-to-run scripts that agents can discover, configure, and launch for you.
+
+### Run any model
+
+Just describe what you want:
+
+> *"Run StormCast ensemble inference on MI300X with 4 members for 12 hours starting 2025-08-09T12"*
+
+Or use a slash command (Claude Code):
+
+```
+/run-stormcast SC_SIF=/path/to/sif
+/run-mattergen unconditional generation
+/run-gpmolformer scaffold c1ccccc1
+```
+
+All 15 models have a `/run-*` command: `stormcast`, `orbit2`, `archesweather`, `aurora`, `gencast`, `neuralgcm`, `panguweather`, `mattergen`, `hydragnn`, `gpmolformer`, `swinunetr`, `semlaflow`, `reinvent4`, `matey`, `walrus`.
+
+### Discover and compare models
+
+```
+/list-models                          # show all models
+/list-models earth_science            # filter by domain
+/list-models finetune                 # filter by task
+/audit-models                         # readiness audit for all models
+```
+
+Or just ask:
+
+> *"What models in this repo support fine-tuning?"*
+> *"Which models are MIT licensed?"*
+> *"Compare StormCast and ORBIT-2"*
+
+### Add and audit models
+
+```
+/add-model microsoft/aurora → earth_science
+/add-recipe StormCast ensemble inference on MI300X
+/check-model NeuralGCM
+```
+
+### Machine-readable metadata
+
+Agents read these files to understand the repo:
+
+| File | Purpose |
+|------|---------|
+| [`models.yaml`](models.yaml) | Index of all 15 models across 5 domains |
+| `<model>/model.yaml` | Per-model manifest: HF id, license, recipes, env vars, hardware |
+| `.cursor/skills/` | Agent skills for Cursor (run models, discover, domain conventions) |
+| `.cursor/rules/` | Contextual rules that fire when editing specific file types |
+| `.claude/commands/` | Slash commands for Claude Code |
+
+---
 
 ## Quick start (without an agent)
 
