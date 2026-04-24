@@ -133,8 +133,9 @@ pip install -q --no-cache-dir --prefer-binary \
     pandas \
     "peft>=0.10" \
     scikit-learn \
-    "transformers>=4.36,<4.41" \
-    rdkit 2>&1 | tail -5
+    "transformers>=4.36,<4.41" 2>&1 | tail -5
+pip install -q --no-cache-dir --prefer-binary rdkit-pypi 2>&1 | tail -3 \
+    || echo "  rdkit-pypi unavailable — validity check in run_generation.sh will be skipped"
 
 echo "--- Running generation ---"
 bash /scripts/run_generation.sh
