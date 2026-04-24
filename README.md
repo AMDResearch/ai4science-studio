@@ -141,7 +141,7 @@ Agents read these files to understand the repo:
 
 ---
 
-## Quick start (without an agent)
+## Manual usage (without an agent)
 
 1. **Browse** the domain folder for the model you want.
 2. **Read** `models/<model>/README.md` for the HF model id, license, and upstream links.
