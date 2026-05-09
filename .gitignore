@@ -35,6 +35,7 @@ Thumbs.db
 .env.*
 *.pem
 secrets/
+**/env_file
 
 # Containers & overlays
 *.sif
