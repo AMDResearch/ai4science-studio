@@ -15,7 +15,7 @@ Which container runtime do you want to use?
 - **Docker** (simpler setup, no overlay needed, but no MPI support and env vars must be appended not replaced)
 
 **Q1. (Apptainer only) SIF path**
-Do you have an Apptainer SIF to use? The validated image is `rocm/pytorch:rocm7.0_ubuntu22.04_py3.10_pytorch_release_2.7.1` (the rocm7.2.2 image also works).
+Do you have an Apptainer SIF to use? The recommended image is `rocm/pytorch:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0` (py3.12) — it has validated GPU detection on MI300A clusters with current `amdgpu` drivers. The older `rocm7.0` py3.10 image works on MI300X but silently falls back to CPU on MI300A clusters with newer drivers.
 - **Yes** — provide the full path
 - **No** — I will generate the pull command
 - **Auto-discover** — I will search the filesystem for existing ROCm PyTorch `.sif` files
@@ -72,7 +72,7 @@ After auto-discovery, always confirm the found values with the user before proce
 
 **If SIF is missing:**
 ```bash
-apptainer pull docker://rocm/pytorch:rocm7.0_ubuntu22.04_py3.10_pytorch_release_2.7.1
+apptainer pull docker://rocm/pytorch:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0
 ```
 Tell the user to set `GPMOL_SIF` to the resulting `.sif` path.
 
@@ -80,7 +80,7 @@ Tell the user to set `GPMOL_SIF` to the resulting `.sif` path.
 
 Note: the script clones `IBM/gp-molformer` and installs deps on first run — internet access from compute nodes is required. Subsequent runs reuse the existing clone in `GPMOL_WORK_DIR`.
 
-**Important:** IBM/gp-molformer has no `requirements.txt`. The Apptainer script uses the py3.10 image where `transformers==4.32.1` and its tokenizers dep have prebuilt wheels. If using the py3.12 image instead, use the Docker script or pin `transformers>=4.36,<4.41`.
+**Important:** IBM/gp-molformer has no `requirements.txt`. The Apptainer script pins `transformers>=4.36,<4.41` which works on both py3.10 and py3.12. The py3.10 image (`rocm7.0`) has wider `tokenizers` wheel availability but fails GPU detection on MI300A clusters with newer `amdgpu` drivers — prefer py3.12 (`rocm7.2.2`). Trade-off: `rdkit-pypi` has no cp312 wheel, so the validity check is skipped on py3.12 (molecules are still generated correctly).
 
 ### Docker path
 
@@ -122,12 +122,13 @@ tail -f gpmolformer-*-<job_id>.out
 
 On success: output CSV is at `<GPMOL_WORK_DIR>/<output_filename>`. The log prints validity and uniqueness stats.
 
-## Expected results (MI300X)
+## Expected results
 
-| Mode | Batches | Molecules | Valid | Wall time |
-|---|---|---|---|---|
-| Unconditional | 1 | 1000 | ~995 (99.5%) | ~90 s |
-| Scaffold `c1ccccc1` | 1 | 1000 | ~653 | ~90 s |
+| Hardware | SIF | Mode | Batches | Molecules | Valid | Wall time |
+|---|---|---|---|---|---|---|
+| MI300X | ROCm 7.0 / py3.10 | Unconditional | 1 | 1000 | 996 (99.6%) | ~41 s |
+| MI300A | ROCm 7.2.2 / py3.12 | Unconditional | 1 | 1000 | (rdkit skipped) | ~18–35 s |
+| MI300X | ROCm 7.0 / py3.10 | Scaffold `c1ccccc1` | 1 | 1000 | ~653 | ~90 s |
 
 ## Arguments
 
