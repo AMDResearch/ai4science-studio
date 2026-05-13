@@ -65,6 +65,36 @@ Many issues (dep lists, version pins, env vars, torch protection) are already so
 - For older hardware (MI100/gfx908): use a `rocm6.x` image
 - For future hardware: update image tag + `ROCM_WHL_TAG` together
 
+## ROCm userspace / host driver compatibility
+
+`torch.cuda.is_available()` can return `False` even when `/dev/kfd` and `/dev/dri/renderD*` are visible inside the container. This means the ROCm userspace in the SIF cannot negotiate with the host `amdgpu` kernel module.
+
+**Symptom:** Generation or training runs ~10-20x slower than expected (silent CPU fallback), with no error message.
+
+**Diagnosis:** Check the host driver version (`cat /sys/module/amdgpu/version`) and test inside the container:
+```bash
+apptainer exec --rocm "$SIF" python3 -c "import torch; print(torch.cuda.is_available())"
+```
+
+**Fix (pick one):**
+1. Use a newer ROCm SIF whose userspace matches the host driver (e.g. ROCm 7.2.2 for driver 6.16.6)
+2. Set `HSA_OVERRIDE_GFX_VERSION=9.4.2` (for gfx942 / MI300A/MI300X) as a workaround
+
+**Known pairings:**
+| Host driver (`amdgpu` module) | ROCm 7.0 SIF | ROCm 7.2.2 SIF |
+|------|------|------|
+| Older (compatible with 7.0) | Works | Works |
+| `6.16.6` (MI300A cluster) | **Fails** | Works |
+
+**Best practice:** Add a GPU detection check early in sbatch scripts so users get a clear warning instead of silent CPU fallback:
+```bash
+GPU_OK=$(python3 -c "import torch; print(torch.cuda.is_available())" 2>/dev/null || echo "False")
+if [[ "$GPU_OK" != "True" ]]; then
+    echo "WARNING: torch.cuda.is_available() = False — falling back to CPU." >&2
+    echo "  Try a newer ROCm SIF or set HSA_OVERRIDE_GFX_VERSION=9.4.2" >&2
+fi
+```
+
 ## Never clobber inherited env vars
 
 Always **append** to `LD_LIBRARY_PATH`, `PYTHONPATH`, `PATH`, `LD_PRELOAD` using `${VAR:-}`. This applies to both runtimes:

@@ -29,8 +29,13 @@
 #                    Maps to GPMOL_WORK_DIR/generated.csv on the host.
 #
 # ── GPU / ROCm compatibility ─────────────────────────────────────────────────
-#   Tested image: rocm/pytorch:rocm7.0_ubuntu22.04_py3.10_pytorch_release_2.7.1
-#   Covers: MI250X (gfx90a), MI300X (gfx942), MI350X (gfx950)
+#   Tested images (pick one based on your host ROCm driver):
+#     rocm/pytorch:rocm7.0_ubuntu22.04_py3.10_pytorch_release_2.7.1   (py3.10)
+#     rocm/pytorch:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0 (py3.12)
+#   If torch.cuda.is_available() returns False inside the container, your host
+#   amdgpu driver is likely too new for the SIF's ROCm userspace. Try the newer
+#   SIF or set HSA_OVERRIDE_GFX_VERSION=9.4.2 as a workaround.
+#   Covers: MI250X (gfx90a), MI300A/MI300X (gfx942), MI350X (gfx950)
 #   GP-MoLFormer is CPU-heavy (GP inference) — 1 GPU is sufficient.
 #   For older hardware (MI100/gfx908): use a rocm6.x image.
 
@@ -60,7 +65,10 @@ fi
 # ---------------------------------------------------------------------------
 if [[ -z "${GPMOL_SIF:-}" ]]; then
     echo "error: set GPMOL_SIF to your Apptainer SIF path before submitting" >&2
-    echo "  Recommended image: rocm/pytorch:rocm7.0_ubuntu22.04_py3.10_pytorch_release_2.7.1" >&2
+    echo "  Recommended images:" >&2
+    echo "    rocm/pytorch:rocm7.0_ubuntu22.04_py3.10_pytorch_release_2.7.1  (py3.10)" >&2
+    echo "    rocm/pytorch:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0 (py3.12)" >&2
+    echo "  Use the newer image if torch cannot detect GPUs with the older one." >&2
     exit 1
 fi
 
@@ -121,6 +129,14 @@ for pkg in torch torchvision torchaudio nvidia triton; do
 done
 
 export PYTHONPATH="/opt/gpmol-pkgs:${PYTHONPATH:-}"
+
+GPU_OK=$(python3 -c "import torch; print(torch.cuda.is_available())" 2>/dev/null || echo "False")
+if [[ "$GPU_OK" != "True" ]]; then
+    echo "WARNING: torch.cuda.is_available() = False — falling back to CPU." >&2
+    echo "  This makes generation ~10-20x slower. To fix:" >&2
+    echo "  1. Use a newer ROCm SIF (e.g. rocm7.2.2), or" >&2
+    echo "  2. Set HSA_OVERRIDE_GFX_VERSION=9.4.2" >&2
+fi
 
 echo "--- Running generation ---"
 bash /scripts/run_generation.sh

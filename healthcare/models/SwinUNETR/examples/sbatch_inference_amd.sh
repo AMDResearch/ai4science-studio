@@ -57,6 +57,11 @@ echo "  Job          : ${SLURM_JOB_ID:-local}"
 
 if [[ -n "${SU_SIF}" ]]; then
     echo "  Runtime: Apptainer (${SU_SIF})"
+    GPU_OK=$(apptainer exec --rocm "${SU_SIF}" python3 -c "import torch; print(torch.cuda.is_available())" 2>/dev/null || echo "False")
+    if [[ "$GPU_OK" != "True" ]]; then
+        echo "WARNING: torch.cuda.is_available() = False — falling back to CPU." >&2
+        echo "  Try a newer ROCm SIF or set HSA_OVERRIDE_GFX_VERSION=9.4.2" >&2
+    fi
     apptainer exec \
         --rocm \
         --bind "${SCRIPT_DIR}:/workspace" \

@@ -5,10 +5,13 @@ task: SMILES molecule generation (unconditional, scaffold-constrained, pair-tuni
 domain: healthcare
 upstream_code: https://github.com/IBM/gp-molformer
 paper: https://arxiv.org/abs/2302.07432
-container_image: rocm/pytorch:rocm7.0_ubuntu22.04_py3.10_pytorch_release_2.7.1
+container_image:
+  - rocm/pytorch:rocm7.0_ubuntu22.04_py3.10_pytorch_release_2.7.1
+  - rocm/pytorch:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0
 vram_gb: null
 validated_hardware:
   - MI300X
+  - MI300A
 
 disclaimer: >
   Research / engineering use only. Not medical advice.

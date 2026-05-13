@@ -108,6 +108,11 @@ if [[ "${MATEY_BARE_METAL}" == "1" ]]; then
 else
     echo "  Runtime: Apptainer (${MATEY_SIF})"
     [[ -n "${OVERLAY_FLAG}" ]] && echo "  Overlay: ${MATEY_OVERLAY}"
+    GPU_OK=$(apptainer exec --rocm "${MATEY_SIF}" python3 -c "import torch; print(torch.cuda.is_available())" 2>/dev/null || echo "False")
+    if [[ "$GPU_OK" != "True" ]]; then
+        echo "WARNING: torch.cuda.is_available() = False — falling back to CPU." >&2
+        echo "  Try a newer ROCm SIF or set HSA_OVERRIDE_GFX_VERSION=9.4.2" >&2
+    fi
     # shellcheck disable=SC2086
     srun -c7 --gpu-bind=closest \
         apptainer exec \
