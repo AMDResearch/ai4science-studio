@@ -23,10 +23,33 @@ Match the user's request to a recipe in `model.yaml`:
 
 Read the `env_vars` section of `model.yaml`. For every variable marked `required: true` that has `default: null`, ask the user for the value. Present the question with the variable's description.
 
-For common patterns:
-- **SIF path** → Ask: "Do you have an Apptainer SIF file? If not, I can generate the pull command."
-- **Overlay** → Ask: "Do you have a pre-built overlay? If not, would you like to build one (saves time on future runs) or skip it?"
-- **SLURM partition/account** → Ask: "What is your SLURM partition and account name?"
+For common patterns, always offer **three options** — provide manually, generate/build, or auto-discover:
+- **SIF path** → "Do you have an Apptainer SIF file? (Yes / No — I'll generate the pull command / Auto-discover — I'll search the filesystem)"
+- **Overlay** → "Do you have a pre-built overlay? (Yes / No, build one / No, skip overlay / Auto-discover — I'll search for an existing one)"
+- **Upstream repo** → "Do you have the repo cloned? (Yes / No — I'll generate the clone command / Auto-discover — I'll search the filesystem)"
+- **SLURM partition/account** → "How should I determine your partition/account? (Provide manually / Auto-discover — I'll query SLURM)"
+
+### Auto-discovery procedures
+
+When the user chooses auto-discover, run the appropriate commands and present results for confirmation:
+
+```bash
+# SIF files — use $HOME so we find files even when home is not under /home
+# (e.g. /shared/prerelease/home/…)
+find "$HOME" /scratch /projects /opt -maxdepth 4 -name "*.sif" 2>/dev/null | head -20
+
+# Overlay images
+find "$HOME" /scratch /projects /opt -maxdepth 4 -name "*<model>*overlay*" 2>/dev/null | head -20
+
+# Upstream repo clones
+find "$HOME" /scratch /projects /opt -maxdepth 4 -type d -name "<RepoName>" 2>/dev/null | head -20
+
+# SLURM partitions and accounts
+sinfo -h -o "%P %G" | grep -i gpu
+sacctmgr show associations where user=$USER format=account%30,partition%30 -n
+```
+
+Always confirm discovered values with the user before proceeding.
 
 ## Step 4: Check the environment (if possible)
 

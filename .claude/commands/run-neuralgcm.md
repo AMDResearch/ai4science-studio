@@ -30,11 +30,28 @@ How many 6h forecast steps? (16 = 4 days, 40 = 10 days)
 JAX PRNG seed for stochastic checkpoints? (default: 0)
 
 **Q5. Partition and account** (if SLURM)
-What is your SLURM partition and account name?
+How should I determine your SLURM partition and account/project?
+- **Provide manually** — type your partition and account names
+- **Auto-discover** — I will query SLURM to find available partitions and accounts on this cluster
 
 ---
 
 ## Step 2 — Act on answers
+
+### Auto-discovery procedures
+
+Run these when the user chose **Auto-discover** for any question. Present the results and let the user confirm or override.
+
+**SLURM partition and account (Q5):**
+```bash
+sinfo -h -o "%P %G" | grep -i gpu
+sacctmgr show associations where user=$USER format=account%30,partition%30 -n
+```
+Present the available GPU partitions and the user's associated accounts. If multiple exist, ask the user to pick.
+
+After auto-discovery, always confirm the found values with the user before proceeding.
+
+---
 
 Read `earth_science/models/NeuralGCM/model.yaml` for full env var details.
 

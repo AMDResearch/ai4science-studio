@@ -12,13 +12,23 @@ Which container runtime do you want to use?
 - **Docker** (simpler setup, no overlay needed, uses `torchrun` for multi-GPU instead of `srun`, single-node only)
 
 **Q1. Upstream repo**
-Do you have the ORBIT-2 upstream code cloned locally? If yes, what is the full path (`ORBIT2_ROOT`)? If no, I will generate the clone command.
+Do you have the ORBIT-2 upstream code cloned locally?
+- **Yes** — provide the full path (`ORBIT2_ROOT`)
+- **No** — I will generate the clone command
+- **Auto-discover** — I will search the filesystem for an existing ORBIT-2 clone
 
 **Q2. (Apptainer only) SIF path**
-Do you have an Apptainer SIF built from `rocm/pytorch:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0`? If yes, what is the full path? If no, I will generate the pull command.
+Do you have an Apptainer SIF built from `rocm/pytorch:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0`?
+- **Yes** — provide the full path
+- **No** — I will generate the pull command
+- **Auto-discover** — I will search the filesystem for existing ROCm PyTorch `.sif` files
 
 **Q3. (Apptainer only) Overlay**
-Do you have a pre-built ORBIT-2 overlay image (`orbit2-overlay.img`)? If yes, what is the full path? If no, would you like to build one now (one-time ~15 min job that skips dep install on every future run), or skip the overlay and pay the ~15 min install cost per job?
+Do you have a pre-built ORBIT-2 overlay image (`orbit2-overlay.img`)?
+- **Yes** — provide the full path
+- **No, build one** — one-time ~15 min job that skips dep install on every future run
+- **No, skip overlay** — pay the ~15 min install cost per job
+- **Auto-discover** — I will search the filesystem for an existing overlay image
 
 **Q4. Data mode**
 Which data mode do you want to use?
@@ -35,11 +45,46 @@ How many GPUs do you want to use?
 - **Multi-node** — (Apptainer only) how many nodes? (sets `--nodes=N --ntasks=N*8`)
 
 **Q7. Partition and account**
-What is your SLURM partition name and account/project name?
+How should I determine your SLURM partition and account/project?
+- **Provide manually** — type your partition and account names
+- **Auto-discover** — I will query SLURM to find available partitions and accounts on this cluster
 
 ---
 
 ## Step 2 — Act on answers
+
+### Auto-discovery procedures
+
+Run these when the user chose **Auto-discover** for any question. Present the results and let the user confirm or override.
+
+**Upstream repo (Q1):**
+```bash
+find "$HOME" /scratch /projects /opt -maxdepth 4 -type d -name "ORBIT-2" 2>/dev/null | head -20
+```
+Use `$HOME` (not `/home`) so the search works when the home directory is under a non-standard prefix (e.g. `/shared/prerelease/home/…`).
+Look for a directory containing `src/` and `examples/` subdirectories to confirm it is a valid ORBIT-2 clone.
+
+**SIF files (Q2):**
+```bash
+find "$HOME" /scratch /projects /opt -maxdepth 4 -name "*.sif" 2>/dev/null | head -20
+```
+Filter results for SIF names containing `rocm` or `pytorch`. Verify with `apptainer inspect <sif>` if multiple candidates.
+
+**Overlay images (Q3):**
+```bash
+find "$HOME" /scratch /projects /opt -maxdepth 4 -name "*orbit2*overlay*" -o -name "*overlay*orbit2*" 2>/dev/null | head -20
+```
+
+**SLURM partition and account (Q7):**
+```bash
+sinfo -h -o "%P %G" | grep -i gpu
+sacctmgr show associations where user=$USER format=account%30,partition%30 -n
+```
+Present the available GPU partitions and the user's associated accounts. If multiple exist, ask the user to pick.
+
+After auto-discovery, always confirm the found values with the user before proceeding (e.g. "I found ORBIT-2 at `/scratch/user/ORBIT-2` — shall I use this?").
+
+---
 
 ### Common (both runtimes)
 

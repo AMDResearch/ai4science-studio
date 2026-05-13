@@ -190,6 +190,14 @@ Always verify at end: `assert 'rocm' in torch.__version__`
 - ORBIT-2 (pytorch-lightning + xformers + wandb + mpi4py + ...): 7 GB overlay, ~2 GB content
 - StormCast (earth2studio + cartopy): 4 GB overlay, ~1.7 GB content
 
+## Auto-discovery: use `$HOME`, never hardcode `/home`
+
+When searching for SIF files, overlays, or repo clones, always use `$HOME` as the search root — not `/home`. Many HPC clusters mount home directories under non-standard prefixes (e.g. `/shared/prerelease/home/amd/user`), so `find /home ...` misses everything. The same applies to overlay and upstream-repo searches.
+
+```bash
+find "$HOME" /scratch /projects /opt -maxdepth 4 -name "*.sif" 2>/dev/null | head -20
+```
+
 ## pip install requires --target (SIF is read-only)
 
 SIF files are squashfs (read-only). All `pip install` inside `apptainer exec` must use `--target <dir>`. Set `PYTHONPATH=<dir>:...`.

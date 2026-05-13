@@ -31,13 +31,40 @@ Where is the ERA5 dataset? (~735 GB for training, ~35 GB for one test year)
 
 **Q5. (Apptainer only) SIF path**
 Do you have an Apptainer SIF built from the silogen/ai-samples geoarches-training Dockerfile?
+- **Yes** — provide the full path
+- **No** — I will generate the build/pull command
+- **Auto-discover** — I will search the filesystem for existing `.sif` files
 
 **Q6. Partition and account**
-What is your SLURM partition and account name? (if using SLURM)
+How should I determine your SLURM partition and account/project? (if using SLURM)
+- **Provide manually** — type your partition and account names
+- **Auto-discover** — I will query SLURM to find available partitions and accounts on this cluster
 
 ---
 
 ## Step 2 — Act on answers
+
+### Auto-discovery procedures
+
+Run these when the user chose **Auto-discover** for any question. Present the results and let the user confirm or override.
+
+**SIF files (Q5):**
+```bash
+find "$HOME" /scratch /projects /opt -maxdepth 4 -name "*.sif" 2>/dev/null | head -20
+```
+Use `$HOME` (not `/home`) so the search works when the home directory is under a non-standard prefix (e.g. `/shared/prerelease/home/…`).
+Filter results for SIF names containing `geoarches` or `rocm`. Verify with `apptainer inspect <sif>` if multiple candidates.
+
+**SLURM partition and account (Q6):**
+```bash
+sinfo -h -o "%P %G" | grep -i gpu
+sacctmgr show associations where user=$USER format=account%30,partition%30 -n
+```
+Present the available GPU partitions and the user's associated accounts. If multiple exist, ask the user to pick.
+
+After auto-discovery, always confirm the found values with the user before proceeding.
+
+---
 
 Read `earth_science/models/ArchesWeather/model.yaml` for full env var details.
 

@@ -12,10 +12,17 @@ Which container runtime do you want to use?
 - **Docker** (simpler setup, no overlay needed, but env vars must be appended not replaced)
 
 **Q1. (Apptainer only) SIF path**
-Do you have an Apptainer SIF built from `rocm/pytorch:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0`? If yes, what is the full path? If no, I will generate the pull command.
+Do you have an Apptainer SIF built from `rocm/pytorch:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0`?
+- **Yes** — provide the full path
+- **No** — I will generate the pull command
+- **Auto-discover** — I will search the filesystem for existing ROCm PyTorch `.sif` files
 
 **Q2. (Apptainer only) Overlay**
-Do you have a pre-built StormCast overlay image (`stormcast-overlay.img`)? If yes, what is the full path? If no, would you like to build one now (one-time ~10 min job that skips a ~5 min pip install on every future run), or skip the overlay and pay the install cost per job?
+Do you have a pre-built StormCast overlay image (`stormcast-overlay.img`)?
+- **Yes** — provide the full path
+- **No, build one** — one-time ~10 min job that skips a ~5 min pip install on every future run
+- **No, skip overlay** — pay the install cost per job
+- **Auto-discover** — I will search the filesystem for an existing StormCast overlay image
 
 **Q3. Forecast start time**
 What start time do you want to use for the forecast? (ISO-8601 format, e.g. `2025-01-01T06`)
@@ -27,11 +34,40 @@ How many 1-hour forecast steps do you want to run?
 Where do you want the output zarr written? (full path, e.g. `/path/to/output/pred.zarr`) Note: any existing zarr at this path will be removed before the run.
 
 **Q6. Partition and account**
-What is your SLURM partition name and account/project name?
+How should I determine your SLURM partition and account/project?
+- **Provide manually** — type your partition and account names
+- **Auto-discover** — I will query SLURM to find available partitions and accounts on this cluster
 
 ---
 
 ## Step 2 — Act on answers
+
+### Auto-discovery procedures
+
+Run these when the user chose **Auto-discover** for any question. Present the results and let the user confirm or override.
+
+**SIF files (Q1):**
+```bash
+find "$HOME" /scratch /projects /opt -maxdepth 4 -name "*.sif" 2>/dev/null | head -20
+```
+Use `$HOME` (not `/home`) so the search works when the home directory is under a non-standard prefix (e.g. `/shared/prerelease/home/…`).
+Filter results for SIF names containing `rocm` or `pytorch`. Verify with `apptainer inspect <sif>` if multiple candidates.
+
+**Overlay images (Q2):**
+```bash
+find "$HOME" /scratch /projects /opt -maxdepth 4 -name "*stormcast*overlay*" -o -name "*overlay*stormcast*" 2>/dev/null | head -20
+```
+
+**SLURM partition and account (Q6):**
+```bash
+sinfo -h -o "%P %G" | grep -i gpu
+sacctmgr show associations where user=$USER format=account%30,partition%30 -n
+```
+Present the available GPU partitions and the user's associated accounts. If multiple exist, ask the user to pick.
+
+After auto-discovery, always confirm the found values with the user before proceeding.
+
+---
 
 ### Apptainer path
 
