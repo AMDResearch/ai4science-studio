@@ -63,7 +63,7 @@
 #SBATCH --ntasks=1
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=8
-#SBATCH --time=02:00:00
+#SBATCH --time=04:00:00
 #SBATCH --output=orbit2-overlay-build-%j.out
 #SBATCH --error=orbit2-overlay-build-%j.out
 
@@ -88,7 +88,7 @@ USE_STAGING=true
 if [[ -v ORBIT2_STAGE_DIR && -z "${ORBIT2_STAGE_DIR}" ]]; then
   USE_STAGING=false
 fi
-STAGE_DIR="${ORBIT2_STAGE_DIR:-$(dirname "$OVERLAY")/orbit2-stage}"
+STAGE_DIR="${ORBIT2_STAGE_DIR:-${TMPDIR:-/tmp}/orbit2-stage}"
 
 if [[ "$USE_STAGING" == true ]]; then
   OVERLAY_SIZE_MB="${ORBIT2_OVERLAY_SIZE_MB:-7168}"
@@ -113,7 +113,7 @@ fi
 # ---------------------------------------------------------------------------
 # Write the install script that runs inside the container
 # ---------------------------------------------------------------------------
-SCRIPTS_DIR="$(dirname "$OVERLAY")/orbit2-overlay-scripts"
+SCRIPTS_DIR="${TMPDIR:-/tmp}/orbit2-overlay-scripts"
 mkdir -p "$SCRIPTS_DIR"
 
 cat > "$SCRIPTS_DIR/overlay_install.sh" << INNEREOF
@@ -198,7 +198,7 @@ if [[ "\$USE_STAGING" == true ]]; then
   echo "--- Step 6: copy stripped packages from staging → overlay ---"
   echo "  Staging size: \$(du -sh "\$STAGE_DIR" | cut -f1)"
   mkdir -p "\$PKG"
-  cp -r "\$STAGE_DIR"/. "\$PKG/"
+  tar -C "\$STAGE_DIR" -cf - . | tar -C "\$PKG" -xf -
   # Final safety strip after copy
   for pkg in torch torchvision torchaudio torchgen functorch nvidia triton; do
       rm -rf "\${PKG}/\${pkg}" "\${PKG}/\${pkg}"-*.dist-info 2>/dev/null || true
