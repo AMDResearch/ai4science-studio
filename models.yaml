@@ -91,7 +91,7 @@ models:
   - slug: SwinUNETR
     domain: healthcare
     hf_id: N/A
-    license: See upstream (MONAI / silogen/ai-samples)
+    license: Apache-2.0
     task: 3D medical image segmentation
     tasks_available: [train, inference]
     path: healthcare/models/SwinUNETR

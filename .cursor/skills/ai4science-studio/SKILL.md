@@ -220,9 +220,20 @@ Always verify at end: `assert 'rocm' in torch.__version__`
 - ORBIT-2 (pytorch-lightning + xformers + wandb + mpi4py + ...): 7 GB overlay, ~2 GB content
 - StormCast (earth2studio + cartopy): 4 GB overlay, ~1.7 GB content
 
+## Local cluster config
+
+Site-specific settings (SLURM partition, account, scratch paths, GPU arch) are stored in an untracked file so they never leak into the public repo. The agent checks two locations (in order):
+
+1. `.cluster-config.yaml` (repo root — gitignored, per-checkout)
+2. `~/.config/ai4science-studio/cluster.yaml` (user-level, shared across clones)
+
+**On first run or if neither file exists, run `/init-cluster`.** This command auto-discovers the cluster environment (GPU arch, SLURM partitions/accounts, container runtimes, scratch paths, internet access) and asks the user to confirm via multiple-choice questions. The result is written to one of the above locations.
+
+When cluster-specific info is discovered during a session (new partition, different scratch path, etc.), update the config file so future runs don't re-ask.
+
 ## Auto-discovery: use `$HOME`, never hardcode `/home`
 
-When searching for SIF files, overlays, or repo clones, always use `$HOME` as the search root — not `/home`. Many HPC clusters mount home directories under non-standard prefixes (e.g. `/shared/prerelease/home/amd/user`), so `find /home ...` misses everything. The same applies to overlay and upstream-repo searches.
+When searching for SIF files, overlays, or repo clones, always use `$HOME` as the search root — not `/home`. Many HPC clusters mount home directories under non-standard prefixes, so `find /home ...` misses everything. The same applies to overlay and upstream-repo searches.
 
 ```bash
 find "$HOME" /scratch /projects /opt -maxdepth 4 -name "*.sif" 2>/dev/null | head -20

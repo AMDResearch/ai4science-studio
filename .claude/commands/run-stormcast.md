@@ -2,6 +2,12 @@
 
 Guide the user through running StormCast end-to-end on an AMD cluster via SLURM.
 
+## Step 0 — Cluster config check
+
+Before starting, check if `.cluster-config.yaml` (repo root) or `~/.config/ai4science-studio/cluster.yaml` exists. If neither exists, run the `/init-cluster` flow first to auto-discover the cluster environment.
+
+If a config exists, read it and pre-fill Q0 (runtime), Q6 (partition/account) from the saved values. Still present them to the user for confirmation but show the saved defaults.
+
 ## Step 1 — Questionnaire (ask ALL questions before doing anything)
 
 Ask the user the following questions. Do not assume any defaults. Wait for answers to all questions before proceeding.
@@ -50,7 +56,7 @@ Run these when the user chose **Auto-discover** for any question. Present the re
 ```bash
 find "$HOME" /scratch /projects /opt -maxdepth 4 -name "*.sif" 2>/dev/null | head -20
 ```
-Use `$HOME` (not `/home`) so the search works when the home directory is under a non-standard prefix (e.g. `/shared/prerelease/home/…`).
+Use `$HOME` (not `/home`) so the search works when the home directory is under a non-standard prefix.
 Filter results for SIF names containing `rocm` or `pytorch`. Verify with `apptainer inspect <sif>` if multiple candidates.
 
 **Overlay images (Q2):**

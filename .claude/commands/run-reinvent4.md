@@ -4,6 +4,10 @@ Guide the user through running REINVENT4 transfer learning for molecular design 
 
 > **Research / engineering use only.** Not for clinical or diagnostic use.
 
+## Step 0 — Cluster config check
+
+Check if `.cluster-config.yaml` (repo root) or `~/.config/ai4science-studio/cluster.yaml` exists. If neither exists, run the `/init-cluster` flow first. If a config exists, read it and pre-fill container runtime and SLURM partition/account from saved values.
+
 ## Step 1 — Questionnaire
 
 **Q0. TOML config**

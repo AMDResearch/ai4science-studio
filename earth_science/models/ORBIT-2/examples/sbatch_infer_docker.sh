@@ -36,7 +36,7 @@
 
 ##SBATCH -A YOUR_PROJECT_HERE
 #SBATCH -J orbit2-docker
-#SBATCH --partition=amd-arad
+#SBATCH --partition=YOUR_PARTITION_HERE
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:8
 #SBATCH --ntasks=1

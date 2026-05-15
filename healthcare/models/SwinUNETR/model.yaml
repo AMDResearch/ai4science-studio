@@ -1,6 +1,6 @@
 name: SwinUNETR
 hf_id: N/A
-license: See upstream (MONAI / silogen/ai-samples)
+license: Apache-2.0
 task: 3D medical image segmentation (lung tumor, NSCLC-Radiomics)
 domain: healthcare
 upstream_code: https://github.com/silogen/ai-samples

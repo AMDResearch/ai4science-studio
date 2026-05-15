@@ -1,0 +1,38 @@
+# AI4Science Studio — Local Cluster Configuration
+#
+# Copy this file to one of these locations (checked in order):
+#   1. .cluster-config.yaml        (this repo — gitignored, per-checkout)
+#   2. ~/.config/ai4science-studio/cluster.yaml  (user-level, shared across clones)
+#
+# The agent (Claude Code / Cursor) reads this file to avoid repeatedly asking
+# for cluster-specific details. It is auto-created on first run if missing.
+# Update it whenever your cluster environment changes.
+
+# SLURM settings
+slurm:
+  partition: ""          # e.g. "gpu", "mi300x", "batch"
+  account: ""            # e.g. "myproject", "CSC000"
+  qos: ""                # optional QoS if your site requires it
+
+# Filesystem paths
+paths:
+  home: ""               # leave blank to use $HOME; set if non-standard
+  scratch: ""            # e.g. "/scratch/$USER", "/lustre/scratch/$USER"
+  projects: ""           # e.g. "/projects/myteam"
+  sif_cache: ""          # where .sif files are stored (e.g. "$HOME/containers")
+
+# Container runtime
+containers:
+  runtime: ""            # "apptainer" or "docker"
+  gpu_method: ""         # "amd-toolkit" (--runtime=amd) or "device-passthrough" (/dev/kfd)
+
+# ROCm / GPU details
+gpu:
+  architecture: ""       # e.g. "gfx942" (MI300X), "gfx90a" (MI250X), "gfx950" (MI350X)
+  count_per_node: 8      # GPUs per node
+  vram_gb: 192           # per-GPU VRAM in GB
+
+# Network
+network:
+  internet_access: true  # can compute nodes reach the internet?
+  proxy: ""              # HTTP proxy if required (e.g. "http://proxy:8080")
