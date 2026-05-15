@@ -50,6 +50,11 @@ secrets/
 **/examples/outputs/
 **/examples/generated.csv
 
+# Local cluster config (site-specific, auto-created by agent)
+.cluster-config.yaml
+.claude/settings.local.json
+nul
+
 # IDE
 .idea/
 .vscode/

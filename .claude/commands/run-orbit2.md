@@ -2,6 +2,10 @@
 
 Guide the user through running ORBIT-2 end-to-end on an AMD cluster via SLURM.
 
+## Step 0 — Cluster config check
+
+Check if `.cluster-config.yaml` (repo root) or `~/.config/ai4science-studio/cluster.yaml` exists. If neither exists, run the `/init-cluster` flow first. If a config exists, read it and pre-fill container runtime and SLURM partition/account from saved values.
+
 ## Step 1 — Questionnaire (ask ALL questions before doing anything)
 
 Ask the user the following questions. Do not assume any defaults. Wait for answers to all questions before proceeding.
@@ -61,7 +65,7 @@ Run these when the user chose **Auto-discover** for any question. Present the re
 ```bash
 find "$HOME" /scratch /projects /opt -maxdepth 4 -type d -name "ORBIT-2" 2>/dev/null | head -20
 ```
-Use `$HOME` (not `/home`) so the search works when the home directory is under a non-standard prefix (e.g. `/shared/prerelease/home/…`).
+Use `$HOME` (not `/home`) so the search works when the home directory is under a non-standard prefix.
 Look for a directory containing `src/` and `examples/` subdirectories to confirm it is a valid ORBIT-2 clone.
 
 **SIF files (Q2):**

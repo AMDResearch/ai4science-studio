@@ -31,7 +31,7 @@
 #   For older hardware (MI100/gfx908): override GPMOL_IMAGE with a rocm6.x image.
 
 #SBATCH --job-name=gpmolformer-docker
-#SBATCH --partition=amd-arad
+#SBATCH --partition=YOUR_PARTITION_HERE
 ##SBATCH --account=YOUR_ACCOUNT_HERE
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1

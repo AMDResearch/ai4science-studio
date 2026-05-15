@@ -50,7 +50,7 @@ The `earth_science/` domain covers **climate**, **weather**, and broader **Earth
   )
   ```
 - **Distributed launch:** `srun --mpi=pmix apptainer exec ... --env HOSTNAME="$MASTER_ADDR"` — see studio SKILL.md for full pattern. Confirmed working for 1-GPU and 8-GPU.
-- **Data blocker:** ORBIT-2 real training data lives on Frontier Lustre (`/lustre/orion/lrn036/...`) — not publicly accessible. Synthetic data covers the smoke-test path.
+- **Data blocker:** ORBIT-2 real training data lives on Frontier Lustre (`/lustre/orion/<YOUR_PROJECT>/...`) — not publicly accessible. Synthetic data covers the smoke-test path.
 
 ### ArchesWeather (geoarches)
 

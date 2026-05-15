@@ -25,7 +25,7 @@
 # See: ../recipes/inference/README.md
 
 #SBATCH --job-name=stormcast-docker
-#SBATCH --partition=amd-arad
+#SBATCH --partition=YOUR_PARTITION_HERE
 ##SBATCH --account=YOUR_ACCOUNT_HERE
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1

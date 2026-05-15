@@ -7,6 +7,21 @@ description: Step-by-step instructions for how Cursor should run any model in AI
 
 Use this skill when a user asks to run, execute, or launch any model in the repository.
 
+## Step 0: Check for cluster config
+
+Before anything else, check if a cluster config exists:
+
+```bash
+# Check both locations
+test -f .cluster-config.yaml && echo "repo-local" || \
+test -f ~/.config/ai4science-studio/cluster.yaml && echo "user-level" || \
+echo "missing"
+```
+
+If **missing**, tell the user: "No cluster configuration found. Running `/init-cluster` to detect your cluster environment." Then run the init-cluster flow (auto-discover GPU, SLURM, containers, paths) before proceeding.
+
+If a config **exists**, read it and use its values as defaults for SLURM partition, account, container runtime, GPU arch, and scratch paths throughout the run. Still confirm with the user if any value is empty or looks stale.
+
 ## Step 1: Identify the model
 
 1. Read `models.yaml` at the repo root to find the model by name, slug, or HF id.
@@ -35,7 +50,6 @@ When the user chooses auto-discover, run the appropriate commands and present re
 
 ```bash
 # SIF files — use $HOME so we find files even when home is not under /home
-# (e.g. /shared/prerelease/home/…)
 find "$HOME" /scratch /projects /opt -maxdepth 4 -name "*.sif" 2>/dev/null | head -20
 
 # Overlay images

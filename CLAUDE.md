@@ -79,6 +79,7 @@ Slash commands for Claude Code live in `.claude/commands/`:
 | `/check-model` | Audit a model folder for completeness and convention compliance |
 | `/list-models` | Discover and filter models by domain, task, or license |
 | `/audit-models` | Readiness audit for all models (scripts, preflight, recipes) |
+| `/init-cluster` | Auto-detect cluster environment (GPU, SLURM, containers) and create local config |
 | `/run-stormcast` | Run StormCast inference on an AMD cluster |
 | `/run-orbit2` | Run ORBIT-2 inference on an AMD cluster |
 | `/run-archesweather` | Run ArchesWeather inference or training on an AMD cluster |
