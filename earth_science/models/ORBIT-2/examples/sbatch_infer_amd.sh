@@ -177,8 +177,11 @@ fi
 # ---------------------------------------------------------------------------
 if [[ "${ORBIT2_USE_SYNTHETIC:-0}" == "1" ]]; then
   SYNTH_DIR="${TMPDIR:-/tmp}/orbit2-synthetic-${SLURM_JOB_ID:-$$}"
+  mkdir -p "$SYNTH_DIR"
   echo "--- Generating synthetic ORBIT-2 dataset → $SYNTH_DIR ---"
-  python "$SCRIPT_DIR/make_synthetic_data.py" --out-dir "$SYNTH_DIR"
+  if [[ -z "${ORBIT2_SIF:-}" ]]; then
+    python3 "$SCRIPT_DIR/make_synthetic_data.py" --out-dir "$SYNTH_DIR"
+  fi
 
   # Stamp data and checkpoint paths into a temp copy of the synthetic config
   SYNTH_CONFIG="${TMPDIR:-/tmp}/interm_8m_synthetic_${SLURM_JOB_ID:-$$}.yaml"
@@ -276,6 +279,7 @@ echo "[rank \$SLURM_PROCID / \$SLURM_NTASKS] GPU \$SLURM_LOCALID on \$(hostname)
 export PYTHONPATH="/opt/orbit2-pkgs:/orbit2/src:/orbit2:\${PYTHONPATH:-}"
 cd /orbit2/examples
 python3 /examples/run_visualize.py \\
+    --orbit2-root /orbit2 \\
     /config/config.yaml \\
     --index 0 --variable total_precipitation_24hr \\
     --master-port \$MASTER_PORT \\
@@ -300,10 +304,8 @@ RANKEOF
 
   echo ""
   echo "--- Phase 2: ${SLURM_NTASKS:-8}-way distributed visualize (srun --mpi=pmix) ---"
-  # --mpi=pmix: provides a PMIx v4 server that the container's OpenMPI/mpi4py
-  # can connect to. Default srun MPI modes (including --mpi=none) fail because
-  # the container's mpi4py auto-calls MPI_Init and cannot reach the PMIx server
-  # through the container namespace.
+  # --mpi=pmix: provides a PMIx server that the container's OpenMPI/mpi4py
+  # can connect to for MPI_Init.
   # HOSTNAME is injected as MASTER_ADDR because visualize.py does:
   #   os.environ["MASTER_ADDR"] = os.environ["HOSTNAME"]
   # Using localhost only works single-node; the scontrol-derived hostname works
