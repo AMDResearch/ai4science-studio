@@ -64,36 +64,7 @@ When you fix anything in a model's scripts, do **all** of the following in the s
 
 **Litmus test:** would a fresh agent session working on a different model make the same mistake? If yes, the fix is incomplete — the lesson must be discoverable in a skill, rule, or `CLAUDE.md` before the task is done.
 
-## Cursor Agent Skills
+## Agent Skills
 
-Domain-specific conventions for AI coding agents are defined in `.cursor/skills/`. Each `SKILL.md` covers one scope: general repo rules (`ai4science-studio`), Hugging Face recipe workflows (`ai4science-huggingface-recipes`), per-domain cautions for earth science, healthcare, material science, protein folding, and physics simulation, plus operational skills (`ai4science-run-models`, `ai4science-discover`).
-
-## Claude Code Skills
-
-Slash commands for Claude Code live in `.claude/commands/`:
-
-| Command | Purpose |
-|---|---|
-| `/add-model` | Walk through adding a new model (slug, folder, README, recipes, examples) |
-| `/add-recipe` | Add or improve a recipe for an existing model |
-| `/check-model` | Audit a model folder for completeness and convention compliance |
-| `/list-models` | Discover and filter models by domain, task, or license |
-| `/audit-models` | Readiness audit for all models (scripts, preflight, recipes) |
-| `/init-cluster` | Auto-detect cluster environment (GPU, SLURM, containers) and create local config |
-| `/run-stormcast` | Run StormCast inference on an AMD cluster |
-| `/run-orbit2` | Run ORBIT-2 inference on an AMD cluster |
-| `/run-archesweather` | Run ArchesWeather inference or training on an AMD cluster |
-| `/run-aurora` | Run Aurora 0.1° weather forecast on an AMD cluster |
-| `/run-gencast` | Run GenCast ensemble forecast on an AMD cluster |
-| `/run-neuralgcm` | Run NeuralGCM hybrid physics+ML forecast on an AMD cluster |
-| `/run-panguweather` | Run PanguWeather deterministic forecast on an AMD cluster |
-| `/run-gpmolformer` | Run GP-MoLFormer molecule generation on an AMD cluster |
-| `/run-mattergen` | Run MatterGen crystal generation on an AMD cluster |
-| `/run-hydragnn` | Run HydraGNN ensemble inference on an AMD cluster |
-| `/run-swinunetr` | Run SwinUNETR medical segmentation on an AMD cluster |
-| `/run-semlaflow` | Run SemlaFlow 3D molecular generation on an AMD cluster |
-| `/run-reinvent4` | Run REINVENT4 transfer learning on an AMD cluster |
-| `/run-matey` | Run MATEY spatiotemporal modeling on an AMD cluster |
-| `/run-walrus` | Run Walrus physics rollout on an AMD cluster |
-
-Invoke with an argument, e.g. `/add-model jychoi-hpc/ORBIT-2 → earth_science` or `/run-stormcast SC_SIF=/path/to/sif`.
+- **Cursor**: `.cursor/skills/` — domain conventions (earth science, healthcare, material science, protein folding, physics simulation, run-models, discover)
+- **Claude Code**: `.claude/commands/` — slash commands for add-model, add-recipe, check-model, list-models, audit-models, init-cluster, and run-* for each model
