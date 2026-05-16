@@ -216,8 +216,24 @@ done
 
 Always verify at end: `assert 'rocm' in torch.__version__`
 
+**Always build the overlay image on `$TMPDIR` (node-local disk), not on NFS.**
+
+An ext3 overlay image is served via FUSE. Writing thousands of small Python package files through FUSE into an image stored on NFS is extremely slow — both `cp -r` and `tar | tar` are equally bottlenecked because the destination is the FUSE layer over NFS, not the copy tool. The correct pattern:
+
+```bash
+LOCAL_OVERLAY="${TMPDIR:-/tmp}/<model>-overlay-${SLURM_JOB_ID:-$$}.img"
+apptainer overlay create --size "$OVERLAY_SIZE_MB" "$LOCAL_OVERLAY"
+
+apptainer exec --rocm --overlay "${LOCAL_OVERLAY}:rw" ...  # populate on local disk (fast)
+
+# Copy finished image to NFS — one large sequential write (fast)
+cp "$LOCAL_OVERLAY" "$OVERLAY"   # $OVERLAY = /shared/... NFS destination
+rm -f "$LOCAL_OVERLAY"
+```
+
 **Validated overlay sizes:**
 - ORBIT-2 (pytorch-lightning + xformers + wandb + mpi4py + ...): 7 GB overlay, ~2 GB content
+- HydraGNN (torch-scatter + torch-geometric + mpi4py + ...): 4 GB overlay, ~522 MB content
 - StormCast (earth2studio + cartopy): 4 GB overlay, ~1.7 GB content
 
 ## Local cluster config
