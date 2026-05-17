@@ -47,7 +47,6 @@ if [[ -z "${HG_CHECKPOINT}" || -z "${HG_CONFIG}" ]]; then
 fi
 
 mkdir -p "$HG_OUTPUT_DIR"
-cd /workspace/HydraGNN
 
 echo "=== HydraGNN Predictive GFM 2024 — Inference ==="
 echo "  Checkpoint : $HG_CHECKPOINT"
@@ -56,27 +55,45 @@ echo "  Output     : $HG_OUTPUT_DIR"
 echo ""
 
 python - <<PYEOF
-import hydragnn
-import torch
+import json, os, torch
+from collections import OrderedDict
 
 config_file = "${HG_CONFIG}"
 checkpoint  = "${HG_CHECKPOINT}"
 output_dir  = "${HG_OUTPUT_DIR}"
 
-print(f"Loading model from config: {config_file}")
-model = hydragnn.load_existing_model(config_file, checkpoint)
-model.eval()
+os.makedirs(output_dir, exist_ok=True)
+
+with open(config_file) as f:
+    config = json.load(f)
+
+from hydragnn.models.create import create_model_config
+from hydragnn.utils.distributed import get_device_name
+
+print(f"Creating model from config: {config_file}")
+model = create_model_config(
+    config=config["NeuralNetwork"],
+    verbosity=config["Verbosity"]["level"],
+)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Device: {device}")
 model = model.to(device)
 
-# --- Replace the block below with your actual input graph construction ---
-# Inputs must match the featurization used during training (see upstream HydraGNN docs).
-# Example placeholder: build an ASE Atoms object or a torch_geometric Data object
-# and call hydragnn.run_prediction(model, data) per upstream API.
+print(f"Loading checkpoint: {checkpoint}")
+map_location = {"cuda:0": str(device)}
+ckpt = torch.load(checkpoint, map_location=map_location)
+state_dict = ckpt["model_state_dict"]
+# GFM checkpoints were saved with DDP (keys prefixed "module.") but we infer
+# without DDP wrapping, so strip the prefix before load_state_dict.
+if next(iter(state_dict)).startswith("module."):
+    state_dict = OrderedDict((k[len("module."):], v) for k, v in state_dict.items())
+model.load_state_dict(state_dict)
+model.eval()
+
 print("")
-print("Model loaded successfully. Build your input graph and call:")
-print("  hydragnn.run_prediction(model, data)")
-print("See recipes/inference/README.md for details.")
+print("Model loaded successfully.")
+print("Build your input graph (torch_geometric.data.Data) and call:")
+print("  pred = model(data.to(device))")
+print(f"Results directory: {output_dir}")
 PYEOF

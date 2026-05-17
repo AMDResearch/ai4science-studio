@@ -39,6 +39,16 @@
 #     ORBIT2_STAGE_DIR="" (empty).  The script will install directly into the
 #     overlay and strip torch afterward.  Simpler, but requires ~7 GB overlay.
 #
+# ── Why the overlay is built on $TMPDIR ──────────────────────────────────────
+#   The overlay image is an ext3 filesystem served via FUSE.  Writing thousands
+#   of small Python package files through FUSE into an image that lives on NFS
+#   is extremely slow (ext3-on-NFS via FUSE).  We instead:
+#     1. Create and populate the ext3 image on $TMPDIR (node-local fast disk).
+#     2. Copy the finished image file (one large sequential write) to the NFS
+#        destination ($ORBIT2_OVERLAY).
+#   This makes the file-intensive install step fast and leaves a single large
+#   file on NFS.
+#
 # ── Key environment variables ─────────────────────────────────────────────────
 #   ORBIT2_SIF              Path to the Apptainer SIF image (required)
 #   ORBIT2_OVERLAY          Output overlay path
@@ -96,9 +106,13 @@ else
   OVERLAY_SIZE_MB="${ORBIT2_OVERLAY_SIZE_MB:-8192}"
 fi
 
+# Build overlay on local disk; copy finished image to NFS destination.
+LOCAL_OVERLAY="${TMPDIR:-/tmp}/orbit2-overlay-${SLURM_JOB_ID:-$$}.img"
+
 echo "=== ORBIT-2 overlay build ==="
 echo "  SIF          : $ORBIT2_SIF"
-echo "  Overlay      : $OVERLAY  (${OVERLAY_SIZE_MB} MB)"
+echo "  Overlay (NFS): $OVERLAY  (${OVERLAY_SIZE_MB} MB)"
+echo "  Build on     : $LOCAL_OVERLAY  (node-local $TMPDIR)"
 echo "  ROCm whl tag : $ROCM_WHL_TAG"
 echo "  Staging mode : $USE_STAGING  (stage dir: ${STAGE_DIR:-n/a})"
 echo "  Node         : $(hostname)  Date: $(date)"
@@ -223,19 +237,26 @@ INNEREOF
 chmod +x "$SCRIPTS_DIR/overlay_install.sh"
 
 # ---------------------------------------------------------------------------
-# Create the overlay image and run the install inside the container
+# Create overlay on local disk, run install, then copy image to NFS
 # ---------------------------------------------------------------------------
-echo "Creating ${OVERLAY_SIZE_MB} MB ext3 overlay image ..."
-apptainer overlay create --size "$OVERLAY_SIZE_MB" "$OVERLAY"
+echo "Creating ${OVERLAY_SIZE_MB} MB ext3 overlay on local disk: $LOCAL_OVERLAY ..."
+apptainer overlay create --size "$OVERLAY_SIZE_MB" "$LOCAL_OVERLAY"
 
 echo "Running install inside container ..."
 apptainer exec \
     --rocm \
-    --overlay "${OVERLAY}:rw" \
+    --overlay "${LOCAL_OVERLAY}:rw" \
     --bind "$SCRIPTS_DIR":/scripts \
-    --bind "$(dirname "$OVERLAY")":/overlay-dir \
+    --bind "${STAGE_DIR}:${STAGE_DIR}" \
     "$ORBIT2_SIF" \
     bash /scripts/overlay_install.sh
+
+echo ""
+echo "--- Copying finished overlay to NFS: $OVERLAY ---"
+echo "  Image size: $(du -sh "$LOCAL_OVERLAY" | cut -f1)"
+cp "$LOCAL_OVERLAY" "$OVERLAY"
+rm -f "$LOCAL_OVERLAY"
+echo "  Done."
 
 echo ""
 echo "=== Overlay ready ==="

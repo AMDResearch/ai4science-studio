@@ -13,10 +13,12 @@ Check if `.cluster-config.yaml` (repo root) or `~/.config/ai4science-studio/clus
 - **Training** — Smaller-scale training (the full GFM pretraining is Frontier-scale)
 
 **Q1. (Inference) Checkpoint and config**
-Do you have a `.pk` checkpoint and matching `config.json` from the HF Hub [`mlupopa/HydraGNN_Predictive_GFM_2024`](https://huggingface.co/mlupopa/HydraGNN_Predictive_GFM_2024)? If not, I will generate the download command.
+First, auto-discover: run `find <paths.projects> -maxdepth 5 -name "*.pk" 2>/dev/null` and `find <paths.projects> -maxdepth 5 -name "config.json" 2>/dev/null` (substituting `paths.projects` from cluster config) to check for existing checkpoints on shared storage. Present any results to the user. If nothing is found, ask:
+- Do you have a `.pk` checkpoint and matching `config.json` from the HF Hub [`mlupopa/HydraGNN_Predictive_GFM_2024`](https://huggingface.co/mlupopa/HydraGNN_Predictive_GFM_2024)?
+- Options: **Yes, provide paths** / **No, download for me** / **Auto-discovered (use found path)**
 
 **Q2. Output directory**
-Where to write predictions? Default: `/workspace/results`.
+Where to write predictions? Default: `<paths.projects>/hydragnn-results` (read `paths.projects` from cluster config, never use $HOME for large outputs).
 
 ---
 
