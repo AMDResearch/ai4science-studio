@@ -7,7 +7,7 @@
 #   export ORBIT2_SIF=${AI4S_SHARED_DIR:-/your/shared/dir}/images/pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif
 #   sbatch build_overlay_amd.sh
 #   # then in your inference job:
-#   export ORBIT2_OVERLAY=/path/to/orbit2-overlay.img
+#   export ORBIT2_OVERLAY=${AI4S_SHARED_DIR:-/your/shared/dir}/models/ORBIT-2/overlays/orbit2-overlay.img
 #   sbatch sbatch_infer_amd.sh
 #
 # ── GPU / ROCm compatibility ─────────────────────────────────────────────────
@@ -52,7 +52,7 @@
 # ── Key environment variables ─────────────────────────────────────────────────
 #   ORBIT2_SIF              Path to the Apptainer SIF image (required)
 #   ORBIT2_OVERLAY          Output overlay path
-#                           (default: same dir as SIF, orbit2-overlay.img)
+#                           (default: ${AI4S_SHARED_DIR:-/your/shared/dir}/models/ORBIT-2/overlays/orbit2-overlay.img)
 #   ORBIT2_STAGE_DIR        Writable scratch dir for staging install (~6 GB)
 #                           Set to "" to install directly into overlay instead
 #                           (requires ORBIT2_OVERLAY_SIZE_MB >= 8192)
@@ -90,7 +90,8 @@ if [[ -z "${ORBIT2_SIF:-}" ]]; then
   exit 1
 fi
 
-OVERLAY="${ORBIT2_OVERLAY:-$(dirname "$ORBIT2_SIF")/orbit2-overlay.img}"
+ORBIT2_BASE="${AI4S_SHARED_DIR:-/your/shared/dir}/models/ORBIT-2"
+OVERLAY="${ORBIT2_OVERLAY:-${ORBIT2_BASE}/overlays/orbit2-overlay.img}"
 
 # Staging mode (default): install to NFS scratch, strip torch, copy to overlay.
 # Direct mode (ORBIT2_STAGE_DIR=""): install straight into overlay (needs ≥8 GB).
