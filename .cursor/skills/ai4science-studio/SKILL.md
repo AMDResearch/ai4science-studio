@@ -227,7 +227,7 @@ apptainer overlay create --size "$OVERLAY_SIZE_MB" "$LOCAL_OVERLAY"
 apptainer exec --rocm --overlay "${LOCAL_OVERLAY}:rw" ...  # populate on local disk (fast)
 
 # Copy finished image to NFS — one large sequential write (fast)
-cp "$LOCAL_OVERLAY" "$OVERLAY"   # $OVERLAY = /shared/... NFS destination
+cp "$LOCAL_OVERLAY" "$OVERLAY"   # $OVERLAY = NFS destination (set by user, never hardcoded)
 rm -f "$LOCAL_OVERLAY"
 ```
 
@@ -246,6 +246,8 @@ Site-specific settings (SLURM partition, account, scratch paths, GPU arch) are s
 **On first run or if neither file exists, run `/init-cluster`.** This command auto-discovers the cluster environment (GPU arch, SLURM partitions/accounts, container runtimes, scratch paths, internet access) and asks the user to confirm via multiple-choice questions. The result is written to one of the above locations.
 
 When cluster-specific info is discovered during a session (new partition, different scratch path, etc.), update the config file so future runs don't re-ask.
+
+**Critical: site-specific paths must never appear in committed scripts — including as env var defaults.** It is not enough that a path comes from an env var; the default value of that env var must also be portable. Any default that contains a username, cluster-specific mount point (`/shared/<user>`, `/scratch/...`), or node name belongs in `.cluster-config.yaml`, not in the script. Use `AI4S_SHARED_DIR` (set by the user) as the base for path defaults, or omit the default entirely and require the user to set the variable.
 
 ## Auto-discovery: use `$HOME`, never hardcode `/home`
 

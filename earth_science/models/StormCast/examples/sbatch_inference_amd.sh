@@ -21,13 +21,16 @@
 #   3. Adjust #SBATCH directives below for your site's partition and account.
 #
 # ── Key environment variables ─────────────────────────────────────────────────
-#   SC_SIF        Path to Apptainer SIF image (required for container mode)
+#   SC_SIF        Path to Apptainer SIF image
+#                 (default: ${AI4S_SHARED_DIR:-/your/shared/dir}/images/rocm_pytorch.sif)
 #   SC_OVERLAY    Path to pre-built ext3 overlay (optional, skips pip install).
+#                 (default: ${AI4S_SHARED_DIR:-/your/shared/dir}/models/StormCast/overlays/stormcast-overlay.img)
 #                 If unset (or file missing), deps are installed into a
 #                 per-job temp dir at startup (~5 min overhead).
 #   SC_START      Forecast start time ISO-8601, e.g. 2025-01-01T06 (default: 2025-01-01T06)
 #   SC_STEPS      Number of 1-h inference steps (default: 6)
-#   SC_OUTPUT     Output zarr path (default: outputs/pred-<start>.zarr next to script)
+#   SC_OUTPUT     Output zarr path
+#                 (default: ${AI4S_SHARED_DIR:-/your/shared/dir}/models/StormCast/outputs/pred-<start>.zarr)
 #
 # ── GPU / ROCm compatibility ─────────────────────────────────────────────────
 #   rocm7.2.2 image covers MI250X (gfx90a), MI300X (gfx942), and MI350X (gfx950).
@@ -65,10 +68,11 @@ SC_STEPS="${SC_STEPS:-6}"
 SC_OUTPUT="${SC_OUTPUT:-}"          # leave empty for default outputs/pred-<date>.zarr
 
 # Apptainer / bare-metal selection
-SC_SIF="${SC_SIF:-}"
+SC_BASE="${AI4S_SHARED_DIR:-/your/shared/dir}/models/StormCast"
+SC_SIF="${SC_SIF:-${AI4S_SHARED_DIR:-/your/shared/dir}/images/rocm_pytorch.sif}"
 
 # Optional pre-built overlay (skips pip install on each job)
-SC_OVERLAY="${SC_OVERLAY:-}"
+SC_OVERLAY="${SC_OVERLAY:-${SC_BASE}/overlays/stormcast-overlay.img}"
 
 # ---------------------------------------------------------------------------
 # Resolve output path and wipe any previous run's zarr
@@ -76,7 +80,7 @@ SC_OVERLAY="${SC_OVERLAY:-}"
 # ---------------------------------------------------------------------------
 if [[ -z "${SC_OUTPUT}" ]]; then
     SAFE_START="${SC_START//[: T]/-}"
-    SC_OUTPUT="${SCRIPT_DIR}/outputs/pred-${SAFE_START}.zarr"
+    SC_OUTPUT="${SC_BASE}/outputs/pred-${SAFE_START}.zarr"
 fi
 echo "  Output zarr : ${SC_OUTPUT}"
 if [[ -e "${SC_OUTPUT}" ]]; then

@@ -30,7 +30,20 @@ When creating or editing `run_*.sh` or `run_*.py` under any model's `examples/` 
    : "${ORBIT2_ROOT:?Set ORBIT2_ROOT to the ORBIT-2 clone directory}"
    ```
 
-4. **No hardcoded paths** — Paths to checkpoints, data, and output directories must always come from env vars, never from hardcoded absolute paths.
+4. **No site-specific paths — including in defaults** — Paths to checkpoints, data, and output directories must come from env vars. Critically, the *default values* for those env vars must also be free of site-specific paths (usernames, cluster-specific mount points like `/shared/username`, `/scratch/...`). This is the most common mistake: the logic is portable, but a site-specific path is baked into the default.
+
+   Wrong:
+   ```bash
+   SC_OUTPUT="${SC_OUTPUT:-/shared/username/models/StormCast/outputs/pred.zarr}"
+   ```
+   Right — derive from a user-set base, or require the user to set it:
+   ```bash
+   # Option A: derive from AI4S_SHARED_DIR (user sets this for their site)
+   SC_OUTPUT="${SC_OUTPUT:-${AI4S_SHARED_DIR:-}/models/StormCast/outputs/pred.zarr}"
+
+   # Option B: no default — require it
+   : "${SC_OUTPUT:?Set SC_OUTPUT to your desired output path}"
+   ```
 
 5. **Shebang line** — Shell scripts: `#!/usr/bin/env bash` with `set -euo pipefail`. Python scripts: `#!/usr/bin/env python3`.
 

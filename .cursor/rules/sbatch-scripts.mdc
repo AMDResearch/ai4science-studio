@@ -32,14 +32,31 @@ When creating or editing `sbatch_*.sh` under any model's `examples/` directory:
    #SBATCH --account=YOUR_ACCOUNT_HERE
    ```
 
-5. **Env vars: never clobber** — Append to `LD_LIBRARY_PATH`, `PYTHONPATH`, `PATH` inside the container, not via `--env`.
+5. **No site-specific paths — including in defaults** — Never hardcode user- or cluster-specific paths anywhere in the script, including as default values for env vars. This is the most common mistake: satisfying "paths come from env vars" while still baking a site-specific path into the default.
 
-6. **ROCm torch protection** — After any pip install inside the job, verify ROCm torch is intact:
+   Wrong:
+   ```bash
+   HG_SIF="${HG_SIF:-/shared/username/models/HydraGNN/images/rocm_pytorch.sif}"
+   ```
+   Right — use `AI4S_SHARED_DIR` (set by the user for their site) or leave the default empty and fail with a clear message:
+   ```bash
+   # Option A: relative to a user-set base dir
+   HG_BASE="${AI4S_SHARED_DIR:-}/models/HydraGNN"
+   HG_SIF="${HG_SIF:-${HG_BASE}/images/rocm_pytorch.sif}"
+
+   # Option B: no default — require the user to set it
+   : "${HG_SIF:?Set HG_SIF to your Apptainer SIF path}"
+   ```
+   Site-specific values (partition, account, shared dir, scratch paths) belong in the gitignored `.cluster-config.yaml` / `~/.config/ai4science-studio/cluster.yaml`, not in committed scripts.
+
+6. **Env vars: never clobber** — Append to `LD_LIBRARY_PATH`, `PYTHONPATH`, `PATH` inside the container, not via `--env`.
+
+7. **ROCm torch protection** — After any pip install inside the job, verify ROCm torch is intact:
    ```bash
    python3 -c "import torch; assert 'rocm' in torch.__version__, f'Non-ROCm torch: {torch.__version__}'"
    ```
 
-7. **Support optional overlay** — If the model has heavy pip deps, support `<MODEL>_OVERLAY` env var for a pre-built overlay:
+8. **Support optional overlay** — If the model has heavy pip deps, support `<MODEL>_OVERLAY` env var for a pre-built overlay:
    ```bash
    OVERLAY_ARG=()
    if [[ -n "${SC_OVERLAY:-}" ]] && [[ -f "$SC_OVERLAY" ]]; then

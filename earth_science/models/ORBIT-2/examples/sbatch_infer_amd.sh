@@ -29,9 +29,10 @@
 #   For older hardware (MI100/gfx908): use a rocm6.x image.
 #
 # Key environment variables:
-#   ORBIT2_ROOT           Path to ORBIT-2 clone (required)
-#   ORBIT2_CHECKPOINT     Path to .ckpt file (required unless ORBIT2_USE_SYNTHETIC=1,
-#                         in which case it is downloaded from HF automatically)
+#   ORBIT2_ROOT           Path to ORBIT-2 clone
+#                         (default: ${AI4S_SHARED_DIR:-/your/shared/dir}/models/ORBIT-2/code/ORBIT-2)
+#   ORBIT2_CHECKPOINT     Path to .ckpt file (default: ${AI4S_SHARED_DIR:-/your/shared/dir}/models/ORBIT-2/weights/<ckpt>.ckpt)
+#                         If unset and ORBIT2_USE_SYNTHETIC=1, downloaded from HF automatically.
 #   ORBIT2_CONFIG         Config YAML basename (default: interm_8m_ft.yaml).
 #                         Ignored when ORBIT2_USE_SYNTHETIC=1.
 #   ORBIT2_USE_SYNTHETIC  Set to 1 to use make_synthetic_data.py + the bundled
@@ -39,8 +40,10 @@
 #                         The checkpoint is still downloaded from HF if
 #                         ORBIT2_CHECKPOINT is not set.
 #   ORBIT2_SIF            Path to Apptainer SIF image for the ROCm PyTorch container.
+#                         (default: ${AI4S_SHARED_DIR:-/your/shared/dir}/images/rocm_pytorch.sif)
 #                         If unset, runs bare-metal.
 #   ORBIT2_OVERLAY        Path to a pre-built ext3 overlay image (optional).
+#                         (default: ${AI4S_SHARED_DIR:-/your/shared/dir}/models/ORBIT-2/overlays/orbit2-overlay.img)
 #                         Build once with build_overlay_amd.sh, then reuse across jobs.
 #                         If unset (or file missing), deps are installed into a
 #                         per-job temp dir at startup (~15 min overhead).
@@ -73,6 +76,11 @@ else
   SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 fi
 LAUNCHER="${STUDIO_ORBIT2_LAUNCHER:-$SCRIPT_DIR/run_visualize.py}"
+
+ORBIT2_BASE="${AI4S_SHARED_DIR:-/your/shared/dir}/models/ORBIT-2"
+ORBIT2_ROOT="${ORBIT2_ROOT:-${ORBIT2_BASE}/code/ORBIT-2}"
+ORBIT2_SIF="${ORBIT2_SIF:-${AI4S_SHARED_DIR:-/your/shared/dir}/images/rocm_pytorch.sif}"
+ORBIT2_OVERLAY="${ORBIT2_OVERLAY:-${ORBIT2_BASE}/overlays/orbit2-overlay.img}"
 
 if [[ -z "${ORBIT2_ROOT:-}" ]]; then
   echo "error: export ORBIT2_ROOT to your ORBIT-2 clone path" >&2

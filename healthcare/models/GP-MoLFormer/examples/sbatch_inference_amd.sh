@@ -20,13 +20,14 @@
 #      On subsequent runs the clone and weights are reused from GPMOL_WORK_DIR.
 #
 # ── Key environment variables ─────────────────────────────────────────────────
-#   GPMOL_SIF        Path to Apptainer SIF image (required)
+#   GPMOL_SIF        Path to Apptainer SIF image
+#                    (default: ${AI4S_SHARED_DIR:-/your/shared/dir}/images/rocm_pytorch.sif)
 #   GPMOL_WORK_DIR   Host directory for repo clone, weights, and output
-#                    (default: same directory as this script)
+#                    (default: ${AI4S_SHARED_DIR:-/your/shared/dir}/models/GP-MoLFormer)
 #   SCAFFOLD         SMILES fragment for constrained generation (unset = unconditional)
 #   NUM_BATCHES      Number of batches of 1000 molecules (default: 1 = 1000 molecules)
 #   OUTPUT_FILE      Output CSV path inside container (default: /workspace/generated.csv)
-#                    Maps to GPMOL_WORK_DIR/generated.csv on the host.
+#                    Maps to GPMOL_WORK_DIR/outputs/generated.csv on the host.
 #
 # ── GPU / ROCm compatibility ─────────────────────────────────────────────────
 #   Tested images (pick one based on your host ROCm driver):
@@ -63,16 +64,9 @@ fi
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-if [[ -z "${GPMOL_SIF:-}" ]]; then
-    echo "error: set GPMOL_SIF to your Apptainer SIF path before submitting" >&2
-    echo "  Recommended images:" >&2
-    echo "    rocm/pytorch:rocm7.0_ubuntu22.04_py3.10_pytorch_release_2.7.1  (py3.10)" >&2
-    echo "    rocm/pytorch:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0 (py3.12)" >&2
-    echo "  Use the newer image if torch cannot detect GPUs with the older one." >&2
-    exit 1
-fi
-
-GPMOL_WORK_DIR="${GPMOL_WORK_DIR:-$SCRIPT_DIR}"
+GPMOL_BASE="${AI4S_SHARED_DIR:-/your/shared/dir}/models/GP-MoLFormer"
+GPMOL_SIF="${GPMOL_SIF:-${AI4S_SHARED_DIR:-/your/shared/dir}/images/rocm_pytorch.sif}"
+GPMOL_WORK_DIR="${GPMOL_WORK_DIR:-$GPMOL_BASE}"
 SCAFFOLD="${SCAFFOLD:-}"
 NUM_BATCHES="${NUM_BATCHES:-1}"
 OUTPUT_FILE="${OUTPUT_FILE:-/workspace/generated.csv}"

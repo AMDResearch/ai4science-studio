@@ -43,8 +43,8 @@
 #   PYG_PYTHON_TAG      Python tag in zip filename (default: py312)
 
 #SBATCH --job-name=hydragnn-overlay
-#SBATCH --partition=lux
-#SBATCH --account=vultr_lux
+#SBATCH --partition=YOUR_PARTITION_HERE
+#SBATCH --account=YOUR_ACCOUNT_HERE
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --gres=gpu:1
@@ -55,13 +55,10 @@
 
 set -euo pipefail
 
-if [[ -z "${HG_SIF:-}" ]]; then
-  echo "error: set HG_SIF to your Apptainer SIF path before submitting" >&2
-  exit 1
-fi
-
-OVERLAY="${HG_OVERLAY:-$(dirname "$HG_SIF")/hydragnn-overlay.img}"
-STAGE_DIR="${HG_STAGE_DIR:-$(dirname "$OVERLAY")/hydragnn-stage}"
+HG_BASE="${AI4S_SHARED_DIR:-/your/shared/dir}/models/HydraGNN"
+HG_SIF="${HG_SIF:-${HG_BASE}/images/rocm_pytorch.sif}"
+OVERLAY="${HG_OVERLAY:-${HG_BASE}/overlays/hydragnn-overlay.img}"
+STAGE_DIR="${HG_STAGE_DIR:-${HG_BASE}/stage/hydragnn-stage}"
 OVERLAY_SIZE_MB="${HG_OVERLAY_SIZE_MB:-4096}"
 PYG_ROCM_RELEASE="${PYG_ROCM_RELEASE:-15}"
 PYG_PYTHON_TAG="${PYG_PYTHON_TAG:-py312}"
