@@ -101,7 +101,10 @@ If Docker is available, also check for AMD Container Toolkit:
 - Otherwise → set `gpu_method: device-passthrough`
 
 **Q7. Scratch / working directory**
-Show discovered writable directories. Ask user to pick or provide their preferred scratch path for large files (SIF, overlays, datasets).
+Show discovered writable directories. Ask user to pick or provide their preferred scratch root (set as `AI4S_SHARED_DIR`).
+Explain the expected layout under that root:
+- `<scratch>/images/` — shared base SIF files (one copy, used by all models)
+- `<scratch>/models/<ModelName>/{weights,overlays,outputs,code,stage,logs}` — per-model artifacts
 
 **Q8. Internet access**
 Show result of connectivity test. Ask to confirm.
@@ -127,9 +130,9 @@ slurm:
 
 paths:
   home: "<$HOME value>"
-  scratch: "<confirmed scratch path>"
-  projects: ""
-  sif_cache: "<path where .sif files were found, or scratch/containers>"
+  scratch: "<confirmed scratch path>"   # also export as AI4S_SHARED_DIR
+  projects: "<scratch>/models"          # per-model artifact root
+  sif_cache: "<scratch>/images"         # shared base SIF files
 
 containers:
   runtime: "<apptainer|docker>"
@@ -145,8 +148,8 @@ network:
   proxy: "<proxy URL or empty>"
 
 discovered_sifs:
-  # SIF files found during init (informational — not used by scripts)
-  # - /path/to/some.sif
+  # SIF files found during init (informational — confirm they are under sif_cache)
+  # - <scratch>/images/pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif
 ```
 
 After writing, confirm to the user:
@@ -158,6 +161,7 @@ After writing, confirm to the user:
 ## Step 4 — Show next steps
 
 Suggest what the user can do next:
+- Export `AI4S_SHARED_DIR=<scratch>` (or add to `~/.bashrc`) so all model scripts resolve paths correctly
 - Run a model: `/run-stormcast`, `/run-orbit2`, etc.
 - The run commands will read cluster config automatically for SLURM partition/account defaults
 

@@ -9,7 +9,7 @@
 #
 # Quick-start with synthetic data (no real ERA5/PRISM data required):
 #   export ORBIT2_ROOT=/path/to/ORBIT-2-clone
-#   export ORBIT2_SIF=/path/to/rocm_pytorch.sif   # optional but recommended
+#   export ORBIT2_SIF=${AI4S_SHARED_DIR:-/your/shared/dir}/images/pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif   # optional but recommended
 #   export ORBIT2_USE_SYNTHETIC=1
 #   sbatch sbatch_infer_amd.sh
 #
@@ -40,7 +40,7 @@
 #                         The checkpoint is still downloaded from HF if
 #                         ORBIT2_CHECKPOINT is not set.
 #   ORBIT2_SIF            Path to Apptainer SIF image for the ROCm PyTorch container.
-#                         (default: ${AI4S_SHARED_DIR:-/your/shared/dir}/images/rocm_pytorch.sif)
+#                         (default: ${AI4S_SHARED_DIR:-/your/shared/dir}/images/pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif)
 #                         If unset, runs bare-metal.
 #   ORBIT2_OVERLAY        Path to a pre-built ext3 overlay image (optional).
 #                         (default: ${AI4S_SHARED_DIR:-/your/shared/dir}/models/ORBIT-2/overlays/orbit2-overlay.img)
@@ -79,7 +79,7 @@ LAUNCHER="${STUDIO_ORBIT2_LAUNCHER:-$SCRIPT_DIR/run_visualize.py}"
 
 ORBIT2_BASE="${AI4S_SHARED_DIR:-/your/shared/dir}/models/ORBIT-2"
 ORBIT2_ROOT="${ORBIT2_ROOT:-${ORBIT2_BASE}/code/ORBIT-2}"
-ORBIT2_SIF="${ORBIT2_SIF:-${AI4S_SHARED_DIR:-/your/shared/dir}/images/rocm_pytorch.sif}"
+ORBIT2_SIF="${ORBIT2_SIF:-${AI4S_SHARED_DIR:-/your/shared/dir}/images/pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif}"
 ORBIT2_OVERLAY="${ORBIT2_OVERLAY:-${ORBIT2_BASE}/overlays/orbit2-overlay.img}"
 
 if [[ -z "${ORBIT2_ROOT:-}" ]]; then

@@ -4,7 +4,7 @@
 # skip the pip install phase on every submission.
 #
 # ── Quick start ──────────────────────────────────────────────────────────────
-#   export HG_SIF=/path/to/rocm_pytorch.sif
+#   export HG_SIF=${AI4S_SHARED_DIR:-/your/shared/dir}/images/pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif
 #   sbatch build_overlay_amd.sh
 #   # then in your inference job:
 #   export HG_OVERLAY=/path/to/hydragnn-overlay.img
@@ -56,7 +56,7 @@
 set -euo pipefail
 
 HG_BASE="${AI4S_SHARED_DIR:-/your/shared/dir}/models/HydraGNN"
-HG_SIF="${HG_SIF:-${HG_BASE}/images/rocm_pytorch.sif}"
+HG_SIF="${HG_SIF:-${HG_BASE}/images/pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif}"
 OVERLAY="${HG_OVERLAY:-${HG_BASE}/overlays/hydragnn-overlay.img}"
 STAGE_DIR="${HG_STAGE_DIR:-${HG_BASE}/stage/hydragnn-stage}"
 OVERLAY_SIZE_MB="${HG_OVERLAY_SIZE_MB:-4096}"

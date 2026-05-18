@@ -27,7 +27,7 @@ with AMD/ROCm container launch, overlay builds, and synthetic smoke tests.
 
 ```bash
 export ORBIT2_ROOT=/path/to/ORBIT-2-clone
-export ORBIT2_SIF=/path/to/rocm_pytorch.sif
+export ORBIT2_SIF=${AI4S_SHARED_DIR:-/your/shared/dir}/images/pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif
 export ORBIT2_USE_SYNTHETIC=1
 sbatch sbatch_infer_amd.sh
 ```
@@ -36,7 +36,7 @@ sbatch sbatch_infer_amd.sh
 
 ```bash
 export ORBIT2_ROOT=/path/to/ORBIT-2-clone
-export ORBIT2_SIF=/path/to/rocm_pytorch.sif
+export ORBIT2_SIF=${AI4S_SHARED_DIR:-/your/shared/dir}/images/pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif
 export ORBIT2_OVERLAY=/path/to/orbit2-overlay.img  # optional
 export ORBIT2_CHECKPOINT=/path/to/model.ckpt
 sbatch sbatch_infer_amd.sh

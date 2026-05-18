@@ -4,7 +4,7 @@
 # skip the ~5-minute pip install phase on every submission.
 #
 # ── Quick start ──────────────────────────────────────────────────────────────
-#   export SC_SIF=/path/to/rocm_pytorch.sif
+#   export SC_SIF=${AI4S_SHARED_DIR:-/your/shared/dir}/images/pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif
 #   sbatch build_overlay_amd.sh
 #   # then in your inference job:
 #   export SC_OVERLAY=/path/to/stormcast-overlay.img

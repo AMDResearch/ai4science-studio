@@ -22,14 +22,14 @@ Model weights are fetched automatically from [`nvidia/stormcast-v1-era5-hrrr`](h
 Build a persistent overlay once to skip the ~5 min pip install on every job:
 
 ```bash
-export SC_SIF=/path/to/rocm_pytorch.sif
+export SC_SIF=${AI4S_SHARED_DIR:-/your/shared/dir}/images/pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif
 sbatch ../../examples/build_overlay_amd.sh        # one-time, ~10 min
 ```
 
 Then submit inference jobs:
 
 ```bash
-export SC_SIF=/path/to/rocm_pytorch.sif
+export SC_SIF=${AI4S_SHARED_DIR:-/your/shared/dir}/images/pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif
 export SC_OVERLAY=/path/to/stormcast-overlay.img  # from build step above
 export SC_START=2025-01-01T06
 export SC_STEPS=6

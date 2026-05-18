@@ -26,7 +26,7 @@ Generate novel drug-like molecules unconditionally or constrained to a scaffold 
 ## Option A — SLURM cluster (Apptainer)
 
 ```bash
-export GPMOL_SIF=/path/to/rocm_pytorch.sif
+export GPMOL_SIF=${AI4S_SHARED_DIR:-/your/shared/dir}/images/pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif
 sbatch examples/sbatch_inference_amd.sh                          # unconditional
 SCAFFOLD="c1ccccc1" sbatch examples/sbatch_inference_amd.sh      # scaffold mode
 ```

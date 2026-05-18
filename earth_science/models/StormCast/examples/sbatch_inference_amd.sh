@@ -2,7 +2,7 @@
 # StormCast deterministic inference on AMD Instinct via SLURM + Apptainer.
 #
 # ── Quick start ──────────────────────────────────────────────────────────────
-#   export SC_SIF=/path/to/rocm_pytorch.sif
+#   export SC_SIF=${AI4S_SHARED_DIR:-/your/shared/dir}/images/pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif
 #   export SC_START=2025-01-01T06 SC_STEPS=6
 #   sbatch sbatch_inference_amd.sh
 #
@@ -22,7 +22,7 @@
 #
 # ── Key environment variables ─────────────────────────────────────────────────
 #   SC_SIF        Path to Apptainer SIF image
-#                 (default: ${AI4S_SHARED_DIR:-/your/shared/dir}/images/rocm_pytorch.sif)
+#                 (default: ${AI4S_SHARED_DIR:-/your/shared/dir}/images/pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif)
 #   SC_OVERLAY    Path to pre-built ext3 overlay (optional, skips pip install).
 #                 (default: ${AI4S_SHARED_DIR:-/your/shared/dir}/models/StormCast/overlays/stormcast-overlay.img)
 #                 If unset (or file missing), deps are installed into a
@@ -69,7 +69,7 @@ SC_OUTPUT="${SC_OUTPUT:-}"          # leave empty for default outputs/pred-<date
 
 # Apptainer / bare-metal selection
 SC_BASE="${AI4S_SHARED_DIR:-/your/shared/dir}/models/StormCast"
-SC_SIF="${SC_SIF:-${AI4S_SHARED_DIR:-/your/shared/dir}/images/rocm_pytorch.sif}"
+SC_SIF="${SC_SIF:-${AI4S_SHARED_DIR:-/your/shared/dir}/images/pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif}"
 
 # Optional pre-built overlay (skips pip install on each job)
 SC_OVERLAY="${SC_OVERLAY:-${SC_BASE}/overlays/stormcast-overlay.img}"

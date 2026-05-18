@@ -39,7 +39,7 @@ Always align the **YAML config** with the **checkpoint** (matching model scale a
 
 ```bash
 export ORBIT2_ROOT=/path/to/ORBIT-2-clone
-export ORBIT2_SIF=/path/to/rocm_pytorch.sif
+export ORBIT2_SIF=${AI4S_SHARED_DIR:-/your/shared/dir}/images/pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif
 export ORBIT2_OVERLAY=/path/to/orbit2-overlay.img   # optional; build with build_overlay_amd.sh
 export ORBIT2_USE_SYNTHETIC=1   # auto-generates data + downloads smallest HF checkpoint
 sbatch ../../examples/sbatch_infer_amd.sh

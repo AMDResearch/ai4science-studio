@@ -4,7 +4,7 @@
 # skip the ~15-minute pip install phase on every submission.
 #
 # ── Quick start ──────────────────────────────────────────────────────────────
-#   export ORBIT2_SIF=/path/to/rocm_pytorch.sif
+#   export ORBIT2_SIF=${AI4S_SHARED_DIR:-/your/shared/dir}/images/pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif
 #   sbatch build_overlay_amd.sh
 #   # then in your inference job:
 #   export ORBIT2_OVERLAY=/path/to/orbit2-overlay.img

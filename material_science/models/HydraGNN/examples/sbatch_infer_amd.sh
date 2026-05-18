@@ -9,7 +9,7 @@
 #            --local-dir /path/to/hydragnn-weights
 #
 # Quick-start:
-#   export HG_SIF=/path/to/rocm_pytorch.sif
+#   export HG_SIF=${AI4S_SHARED_DIR:-/your/shared/dir}/images/pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif
 #   export HG_OVERLAY=/path/to/hydragnn-overlay.img
 #   export HG_CHECKPOINT=/path/to/gfm_0.229.pk
 #   export HG_CONFIG=/path/to/config.json
@@ -17,7 +17,7 @@
 #
 # Key environment variables:
 #   HG_SIF          Path to Apptainer SIF image
-#                   (default: ${AI4S_SHARED_DIR:-/your/shared/dir}/models/HydraGNN/images/rocm_pytorch.sif)
+#                   (default: ${AI4S_SHARED_DIR:-/your/shared/dir}/models/HydraGNN/images/pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif)
 #   HG_OVERLAY      Path to pre-built ext3 overlay from build_overlay_amd.sh
 #                   (default: ${AI4S_SHARED_DIR:-/your/shared/dir}/models/HydraGNN/overlays/hydragnn-overlay.img)
 #   HG_CHECKPOINT   Path to .pk checkpoint file
@@ -54,7 +54,7 @@ fi
 # Validate required inputs
 # ---------------------------------------------------------------------------
 HG_BASE="${AI4S_SHARED_DIR:-/your/shared/dir}/models/HydraGNN"
-HG_SIF="${HG_SIF:-${HG_BASE}/images/rocm_pytorch.sif}"
+HG_SIF="${HG_SIF:-${AI4S_SHARED_DIR:-/your/shared/dir}/images/pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif}"
 HG_OVERLAY="${HG_OVERLAY:-${HG_BASE}/overlays/hydragnn-overlay.img}"
 HG_CHECKPOINT="${HG_CHECKPOINT:-${HG_BASE}/weights/gfm_0.229.pk}"
 HG_CONFIG="${HG_CONFIG:-${HG_BASE}/weights/config.json}"

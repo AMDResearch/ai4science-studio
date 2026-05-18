@@ -6,7 +6,7 @@
 # or therapeutic use and must not be used for patient treatment decisions.
 #
 # ── Quick start ──────────────────────────────────────────────────────────────
-#   export GPMOL_SIF=/path/to/rocm_pytorch.sif
+#   export GPMOL_SIF=${AI4S_SHARED_DIR:-/your/shared/dir}/images/pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif
 #   sbatch sbatch_inference_amd.sh                            # unconditional
 #   SCAFFOLD="c1ccccc1" sbatch sbatch_inference_amd.sh        # scaffold mode
 #
@@ -21,7 +21,7 @@
 #
 # ── Key environment variables ─────────────────────────────────────────────────
 #   GPMOL_SIF        Path to Apptainer SIF image
-#                    (default: ${AI4S_SHARED_DIR:-/your/shared/dir}/images/rocm_pytorch.sif)
+#                    (default: ${AI4S_SHARED_DIR:-/your/shared/dir}/images/pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif)
 #   GPMOL_WORK_DIR   Host directory for repo clone, weights, and output
 #                    (default: ${AI4S_SHARED_DIR:-/your/shared/dir}/models/GP-MoLFormer)
 #   SCAFFOLD         SMILES fragment for constrained generation (unset = unconditional)
@@ -65,7 +65,7 @@ fi
 # Configuration
 # ---------------------------------------------------------------------------
 GPMOL_BASE="${AI4S_SHARED_DIR:-/your/shared/dir}/models/GP-MoLFormer"
-GPMOL_SIF="${GPMOL_SIF:-${AI4S_SHARED_DIR:-/your/shared/dir}/images/rocm_pytorch.sif}"
+GPMOL_SIF="${GPMOL_SIF:-${AI4S_SHARED_DIR:-/your/shared/dir}/images/pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif}"
 GPMOL_WORK_DIR="${GPMOL_WORK_DIR:-$GPMOL_BASE}"
 SCAFFOLD="${SCAFFOLD:-}"
 NUM_BATCHES="${NUM_BATCHES:-1}"
