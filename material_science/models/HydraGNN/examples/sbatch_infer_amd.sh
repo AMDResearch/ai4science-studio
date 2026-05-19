@@ -101,15 +101,18 @@ echo "  Config     : $HG_CONFIG"
 echo "  Output     : $HG_OUTPUT_DIR"
 echo ""
 
+HG_INFER_REPO="${HG_INFER_REPO:-${HG_OUTPUT_DIR}/HydraGNN-infer}"
+
 apptainer exec --rocm \
     --overlay "${HG_OVERLAY}:ro" \
     --bind "$(dirname "$HG_CHECKPOINT"):$(dirname "$HG_CHECKPOINT"):ro" \
     --bind "$(dirname "$HG_CONFIG"):$(dirname "$HG_CONFIG"):ro" \
     --bind "${HG_OUTPUT_DIR}:${HG_OUTPUT_DIR}" \
     --bind "$SCRIPT_DIR":/examples:ro \
-    --env PYTHONPATH="/opt/hydragnn-pkgs:${PYTHONPATH:-}" \
     --env HG_CHECKPOINT="$HG_CHECKPOINT" \
     --env HG_CONFIG="$HG_CONFIG" \
     --env HG_OUTPUT_DIR="$HG_OUTPUT_DIR" \
+    --env HG_INFER_REPO="$HG_INFER_REPO" \
+    --env PYTHONPATH="/opt/hydragnn-pkgs" \
     "$HG_SIF" \
     bash -c "source /opt/venv/bin/activate && bash /examples/run_inference.sh"

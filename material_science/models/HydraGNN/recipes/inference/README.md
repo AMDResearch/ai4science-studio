@@ -6,8 +6,8 @@ This is the usual **AI4Science Studio** entry point: use **published checkpoints
 
 ## Prerequisites
 
-- Container: `rocm/pytorch:rocm7.0_ubuntu22.04_py3.10_pytorch_release_2.7.1`
-- Code: clone [`ORNL/HydraGNN`](https://github.com/ORNL/HydraGNN) branch **`Predictive_GFM_2024`**; install with `pip install -e .`
+- Container: `rocm/pytorch:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0` (with hydragnn overlay)
+- Code: **must use branch `Predictive_GFM_2024`** — the inference script auto-clones this at runtime because the GFM 2024 checkpoints are incompatible with the newer training SHA (different model architecture keys and state_dict structure)
 - Weights: download from [`mlupopa/HydraGNN_Predictive_GFM_2024`](https://huggingface.co/mlupopa/HydraGNN_Predictive_GFM_2024) -- under `Ensemble_of_models/`, each trial folder has a `config.json` and `.pk` checkpoint
 
 ## Environment Variables

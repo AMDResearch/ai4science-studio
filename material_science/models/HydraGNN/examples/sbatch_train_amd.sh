@@ -182,7 +182,7 @@ export HYDRAGNN_VALTEST="${HYDRAGNN_VALTEST:-0}"
 export HYDRAGNN_USE_FSDP=0
 export HYDRAGNN_TRACE_LEVEL="${HYDRAGNN_TRACE_LEVEL:-1}"
 
-# Vultr MI355X wiki: HSA_NO_SCRATCH_RECLAIM=1 required for RCCL stability
+# Required for RCCL stability on MI355X
 export HSA_NO_SCRATCH_RECLAIM=1
 
 cd "$HG_OUTPUT_DIR"
@@ -233,19 +233,53 @@ RANKEOF
 chmod +x "$RANK_SCRIPT"
 
 # ---------------------------------------------------------------------------
-# Multi-node RCCL environment (required for >1 node)
+# Multi-node network environment (required for >1 node)
 #
-# These values are cluster-specific. The defaults below are for Vultr/Lux
-# MI355X (sourced from the cluster wiki). Override via env vars for other sites:
-#   NCCL_IB_HCA        — IB HCA device list (discover with: ibstat | grep 'CA ')
-#   NCCL_SOCKET_IFNAME — Network interface for OOB (discover with: ip -o link show up)
+# All cluster-specific values are read from .cluster-config.yaml (gitignored)
+# or overridden via env vars:
+#   NCCL_IB_HCA        — IB HCA device list (discover: ibstat | grep 'CA ')
+#   NCCL_SOCKET_IFNAME — Management NIC for OOB (discover: ip -o link show up)
+#   RCCL_ANP_PLUGIN    — Path to librccl-anp.so on host
+#   LIBIONIC_PATH      — Path to libionic.so.1 on host
 # ---------------------------------------------------------------------------
 RCCL_MULTINODE_ENVS=()
+MPI_MULTINODE_ENVS=()
 if [[ "$NODES" -gt 1 ]]; then
-  : "${NCCL_IB_HCA:=ionic_0,ionic_1,ionic_2,ionic_3,ionic_4,ionic_5,ionic_6,ionic_7}"
-  : "${NCCL_SOCKET_IFNAME:=enp193s0f1np1}"
+  # Read cluster-specific network settings from .cluster-config.yaml if not
+  # already set via environment. Requires yq or falls back to grep parsing.
+  _CLUSTER_CFG="${SCRIPT_DIR}/../../../../.cluster-config.yaml"
+  if [[ -f "$_CLUSTER_CFG" ]]; then
+    _yaml_get() { grep "^  $1:" "$_CLUSTER_CFG" 2>/dev/null | sed 's/.*: *"\?\([^"]*\)"\?.*/\1/' | grep -v '^$'; }
+    : "${NCCL_IB_HCA:=$(_yaml_get ib_hca)}"
+    : "${NCCL_SOCKET_IFNAME:=$(_yaml_get mgmt_iface)}"
+    : "${RCCL_ANP_PLUGIN:=$(_yaml_get rccl_anp_plugin)}"
+    : "${LIBIONIC_PATH:=$(_yaml_get libionic_path)}"
+  fi
+
+  # Validate required settings
+  : "${NCCL_IB_HCA:?Set NCCL_IB_HCA or configure network.ib_hca in .cluster-config.yaml}"
+  : "${NCCL_SOCKET_IFNAME:?Set NCCL_SOCKET_IFNAME or configure network.mgmt_iface in .cluster-config.yaml}"
+  : "${RCCL_ANP_PLUGIN:?Set RCCL_ANP_PLUGIN or configure network.rccl_anp_plugin in .cluster-config.yaml}"
+  : "${LIBIONIC_PATH:?Set LIBIONIC_PATH or configure network.libionic_path in .cluster-config.yaml}"
+
+  # MPI transport: ob1/tcp over management NIC.
+  # Pensando/ionic data NICs use /31 point-to-point subnets that don't route
+  # between nodes, so IB verbs cannot work for MPI. Only RCCL (via ANP plugin)
+  # bypasses IP routing on the data fabric. MPI uses TCP on the management NIC.
+  MPI_MULTINODE_ENVS=(
+    --env OMPI_MCA_pml=ob1
+    --env OMPI_MCA_btl=tcp,self
+    --env OMPI_MCA_btl_tcp_if_include="$NCCL_SOCKET_IFNAME"
+    --env MPI4PY_RC_THREADS=false
+  )
+
+  # RCCL/NCCL env vars for ANP over ionic (from AMD MI355X documentation).
+  # The ANP plugin and libionic must be bind-mounted into the container since
+  # Apptainer --rocm does not expose them automatically.
   RCCL_MULTINODE_ENVS=(
-    --env NCCL_NET_PLUGIN=/opt/rocm/lib/librccl-anp.so
+    --bind "${RCCL_ANP_PLUGIN}:${RCCL_ANP_PLUGIN}:ro"
+    --bind "${LIBIONIC_PATH}:${LIBIONIC_PATH}:ro"
+    --env NCCL_NET_PLUGIN="$RCCL_ANP_PLUGIN"
     --env NCCL_IB_HCA="$NCCL_IB_HCA"
     --env NCCL_IB_GID_INDEX=1
     --env NCCL_GDR_FLUSH_DISABLE=1
@@ -265,6 +299,7 @@ if [[ "$NODES" -gt 1 ]]; then
     --env NCCL_DMABUF_ENABLE=1
     --env NCCL_DEBUG="${NCCL_DEBUG:-WARN}"
   )
+  echo "  Multi-node MPI transport: ob1/tcp (btl_tcp_if_include=$NCCL_SOCKET_IFNAME)"
   echo "  Multi-node RCCL env vars enabled"
   echo "    NCCL_IB_HCA=$NCCL_IB_HCA"
   echo "    NCCL_SOCKET_IFNAME=$NCCL_SOCKET_IFNAME"
@@ -287,6 +322,7 @@ srun --mpi=pmix \
     --bind "${HG_OUTPUT_DIR}:${HG_OUTPUT_DIR}" \
     --env PMIX_MCA_gds=hash \
     --env PMIX_MCA_psec=native \
+    "${MPI_MULTINODE_ENVS[@]}" \
     --env SCRATCH_LOCAL="${SCRATCH_LOCAL:-/scratch}" \
     --env HG_DATASETS="$HG_DATASETS" \
     --env HG_PRECISION="$HG_PRECISION" \

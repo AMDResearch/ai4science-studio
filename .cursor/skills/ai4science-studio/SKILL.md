@@ -331,9 +331,15 @@ local_rank = int(os.environ["SLURM_LOCALID"])
 torch.cuda.set_device(local_rank)  # rank 0→GPU 0, rank 1→GPU 1, ...
 ```
 
-**Vultr MI355X wiki-documented RCCL env vars:**
+**MI355X RCCL env vars (from AMD documentation):**
 - Single-node: only `HSA_NO_SCRATCH_RECLAIM=1` needed
-- Multi-node: full set (`NCCL_NET_PLUGIN`, `NCCL_IB_HCA`, `NCCL_IB_GID_INDEX`, etc.) — see the wiki page or `sbatch_train_amd.sh` in HydraGNN examples
+- Multi-node: full set (`NCCL_NET_PLUGIN`, `NCCL_IB_HCA`, `NCCL_IB_GID_INDEX`, etc.) — see `sbatch_train_amd.sh` in HydraGNN examples
+
+**Multi-node MPI transport (ob1/tcp — correct for Pensando/ionic fabric):**
+- Pensando ionic data NICs use `/31` point-to-point subnets; nodes cannot route to each other on data interfaces. Standard IB verbs do NOT work for MPI inter-node traffic.
+- MPI uses ob1 PML with TCP BTL over the management NIC: `OMPI_MCA_pml=ob1`, `OMPI_MCA_btl=tcp,self`, `OMPI_MCA_btl_tcp_if_include=<mgmt_iface>`, `MPI4PY_RC_THREADS=false`.
+- RCCL uses ANP plugin (`librccl-anp.so`) + `libionic.so.1` (bind-mounted from host) over ionic native transport (RoCEv2/GDRDMA) for GPU allreduce — independent of MPI/UCX.
+- Without the ANP bind-mounts, RCCL falls back to socket transport over the management NIC (works but much slower).
 
 ## PMIx shared memory fix for Apptainer
 

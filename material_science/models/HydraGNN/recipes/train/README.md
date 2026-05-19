@@ -1,10 +1,8 @@
-# HydraGNN: Training on AMD Instinct MI355X (Lux)
+# HydraGNN: Distributed Training on AMD Instinct MI355X
 
 > **Ready-to-run scripts:** see [`../../examples/`](../../examples/) for `sbatch_train_amd.sh` and `run_train.sh`.
 
-This recipe documents multi-node GFM (Graph Foundation Model) training using HydraGNN on the Lux cluster with AMD Instinct MI355X GPUs.
-
-Related ticket: [DCSWEAP-4502](https://amd.atlassian.net/browse/DCSWEAP-4502)
+This recipe documents multi-node GFM (Graph Foundation Model) training using HydraGNN on AMD Instinct MI355X GPUs with Pensando/ionic interconnect.
 
 ---
 
@@ -19,7 +17,7 @@ No module loads or conda environments are needed. Everything runs inside an Appt
 
 **Overlay contents:** PyTorch 2.10.0+rocm7.2.2, torch-geometric, torch-scatter/sparse/cluster (ROCm wheels), mpi4py, adios2, hydragnn, and runtime deps (tqdm, pyyaml, tensorboard, scikit-learn, scipy, h5py, ase).
 
-**Hardware:** Lux cluster — up to 16 nodes, 8x MI355X (gfx950) per node, 288 GB VRAM per GPU.
+**Hardware:** AMD Instinct MI355X (gfx950), 8 GPUs per node, 288 GB VRAM per GPU, Pensando ionic interconnect.
 
 ## 2. Build / Setup Instructions
 
@@ -134,16 +132,16 @@ For longer training runs (`num_epoch >= 10`):
 
 ### Validated sanity test (1 node / 8 GPUs, 50 batches)
 
-Ran on Lux MI355X (2026-05-18) with `HYDRAGNN_MAX_NUM_BATCH=50`, `HG_BATCH_SIZE=200`, `HG_PRECISION=fp64`, datasets `ANI1x,Alexandria`:
+Validated on MI355X (2026-05-19) with `HYDRAGNN_MAX_NUM_BATCH=50`, `HG_BATCH_SIZE=200`, `HG_PRECISION=fp64`, datasets `ANI1x,Alexandria`:
 
 | Metric | Value |
 |--------|-------|
-| Total training time | ~130 s (50 batches) |
-| Steady-state iteration time | 2.4 s/batch |
+| Total training time | 183 s (50 batches) |
+| Steady-state iteration time | 2.9–3.0 s/batch |
 | Peak GPU memory (allocated) | 7.5 GB |
 | Peak GPU memory (reserved) | 9.0 GB |
-| Data load time | 2.3 s |
-| Model creation time | 0.67 s |
+| Data load time | 2.9 s |
+| Model creation time | 0.75 s |
 | RCCL errors | None |
 | All ranks converged | Yes |
 
@@ -151,9 +149,43 @@ Ran on Lux MI355X (2026-05-18) with `HYDRAGNN_MAX_NUM_BATCH=50`, `HG_BATCH_SIZE=
 
 | Nodes | GPUs | Throughput (batch/s) | Time per batch | Notes |
 |-------|------|---------------------|----------------|-------|
-| 1     | 8    | ~0.42               | 2.4 s          | Validated (50-batch sanity test) |
-| 2     | 16   | TBD                 |                | |
-| 4     | 32   | TBD                 |                | |
+| 1     | 8    | ~0.42               | 2.4 s          | Validated (50-batch sanity test, 2026-05-19) |
+| 2     | 16   | ~0.33               | 3.0 s          | Validated (30-batch, ob1/tcp MPI, 2026-05-19) |
+| 4     | 32   | TBD                 | —              | Expected to work with same flags |
+
+### Multi-node network architecture
+
+On Pensando/ionic fabrics, data NICs use `/31` point-to-point subnets that don't route between nodes — standard IB verbs cannot work for inter-node MPI. The architecture separates traffic into three paths:
+
+| Path | Interface | Protocol | Purpose |
+|------|-----------|----------|---------|
+| MPI (data bcast, OOB) | management NIC | TCP | ADIOS metadata bcast, rank coordination |
+| RCCL bootstrap | same mgmt NIC | TCP socket | RCCL topology exchange |
+| RCCL data (GPU allreduce) | IB HCA devices (400G each) | ANP plugin (RoCEv2, GDRDMA) | GPU-to-GPU collectives |
+
+**MPI configuration (in `sbatch_train_amd.sh`):**
+
+```bash
+--env OMPI_MCA_pml=ob1              # ob1 PML (UCX PML hangs on ionic fabrics)
+--env OMPI_MCA_btl=tcp,self         # TCP BTL over management NIC
+--env OMPI_MCA_btl_tcp_if_include=$NCCL_SOCKET_IFNAME  # Management interface
+--env MPI4PY_RC_THREADS=false       # Avoid MPI_THREAD_MULTIPLE
+```
+
+**RCCL configuration:**
+
+```bash
+--bind $RCCL_ANP_PLUGIN:$RCCL_ANP_PLUGIN:ro   # ANP plugin (not exposed by --rocm)
+--bind $LIBIONIC_PATH:$LIBIONIC_PATH:ro        # ionic userspace driver
+--env NCCL_NET_PLUGIN=$RCCL_ANP_PLUGIN         # Select ANP transport
+--env NCCL_IB_HCA=$NCCL_IB_HCA                  # All IB HCAs (from .cluster-config.yaml)
+```
+
+Without the ANP/libionic bind-mounts, RCCL falls back to socket transport over the management NIC (functional but significantly slower).
+
+**Why ob1/tcp for MPI is correct:**
+- MPI over TCP on the mgmt NIC is sufficient for ADIOS I/O (metadata bcast at startup, not on the training hot path)
+- GPU gradient allreduce uses RCCL over ANP with GDRDMA — completely independent of MPI
 
 ## 7. Hyperparameter Recommendations
 
@@ -169,6 +201,56 @@ Ran on Lux MI355X (2026-05-18) with `HYDRAGNN_MAX_NUM_BATCH=50`, `HG_BATCH_SIZE=
 - Config is saved to `logs/<run_name>/` at start of training
 - Checkpoints (if enabled) write to `logs/<run_name>/`
 - Existing pretrained weights in `$AI4S_SHARED_DIR/models/HydraGNN/weights/` are never modified
+
+## 9. Convergence Tracking
+
+HydraGNN prints epoch-level loss metrics when `HYDRAGNN_VALTEST=1`. Use the bundled parser to extract structured convergence data:
+
+```bash
+# Run training with validation enabled:
+export HYDRAGNN_VALTEST=1
+export HG_NUM_EPOCH=10
+export HYDRAGNN_MAX_NUM_BATCH=50   # cap batches per epoch for faster iteration
+sbatch sbatch_train_amd.sh
+
+# Parse the output:
+python examples/parse_convergence.py --log hydragnn-train-<jobid>.out -o convergence.csv
+python examples/parse_convergence.py --log hydragnn-train-<jobid>.out --plot convergence.png
+```
+
+### Output format (SLURM log parsing)
+
+HydraGNN emits per-epoch lines:
+```
+0: Epoch: 01, Train Loss: 8.01219610, Val Loss: 7.77382998, Test Loss: 12.61618049
+0: Tasks Train Loss: [1.351, 0.106, 0.791]
+```
+
+The parser extracts these into CSV columns: `epoch, batch, train_loss, val_loss, test_loss, tasks_train, tasks_val, wall_time_s, source`.
+
+### Validated convergence (1 node / 8 GPUs, 5 epochs, 50 batches/epoch)
+
+Validated on MI355X (2026-05-19) with `HYDRAGNN_VALTEST=1`, `HYDRAGNN_MAX_NUM_BATCH=50`, `HG_BATCH_SIZE=200`, `HG_PRECISION=fp64`:
+
+| Epoch | Train Loss | Val Loss | Test Loss | Time/batch |
+|-------|-----------|----------|-----------|------------|
+| 0     | 8.2051    | 8.2576   | 13.2743   | 2.44 s     |
+| 1     | 8.0122    | 7.7738   | 12.6162   | 2.44 s     |
+| 2     | 7.3135    | 6.8208   | 11.1788   | 2.41 s     |
+| 3     | 6.5180    | 6.2752   | 10.1997   | 2.43 s     |
+| 4     | 6.0819    | 6.1667   | 10.1823   | 2.39 s     |
+
+Total training time: 720 s (12 min). Loss reduced 25.9% over 5 epochs with clear downward trend.
+
+### TensorBoard (alternative)
+
+HydraGNN also writes TensorBoard events when `HYDRAGNN_VALTEST=1`. Event files appear in `$HG_OUTPUT_DIR/logs/<run_name>/`. The parser supports this mode:
+
+```bash
+python examples/parse_convergence.py --tbdir /shared/aaji/models/HydraGNN/outputs/logs/hydragnn-train-<jobid>-N1/ -o convergence.csv
+```
+
+Note: TensorBoard scalars are only populated when validation runs (they remain empty with `HYDRAGNN_VALTEST=0`).
 
 ## Phase 2: DDStore (future)
 

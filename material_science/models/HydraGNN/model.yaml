@@ -68,6 +68,10 @@ env_vars:
     required: false
     default: null
   HG_REPO_DIR:
-    description: HydraGNN source clone location
+    description: HydraGNN source clone location (training, pinned SHA)
+    required: false
+    default: null
+  HG_INFER_REPO:
+    description: HydraGNN Predictive_GFM_2024 branch clone (inference only)
     required: false
     default: null
