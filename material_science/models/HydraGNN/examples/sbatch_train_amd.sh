@@ -297,10 +297,6 @@ srun --mpi=pmix \
     --env HYDRAGNN_TRACE_LEVEL="${HYDRAGNN_TRACE_LEVEL:-1}" \
     --env HG_EXAMPLE_DIR="$EXAMPLE_DIR" \
     --env HG_OUTPUT_DIR="$HG_OUTPUT_DIR" \
-    --env SLURM_JOB_ID="${SLURM_JOB_ID:-}" \
-    --env SLURM_JOB_NUM_NODES="${SLURM_JOB_NUM_NODES:-1}" \
-    --env SLURM_PROCID='$SLURM_PROCID' \
-    --env SLURM_CPUS_PER_TASK="${SLURM_CPUS_PER_TASK:-16}" \
     "${RCCL_MULTINODE_ENVS[@]}" \
     "$HG_SIF" \
     bash "$RANK_SCRIPT"
