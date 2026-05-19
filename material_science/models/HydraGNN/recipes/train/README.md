@@ -86,6 +86,9 @@ sbatch --nodes=4 --time=04:00:00 sbatch_train_amd.sh
 | `HG_PRECISION` | `fp64` | `fp32`, `fp64`, or `bf16` |
 | `HG_OUTPUT_DIR` | `$AI4S_SHARED_DIR/models/HydraGNN/outputs` | Output working directory |
 | `HG_REPO_DIR` | `$AI4S_SHARED_DIR/models/HydraGNN/code/HydraGNN` | HydraGNN source clone |
+| `HYDRAGNN_MAX_NUM_BATCH` | (unset = unlimited) | Cap batches per epoch (sanity: 50) |
+| `HYDRAGNN_VALTEST` | `0` | Run validation/test loops (0=skip) |
+| `SCRATCH_LOCAL` | `/scratch` | Node-local fast storage for MIOpen cache |
 
 ### How the launch works
 
@@ -129,17 +132,28 @@ For longer training runs (`num_epoch >= 10`):
 - Force prediction error should also decrease
 - Early stopping (patience=10) will halt training if validation loss plateaus
 
-*(Specific loss values to be populated after initial runs on Lux.)*
+### Validated sanity test (1 node / 8 GPUs, 50 batches)
+
+Ran on Lux MI355X (2026-05-18) with `HYDRAGNN_MAX_NUM_BATCH=50`, `HG_BATCH_SIZE=200`, `HG_PRECISION=fp64`, datasets `ANI1x,Alexandria`:
+
+| Metric | Value |
+|--------|-------|
+| Total training time | ~130 s (50 batches) |
+| Steady-state iteration time | 2.4 s/batch |
+| Peak GPU memory (allocated) | 7.5 GB |
+| Peak GPU memory (reserved) | 9.0 GB |
+| Data load time | 2.3 s |
+| Model creation time | 0.67 s |
+| RCCL errors | None |
+| All ranks converged | Yes |
 
 ## 6. Performance & Scaling
 
-*(To be populated after initial runs.)*
-
-| Nodes | GPUs | Expected throughput | Notes |
-|-------|------|---------------------|-------|
-| 1     | 8    | TBD                 | Baseline |
-| 2     | 16   | TBD                 | |
-| 4     | 32   | TBD                 | |
+| Nodes | GPUs | Throughput (batch/s) | Time per batch | Notes |
+|-------|------|---------------------|----------------|-------|
+| 1     | 8    | ~0.42               | 2.4 s          | Validated (50-batch sanity test) |
+| 2     | 16   | TBD                 |                | |
+| 4     | 32   | TBD                 |                | |
 
 ## 7. Hyperparameter Recommendations
 
