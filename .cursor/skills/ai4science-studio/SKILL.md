@@ -315,6 +315,34 @@ srun --mpi=pmix apptainer exec \
 
 **Multi-node scaling:** Change `--nodes=N --ntasks=N*<gpus_per_node>` in the SBATCH header; the `srun` command is unchanged.
 
+## GPU visibility: `--gpus-per-node` NOT `--gpus-per-task` (MI355X / RCCL)
+
+**Use `--gpus-per-node=8`, NOT `--gpus-per-task=1`** for multi-GPU distributed training with RCCL/NCCL backend on AMD Instinct MI355X.
+
+**Why:** With `--gpus-per-task=1`, SLURM's cgroup restricts each rank to seeing only 1 GPU (`torch.cuda.device_count()=1`). RCCL still tries to read the full KFD topology (`/sys/class/kfd/kfd/topology/nodes/*/io_links/*/properties`) to discover XGMI links, but cannot reconcile 8-GPU topology info with 1-GPU access. This produces:
+```
+NCCL WARN Could not read node # N
+ncclUnhandledCudaError: Call to CUDA function failed.
+```
+
+**Fix:** Use `--gpus-per-node=8` (all GPUs visible to all ranks). Frameworks like HydraGNN, DeepSpeed, and plain PyTorch DDP use `SLURM_LOCALID` to select the correct device per rank when `device_count() > 1`:
+```python
+local_rank = int(os.environ["SLURM_LOCALID"])
+torch.cuda.set_device(local_rank)  # rank 0→GPU 0, rank 1→GPU 1, ...
+```
+
+**Vultr MI355X wiki-documented RCCL env vars:**
+- Single-node: only `HSA_NO_SCRATCH_RECLAIM=1` needed
+- Multi-node: full set (`NCCL_NET_PLUGIN`, `NCCL_IB_HCA`, `NCCL_IB_GID_INDEX`, etc.) — see the wiki page or `sbatch_train_amd.sh` in HydraGNN examples
+
+## PMIx shared memory fix for Apptainer
+
+When using `srun --mpi=pmix` with Apptainer, ranks may segfault with `PMIx ERROR: UNREACHABLE` if `/dev/shm` or `/tmp` is shared from the host. Fix:
+```bash
+--env PMIX_MCA_gds=hash
+--env PMIX_MCA_psec=native
+```
+
 ---
 
 # Docker-specific patterns

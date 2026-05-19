@@ -44,19 +44,28 @@ which apptainer 2>/dev/null && apptainer --version
 which docker 2>/dev/null && docker --version 2>/dev/null
 docker info 2>/dev/null | grep -i "amd\|runtime"
 
-# 8. Common scratch / project directories
+# 8. Common scratch / project directories (shared storage)
 for d in /scratch/$USER /scratch /lustre /gpfs /tmp/$USER; do
     [[ -d "$d" ]] && echo "scratch: $d"
 done
 
-# 9. Internet connectivity from this node
+# 9. Node-local fast storage (for MIOpen cache, tmp writes during training)
+for d in /scratch /local /nvme /tmp; do
+    [[ -d "$d" && -w "$d" ]] && echo "scratch_local: $d" && break
+done
+
+# 10. RCCL / network interface discovery (for multi-node)
+ip -o link show up 2>/dev/null | awk -F': ' '{print $2}' | grep -v lo
+ibstat 2>/dev/null | grep "CA '" | awk -F"'" '{print $2}'
+
+# 11. Internet connectivity from this node
 curl -s --connect-timeout 5 -o /dev/null -w "%{http_code}" https://huggingface.co 2>/dev/null
 
-# 10. Proxy settings
+# 12. Proxy settings
 echo "HTTP_PROXY=${HTTP_PROXY:-<unset>}"
 echo "HTTPS_PROXY=${HTTPS_PROXY:-<unset>}"
 
-# 11. Existing SIF files
+# 13. Existing SIF files
 find "$HOME" /scratch /projects /opt -maxdepth 4 -name "*.sif" 2>/dev/null | head -20
 ```
 
@@ -131,6 +140,7 @@ slurm:
 paths:
   home: "<$HOME value>"
   scratch: "<confirmed scratch path>"   # also export as AI4S_SHARED_DIR
+  scratch_local: "<node-local fast storage>"  # for MIOpen cache, tmp writes (e.g. /scratch, /local, /tmp)
   projects: "<scratch>/models"          # per-model artifact root
   sif_cache: "<scratch>/images"         # shared base SIF files
 
@@ -146,6 +156,10 @@ gpu:
 network:
   internet_access: <true|false>
   proxy: "<proxy URL or empty>"
+
+rccl:
+  socket_ifname: "<interface for RCCL OOB, e.g. enp193s0f1np1>"  # discover: ip link show up
+  ib_hca: "<IB HCA devices, e.g. ionic_0,ionic_1,...>"           # discover: ibstat | grep CA
 
 discovered_sifs:
   # SIF files found during init (informational — confirm they are under sif_cache)

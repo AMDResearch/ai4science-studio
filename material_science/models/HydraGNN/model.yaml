@@ -6,9 +6,10 @@ domain: material_science
 upstream_code: https://github.com/ORNL/HydraGNN
 upstream_branch: Predictive_GFM_2024
 paper: null
-container_image: rocm/pytorch:rocm7.0_ubuntu22.04_py3.10_pytorch_release_2.7.1
+container_image: rocm/pytorch:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0
 vram_gb: null
-validated_hardware: []
+validated_hardware:
+  - MI355X (gfx950)
 
 data_format: ADIOS (HDF5-based)
 data_source: https://doi.ccs.ornl.gov/dataset/3a49c8df-83f7-5d32-84be-f81d289e7cdd
@@ -18,29 +19,55 @@ recipes:
     description: Load checkpoints and run predictions with the GFM ensemble
     recipe_path: recipes/inference/
     script: examples/run_inference.sh
+    sbatch_script: examples/sbatch_infer_amd.sh
   - task: train
-    description: Frontier-scale pretraining and HPO
+    description: Multi-dataset GFM training with ANI1x and Alexandria (multi-node)
     recipe_path: recipes/train/
     script: examples/run_train.sh
+    sbatch_script: examples/sbatch_train_amd.sh
 
 env_vars:
+  # Required for HPC scripts (sbatch_*_amd.sh, build_overlay_amd.sh)
+  AI4S_SHARED_DIR:
+    description: Base path for shared assets (SIF, overlays, datasets, code)
+    required: true
+    default: null
+  # Inference task
   HG_CHECKPOINT:
-    description: Path to .pk checkpoint file
+    description: Path to .pk checkpoint file (inference)
     required: true
     default: null
   HG_CONFIG:
-    description: Matching config.json for the checkpoint
+    description: Matching config.json for the checkpoint (inference)
     required: true
     default: null
-  HG_OUTPUT_DIR:
-    description: Prediction output directory
+  # Training task
+  HG_DATASETS:
+    description: Comma-separated dataset names for training
     required: false
-    default: /workspace/results
-  HG_EXAMPLE:
-    description: Upstream example folder name (train task)
-    required: false
-    default: multidataset_hpo
+    default: ANI1x,Alexandria
   HG_DATA_DIR:
-    description: Dataset staging directory (train task)
+    description: Directory containing <name>-v2.bp ADIOS dataset dirs
     required: false
-    default: /data
+    default: null
+  HG_BATCH_SIZE:
+    description: Per-rank batch size (overrides config)
+    required: false
+    default: null
+  HG_NUM_EPOCH:
+    description: Number of training epochs (overrides config)
+    required: false
+    default: null
+  HG_PRECISION:
+    description: Training precision (fp32, fp64, bf16)
+    required: false
+    default: fp64
+  # Shared
+  HG_OUTPUT_DIR:
+    description: Output/working directory
+    required: false
+    default: null
+  HG_REPO_DIR:
+    description: HydraGNN source clone location
+    required: false
+    default: null
