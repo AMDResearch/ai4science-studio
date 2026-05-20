@@ -315,6 +315,40 @@ srun --mpi=pmix apptainer exec \
 
 **Multi-node scaling:** Change `--nodes=N --ntasks=N*<gpus_per_node>` in the SBATCH header; the `srun` command is unchanged.
 
+## GPU visibility: `--gpus-per-node` NOT `--gpus-per-task` (MI355X / RCCL)
+
+**Use `--gpus-per-node=8`, NOT `--gpus-per-task=1`** for multi-GPU distributed training with RCCL/NCCL backend on AMD Instinct MI355X.
+
+**Why:** With `--gpus-per-task=1`, SLURM's cgroup restricts each rank to seeing only 1 GPU (`torch.cuda.device_count()=1`). RCCL still tries to read the full KFD topology (`/sys/class/kfd/kfd/topology/nodes/*/io_links/*/properties`) to discover XGMI links, but cannot reconcile 8-GPU topology info with 1-GPU access. This produces:
+```
+NCCL WARN Could not read node # N
+ncclUnhandledCudaError: Call to CUDA function failed.
+```
+
+**Fix:** Use `--gpus-per-node=8` (all GPUs visible to all ranks). Frameworks like HydraGNN, DeepSpeed, and plain PyTorch DDP use `SLURM_LOCALID` to select the correct device per rank when `device_count() > 1`:
+```python
+local_rank = int(os.environ["SLURM_LOCALID"])
+torch.cuda.set_device(local_rank)  # rank 0→GPU 0, rank 1→GPU 1, ...
+```
+
+**MI355X RCCL env vars (from AMD documentation):**
+- Single-node: only `HSA_NO_SCRATCH_RECLAIM=1` needed
+- Multi-node: full set (`NCCL_NET_PLUGIN`, `NCCL_IB_HCA`, `NCCL_IB_GID_INDEX`, etc.) — see `sbatch_train_amd.sh` in HydraGNN examples
+
+**Multi-node MPI transport (ob1/tcp — correct for Pensando/ionic fabric):**
+- Pensando ionic data NICs use `/31` point-to-point subnets; nodes cannot route to each other on data interfaces. Standard IB verbs do NOT work for MPI inter-node traffic.
+- MPI uses ob1 PML with TCP BTL over the management NIC: `OMPI_MCA_pml=ob1`, `OMPI_MCA_btl=tcp,self`, `OMPI_MCA_btl_tcp_if_include=<mgmt_iface>`, `MPI4PY_RC_THREADS=false`.
+- RCCL uses ANP plugin (`librccl-anp.so`) + `libionic.so.1` (bind-mounted from host) over ionic native transport (RoCEv2/GDRDMA) for GPU allreduce — independent of MPI/UCX.
+- Without the ANP bind-mounts, RCCL falls back to socket transport over the management NIC (works but much slower).
+
+## PMIx shared memory fix for Apptainer
+
+When using `srun --mpi=pmix` with Apptainer, ranks may segfault with `PMIx ERROR: UNREACHABLE` if `/dev/shm` or `/tmp` is shared from the host. Fix:
+```bash
+--env PMIX_MCA_gds=hash
+--env PMIX_MCA_psec=native
+```
+
 ---
 
 # Docker-specific patterns

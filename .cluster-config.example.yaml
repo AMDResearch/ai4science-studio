@@ -36,3 +36,7 @@ gpu:
 network:
   internet_access: true  # can compute nodes reach the internet?
   proxy: ""              # HTTP proxy if required (e.g. "http://proxy:8080")
+  mgmt_iface: ""         # Management NIC for MPI/OOB (discover: ip -o link show up)
+  ib_hca: ""             # IB HCA device list for RCCL (discover: ibstat | grep 'CA ')
+  rccl_anp_plugin: ""    # Path to librccl-anp.so on host (default: /opt/rocm/lib/librccl-anp.so)
+  libionic_path: ""      # Path to libionic.so.1 on host (default: /usr/lib/x86_64-linux-gnu/libionic.so.1)
