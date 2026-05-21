@@ -101,7 +101,7 @@ done
 # ---------------------------------------------------------------------------
 # Clone HydraGNN source if not present
 # ---------------------------------------------------------------------------
-HG_HYDRAGNN_SHA="${HG_HYDRAGNN_SHA:-6c45f1682783e66dc89e9e23009f61716186432b}"
+HG_HYDRAGNN_SHA="${HG_HYDRAGNN_SHA:-2fb0bd0157e3c85a74f9841887155095bd163303}"
 if [[ ! -d "${HG_REPO_DIR}/examples/multidataset_hpo_sc26" ]]; then
   echo "--- Cloning HydraGNN (pinned SHA: ${HG_HYDRAGNN_SHA}) ---"
   git clone https://github.com/ORNL/HydraGNN.git "$HG_REPO_DIR"
