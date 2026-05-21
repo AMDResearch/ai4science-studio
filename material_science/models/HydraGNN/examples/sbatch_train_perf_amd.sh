@@ -80,6 +80,16 @@ OMNISTAT_VENV="${OMNISTAT_VENV:-/shared/aaji/tools/omnistat-pr271}"
 OMNISTAT_TEMPLATE="${OMNISTAT_TEMPLATE:-${SCRIPT_DIR}/../recipes/perf-analysis/omnistat-lux.config.template}"
 OMNISTAT_USERMODE_INTERVAL="${OMNISTAT_USERMODE_INTERVAL:-1}"
 
+# Kernel-dispatch tracing (per-kernel name + duration histogram from every
+# rank). OFF by default — opt in with OMNISTAT_KERNEL_TRACE=1. When enabled
+# we auto-flip enable_kernel_trace=True in the rendered config and load
+# libomnistat_trace.so via ROCP_TOOL_LIBRARIES inside the container.
+# See material_science/models/HydraGNN/recipes/perf-analysis/agents/launcher.md
+# for how to build libomnistat_trace.so on a compute node.
+OMNISTAT_KERNEL_TRACE="${OMNISTAT_KERNEL_TRACE:-0}"
+OMNISTAT_TRACE_LIB="${OMNISTAT_TRACE_LIB:-/shared/aaji/tools/omnistat-src/build-trace/libomnistat_trace.so}"
+OMNISTAT_TRACE_ENDPOINT_PORT="${OMNISTAT_TRACE_ENDPOINT_PORT:-8001}"
+
 NODES="${SLURM_JOB_NUM_NODES:-2}"
 GPUS_PER_NODE=8
 TOTAL_RANKS=$((NODES * GPUS_PER_NODE))
@@ -147,6 +157,27 @@ mkdir -p "$HG_OUTPUT_DIR"
 OMNISTAT_CONFIG="${HG_OUTPUT_DIR}/omnistat.config"
 sed -e "s|@JOB_DIR@|${HG_OUTPUT_DIR}|g" "$OMNISTAT_TEMPLATE" > "$OMNISTAT_CONFIG"
 
+# Opt-in kernel tracing: flip enable_kernel_trace=True in the rendered config
+# and verify the rocprofiler-sdk tool library exists. Bail out loudly if
+# the user asked for it but the .so isn't present — silent fall-through is
+# exactly the "rocprofiler counters disabled" failure mode we already burned
+# a day on (see SKILL.md §11).
+if [[ "$OMNISTAT_KERNEL_TRACE" == "1" ]]; then
+  if [[ ! -f "$OMNISTAT_TRACE_LIB" ]]; then
+    echo "ERROR: OMNISTAT_KERNEL_TRACE=1 but tool library not found:" >&2
+    echo "       $OMNISTAT_TRACE_LIB" >&2
+    echo "       Build it on a compute node:" >&2
+    echo "         salloc -p lux -A vultr_lux -N 1 --time=00:15:00 --gpus-per-node=1 \\" >&2
+    echo "           apptainer exec --rocm \"\$HG_SIF\" bash -c '" >&2
+    echo "             cd /shared/aaji/tools/omnistat-src && \\" >&2
+    echo "             cmake -S rocprofiler-sdk/ -B build-trace/ -DBUILD_KERNEL_TRACE_LIB=ON && \\" >&2
+    echo "             cmake --build build-trace/ -j 8'" >&2
+    exit 2
+  fi
+  sed -i 's/^enable_kernel_trace = False/enable_kernel_trace = True/' "$OMNISTAT_CONFIG"
+fi
+_KTRACE_STATE=$(awk -F'[= \t]+' '/^enable_kernel_trace/ {print $2; exit}' "$OMNISTAT_CONFIG")
+
 # ---------------------------------------------------------------------------
 # Generate the per-job profile config (inject "Profile" block)
 # Done on the submit/host side (login or compute), uses python3 if available.
@@ -192,6 +223,11 @@ echo "  Omnistat cfg : $OMNISTAT_CONFIG (rendered)"
 echo "  Rocprofiler  : enable_rocprofiler=${_ROCPROF_STATE:-?} profile=${_ROCPROF_PROFILE:-?}"
 if [[ "$_ROCPROF_STATE" != "True" ]]; then
   echo "  WARN         : rocprofiler counters DISABLED — HBM/FLOP counters will NOT be collected" >&2
+fi
+echo "  KernelTrace  : enable_kernel_trace=${_KTRACE_STATE:-?} (opt-in via OMNISTAT_KERNEL_TRACE=1)"
+if [[ "$OMNISTAT_KERNEL_TRACE" == "1" ]]; then
+  echo "  TraceLib     : $OMNISTAT_TRACE_LIB"
+  echo "  TracePort    : $OMNISTAT_TRACE_ENDPOINT_PORT"
 fi
 echo "  Node(s)      : ${SLURM_NODELIST:-$(hostname)}"
 echo "  Date         : $(date)"
@@ -386,6 +422,21 @@ if [[ "$NODES" -gt 1 ]]; then
 fi
 
 # ---------------------------------------------------------------------------
+# Optional: kernel-trace tool library bind + env (loaded by rocprofiler-sdk
+# when ROCP_TOOL_LIBRARIES points at the .so). The library POSTs dispatch
+# records to the omnistat collector on localhost:OMNISTAT_TRACE_ENDPOINT_PORT.
+# ---------------------------------------------------------------------------
+KTRACE_BIND_ENVS=()
+if [[ "$OMNISTAT_KERNEL_TRACE" == "1" ]]; then
+  KTRACE_BIND_ENVS=(
+    --bind "${OMNISTAT_TRACE_LIB}:${OMNISTAT_TRACE_LIB}:ro"
+    --env ROCP_TOOL_LIBRARIES="${OMNISTAT_TRACE_LIB}"
+    --env OMNISTAT_TRACE_ENDPOINT_PORT="${OMNISTAT_TRACE_ENDPOINT_PORT}"
+    --env OMNISTAT_TRACE_LOG="${OMNISTAT_TRACE_LOG:-1}"
+  )
+fi
+
+# ---------------------------------------------------------------------------
 # Launch distributed training via srun + apptainer
 # ---------------------------------------------------------------------------
 echo "--- Launching training: $TOTAL_RANKS ranks across $NODES nodes ---"
@@ -400,6 +451,7 @@ srun --mpi=pmix \
     --bind "${HG_REPO_DIR}:${HG_REPO_DIR}:ro" \
     --bind "${HG_DATA_DIR}:${HG_DATA_DIR}:ro" \
     --bind "${HG_OUTPUT_DIR}:${HG_OUTPUT_DIR}" \
+    "${KTRACE_BIND_ENVS[@]}" \
     --env PMIX_MCA_gds=hash \
     --env PMIX_MCA_psec=native \
     "${MPI_MULTINODE_ENVS[@]}" \

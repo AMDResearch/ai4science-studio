@@ -100,6 +100,30 @@ fi
 VM_VERSION=$(cat $VM_DIR/VERSION)
 ```
 
+### 1e. (Optional) Build the omnistat kernel-trace tool library
+
+Only required if the run will set `OMNISTAT_KERNEL_TRACE=1` to enable per-kernel dispatch tracing. Idempotent — skip if `build-trace/libomnistat_trace.so` already exists.
+
+```bash
+TRACE_LIB=$TOOLS/omnistat-src/build-trace/libomnistat_trace.so
+if [[ "${OMNISTAT_KERNEL_TRACE:-0}" == "1" && ! -f "$TRACE_LIB" ]]; then
+  # Must build inside the same SIF the workload uses — login nodes lack
+  # apptainer and ROCm headers. C++20 + libcurl + rocprofiler-sdk needed.
+  salloc -p lux -A vultr_lux -N 1 --time=00:15:00 --gpus-per-node=1 \
+    apptainer exec --rocm \
+      "/shared/aaji/images/pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif" \
+      bash -c "
+        set -e
+        cd $TOOLS/omnistat-src
+        cmake -S rocprofiler-sdk/ -B build-trace/ -DBUILD_KERNEL_TRACE_LIB=ON
+        cmake --build build-trace/ -j 8
+      "
+  test -f "$TRACE_LIB" || { echo "ERROR: kernel-trace build did not produce $TRACE_LIB" >&2; exit 2; }
+fi
+```
+
+The sbatch wrapper expects the `.so` at `/shared/aaji/tools/omnistat-src/build-trace/libomnistat_trace.so` by default; override with `OMNISTAT_TRACE_LIB=/path/to/lib.so`. See `ai4science-studio` SKILL §12 for when to enable kernel tracing vs the default device-counting collector.
+
 ### 2. Author the Omnistat user-mode config (once, in repo `perf-runs/`)
 
 If `/shared/aaji/models/HydraGNN/perf-runs/omnistat-lux.config` doesn't exist, write it from the template at `/home/aaji/git/ai4science-studio/material_science/models/HydraGNN/recipes/perf-analysis/omnistat-lux.config.template`. The template uses `%(SLURM_JOB_ID)s` placeholders that omnistat-usermode resolves at runtime.

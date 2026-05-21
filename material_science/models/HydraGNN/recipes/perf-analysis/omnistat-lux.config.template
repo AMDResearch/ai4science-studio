@@ -22,6 +22,20 @@ enable_vendor_counters = True
 enable_xgmi = True
 enable_cu_occupancy = False
 
+# Kernel-dispatch tracing collector (per-kernel name + duration histogram on
+# every node). Disabled by default: it requires the standalone tool library
+# `libomnistat_trace.so` to be built (see rocprofiler-sdk/README.md
+# "Kernel Tracing Library") and loaded into the workload via
+# ROCP_TOOL_LIBRARIES. The sbatch wrapper enables this automatically when
+# OMNISTAT_KERNEL_TRACE=1 is set; otherwise it stays False.
+#
+# IMPORTANT: kernel tracing and the rocprofiler device-counting service
+# (enable_rocprofiler above) BOTH talk to rocprofiler-sdk. They can co-exist
+# on a single GPU, but if you're chasing per-kernel attribution it's usually
+# cleaner to either (a) run kernel-trace alone, or (b) run device counting
+# alone — see ai4science-studio SKILL §11 for the tradeoffs.
+enable_kernel_trace = False
+
 # Path to local ROCm install (Lux: 7.2.x)
 rocm_path = /opt/rocm
 
