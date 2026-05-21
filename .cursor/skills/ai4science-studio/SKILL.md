@@ -597,3 +597,62 @@ This catches both tool bugs and analyst hallucinations. Refuted claims stay in `
 ### 7. Datetimes from omnistat-inspect are UTC
 
 `job_info.json` returns `start_time`/`end_time` as ISO-8601 strings without a `Z` or offset — they are **UTC**. Verifier subagents that build PromQL `start`/`end` from these MUST use `calendar.timegm(time.strptime(s, "%Y-%m-%dT%H:%M:%S"))`, **not** `time.mktime` (which interprets local time and produces wrong epoch on most clusters). Wrong epoch → empty PromQL result series → false "no data" finding.
+
+### 8. Never read configs from a `/shared` "staged copy" — always from the in-repo template
+
+We hit this once: the omnistat config under `/shared/aaji/models/HydraGNN/perf-runs/omnistat-lux.config` was a stale copy of the in-repo `omnistat-lux.config.template`, with `enable_rocprofiler = False` left over from an early v1 decision. The in-repo template had since been updated to `enable_rocprofiler = True` with the `hbm_flops_f64` profile, but the staged copy was never refreshed, so two perf-analysis runs (jobs 6762 and 6840) silently collected zero hardware counters (no HBM bandwidth, no fp64 VALU/MFMA FLOPs). The TraceLens analytical roofline still ran fine, masking the gap until someone asked "where are the HBM counters?"
+
+Two compounding mistakes:
+1. The sbatch script defaulted `OMNISTAT_TEMPLATE` to the `/shared` staged path, not the in-repo path.
+2. There was no run-time signal that rocprofiler was off — the run banner printed `Omnistat tmpl: <path>` but not the rocprofiler state of that template.
+
+**Fix pattern for any model recipe that reads a config template**:
+- Default the path to the in-repo source of truth: `${SCRIPT_DIR}/../recipes/<recipe>/<file>.template`. Only override via env var for ad-hoc probes.
+- After resolving the template, parse the critical knobs and **print them in the run banner**, with a `WARN` line if any expected counter group is disabled. Example:
+```bash
+_ROCPROF_STATE=$(awk -F'[= \t]+' '/^enable_rocprofiler/ {print $2; exit}' "$OMNISTAT_TEMPLATE")
+echo "  Rocprofiler  : enable_rocprofiler=${_ROCPROF_STATE:-?}"
+[[ "$_ROCPROF_STATE" != "True" ]] && echo "  WARN: rocprofiler counters DISABLED — HBM/FLOP counters NOT collected" >&2
+```
+- Don't `exit` on it: a config-only probe that intentionally turns rocprofiler off is legitimate. Just make it impossible to be silently wrong.
+
+**Detection rule for any future template**: if a config file lives **both** in `<repo>/.../<recipe>/*.template` and on a shared filesystem (`/shared`, `/lustre`, etc.), assume the shared copy is stale until proven otherwise. Either delete the staged copy or refresh it from the repo before submitting.
+
+### 9. Omnistat rocprofiler-sdk extension is a separate C++ build (not a pip extra)
+
+`pip install -e '.[query]'` does NOT build the rocprofiler-sdk Python binding even with `BUILD_ROCPROFILER_SDK_EXTENSION=1` exported, because pip skips the build step on a re-install of an editable package. Symptom: `enable_rocprofiler = True` in the config + `omnistat-monitor` exporter dies silently with `Missing ROCProfiler-SDK extension: build with installation required` and `ModuleNotFoundError: No module named 'rocprofiler_sdk'`.
+
+The doc-recommended path for editable installs (`docs/installation/extensions.md` upstream) is:
+```bash
+cd /path/to/omnistat-src
+BUILD_ROCPROFILER_SDK_EXTENSION=1 python setup.py build_ext --inplace
+```
+This must run on a **compute node** (where `/opt/rocm/include/rocprofiler-sdk/` headers and `/opt/rocm/share/rocprofiler-sdk/counter_defs.yaml` are present — login nodes often have neither). Build deps: `cmake-build-extension`, `nanobind`, `cmake>=3.15`, ninja, a C++20 compiler. Output is one `.so` file named `omnistat/rocprofiler_sdk_extension.cpython-3*-x86_64-linux-gnu.so`. Verify with `python3 -c "from omnistat.rocprofiler_sdk_extension import get_samplers, initialize"`.
+
+Imports note: omnistat's collector imports `from omnistat.rocprofiler_sdk_extension import ...`, NOT `import rocprofiler_sdk`. A naive sanity check that imports the upstream `rocprofiler_sdk` Python package will always fail (that package is unrelated, ships with ROCm, and is not on the omnistat venv path).
+
+### 10. gfx950 (MI355X) rocprofiler counter register limits — multiple counters in same hardware block fail
+
+ROCm rocprofiler-sdk on gfx950 returns
+```
+create profile failed with error code 38: Request exceeds the capabilities of the hardware to collect
+```
+when a single profile asks for more counters than fit in the per-block register file. Per-block limits are not documented uniformly; we determined empirically on `lux-mi355x-b1` (ROCm 7.2.2):
+
+- **TCC (L2 cache) block**: **`FETCH_SIZE` AND `WRITE_SIZE` together fail.** Either one alone works (with up to 4 SQ_INSTS_VALU_*_F64 counters in the same profile).
+- **SQ (scalar/vector unit) block**: ≥4 SQ_INSTS_VALU_*_F64 counters in one profile work.
+- Workaround: use `sampling_mode = periodic` and `counters = [[set0], [set1]]` to time-multiplex — but see lesson 11.
+
+Always probe interactively first (1 node `salloc`, run `omnistat-monitor --configfile <test>` foreground for 8 s, grep stderr for "create profile failed") before submitting an sbatch with new counters; the omnistat user-mode launcher swallows the error from the spawned exporter and the only symptom from the outside is "Missing exporter on <host>".
+
+### 11. Omnistat `sampling_mode = periodic` only fires the first set in this build
+
+In `omnistat 1.12.0+git.65ea9ac` (PR #271 + main merged) on `lux-mi355x-b1` with rocprofiler-sdk freshly built, `sampling_mode = periodic` with two counter sets only fires the FIRST set. Every subsequent set returns identically zero across all cards and timestamps. Half the intended counter coverage is silently lost.
+
+We surfaced this with the `[[FETCH+4×SQ_F64], [WRITE+4×SQ_F64]]` config: FETCH and MFMA_MOPS samples were healthy (~50% non-zero, ~7% non-zero respectively), but WRITE and FMA/ADD/MUL were uniformly zero. Workaround: use `sampling_mode = constant` and a single counter set that fits in the per-block hardware limits — for fp64 + HBM-read on gfx950 that's:
+```ini
+[omnistat.collectors.rocprofiler.fp64_and_hbm_read]
+sampling_mode = constant
+counters = ["FETCH_SIZE", "SQ_INSTS_VALU_ADD_F64", "SQ_INSTS_VALU_MUL_F64", "SQ_INSTS_VALU_FMA_F64", "SQ_INSTS_VALU_MFMA_MOPS_F64"]
+```
+Trade-off: lose `WRITE_SIZE` (HBM-write bandwidth) until the periodic-mode bug is fixed upstream. For most ML training workloads, FETCH_SIZE is the dominant traffic anyway.
