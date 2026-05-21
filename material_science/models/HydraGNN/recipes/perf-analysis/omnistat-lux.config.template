@@ -1,0 +1,81 @@
+#--
+# Omnistat user-mode config for Lux (MI355X)
+#
+# Adapted from HydraGNN's upstream omnistat.hydragnn-external.config.
+# Differences from upstream / from system-mode default on Lux:
+#   - enable_amd_smi (newer SMI), not rocm_smi
+#   - rocprofiler counters DISABLED in v1 (turn on per-probe via verifier)
+#   - allowed_ips includes 0.0.0.0 so the user-mode VM scrapes
+#   - victoria_datadir under /shared/aaji (NFS, persists after job)
+#--
+
+[omnistat.collectors]
+
+port = 8101
+enable_rocm_smi = False
+enable_amd_smi = True
+enable_ras_ecc = True
+enable_rms = True
+enable_rocprofiler = False
+enable_network = True
+enable_vendor_counters = True
+enable_xgmi = True
+enable_cu_occupancy = False
+
+# Path to local ROCm install (Lux: 7.2.x)
+rocm_path = /opt/rocm
+
+# allowed scrapers: localhost (the user-mode VM sits on the same node) + 0.0.0.0
+# wildcard for any user-mode VictoriaMetrics that might run on a sibling node.
+allowed_ips = 127.0.0.1, 0.0.0.0
+
+[omnistat.collectors.rms]
+
+host_skip = "login.*"
+enable_annotations = True
+# Lux note: /tmp/omni_rmsjobinfo (the upstream default) is owned by user
+# `omnidc` on Lux compute nodes for the system-mode collector, so user-mode
+# omnistat-rms-env hits PermissionError if it tries to write there. The
+# sbatch wrapper substitutes @JOB_DIR@ with the job-scoped perf-run dir
+# (NFS-mounted on every compute node) before passing the resolved config
+# to omnistat-usermode --configfile.
+job_detection_mode = file-based
+job_detection_file = @JOB_DIR@/omni_rmsjobinfo
+step_detection_file = @JOB_DIR@/omni_rmsjobinfo_step
+
+[omnistat.collectors.host]
+enable_proc_io_stats = True
+
+# rocprofiler section kept as a reference for the verifier probe — disabled
+# above. Enable enable_rocprofiler=True + select a profile here for HBM/FLOPS
+# counters on a 1-node remedy probe only.
+[omnistat.collectors.rocprofiler]
+profile = hbm
+
+[omnistat.collectors.rocprofiler.hbm]
+sampling_mode = constant
+counters = ["FETCH_SIZE", "WRITE_SIZE"]
+
+[omnistat.query]
+prometheus_url = http://localhost:8428
+system_name = lux
+
+#--
+# User-mode settings — VictoriaMetrics + per-job datadir
+# (Like the [rms] section above, @JOB_DIR@ is substituted by the sbatch
+#  wrapper at runtime; ConfigParser's %(VAR)s interpolation does NOT pull
+#  from os.environ, so we can't rely on %(SLURM_JOB_ID)s here.)
+#--
+[omnistat.usermode]
+
+victoria_binary = /shared/aaji/tools/victoriametrics/victoria-metrics-prod
+victoria_datadir = @JOB_DIR@/omnistat-db
+victoria_logfile = vic_server.log
+
+# No external VM; we keep everything local to the job.
+external_victoria = False
+
+# Bind exporter to a single core to keep monitoring overhead off the data path.
+exporter_corebinding = 0
+
+ssh_key = ~/.ssh/id_rsa

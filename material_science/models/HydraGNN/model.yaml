@@ -25,6 +25,10 @@ recipes:
     recipe_path: recipes/train/
     script: examples/run_train.sh
     sbatch_script: examples/sbatch_train_amd.sh
+  - task: perf-analysis
+    description: 2-node bottleneck analysis with TraceLens + Omnistat (user-mode) via paired analyst/verifier subagents
+    recipe_path: recipes/perf-analysis/
+    sbatch_script: examples/sbatch_train_perf_amd.sh
 
 env_vars:
   # Required for HPC scripts (sbatch_*_amd.sh, build_overlay_amd.sh)
