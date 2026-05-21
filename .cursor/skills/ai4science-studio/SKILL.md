@@ -656,3 +656,34 @@ sampling_mode = constant
 counters = ["FETCH_SIZE", "SQ_INSTS_VALU_ADD_F64", "SQ_INSTS_VALU_MUL_F64", "SQ_INSTS_VALU_FMA_F64", "SQ_INSTS_VALU_MFMA_MOPS_F64"]
 ```
 Trade-off: lose `WRITE_SIZE` (HBM-write bandwidth) until the periodic-mode bug is fixed upstream. For most ML training workloads, FETCH_SIZE is the dominant traffic anyway.
+
+### 12. Three rocprofiler-sdk surfaces — pick the right one
+
+Omnistat exposes **two** independent rocprofiler-sdk integrations, and there's a **third** path that bypasses omnistat entirely. They sample disjoint things and can mostly co-exist; pick by the question you're answering.
+
+| Surface | What you get | Cardinality / cost | Build artifact | Switch in our stack |
+|---|---|---|---|---|
+| **Device counting** (omnistat collector, `enable_rocprofiler=True`) | Whole-card hardware counters: FETCH_SIZE, fp64 VALU/MFMA, etc. Sampled at 1 Hz, scraped by the omnistat exporter. | One time-series per (card, counter). Constant-mode is essentially free. | `omnistat/rocprofiler_sdk_extension.cpython-*.so` (Python binding, built in-place from `rocprofiler-sdk/CMakeLists.txt` with `BUILD_KERNEL_TRACE_LIB=OFF`) | `enable_rocprofiler = True` in `omnistat-lux.config.template` (default). |
+| **Kernel tracing** (omnistat collector, `enable_kernel_trace=True`) | Per-kernel-name dispatch count and total duration on every card, every node. Aggregated in 1 s bins, POSTed via HTTP to the omnistat exporter. | One time-series per (card, kernel-name) — can be 1k+ unique kernel names per training step. Light overhead per dispatch (microseconds), but cardinality blows up VictoriaMetrics if left on for hours. | `build-trace/libomnistat_trace.so` (standalone C++ tool library, built from same CMake with `-DBUILD_KERNEL_TRACE_LIB=ON`) | `OMNISTAT_KERNEL_TRACE=1` env-gate in `sbatch_train_perf_amd.sh` — flips `enable_kernel_trace=True` in the rendered config and exports `ROCP_TOOL_LIBRARIES=<path-to-libomnistat_trace.so>` into the apptainer exec. |
+| **`rocprofv3` standalone trace** (no omnistat) | Full kernel + memcpy + HSA API trace on a single rank. JSON / Perfetto / CSV output you read with TraceLens or chrome://tracing. | One trace file per rank, multi-MB per second of training. Heaviest of the three. | None — uses `/opt/rocm/bin/rocprofv3` directly. | Wrap a single rank's command in `rocprofv3 --kernel-trace -o ./rank0_trace -- python ...`. We don't run this in our standard sbatch yet. |
+
+**When to use which:**
+
+- **Device counting only** → multi-node, multi-hour runs. You want HBM bandwidth and fp64 FLOP rate per card across the whole job, with telemetry that survives a 2-hour wallclock without filling the DB.
+- **Kernel tracing on top of device counting** → short probe runs (≤ 5 minutes, ≤ 1 node) when you need to know *which kernel* dominated time without rank-0-only kineto traces. Combine with device counting to correlate per-kernel duration against whole-card FLOP rate.
+- **`rocprofv3` instead of omnistat** → deepest single-rank kernel detail (per-dispatch timing, register usage, kernel arguments). Use when omnistat's aggregate-by-name view loses the signal you need (e.g. tail latency on one specific dispatch). Don't run it across all ranks; the file size will eat the NFS share.
+
+**Cross-runtime gotcha:** `enable_kernel_trace=True` without the tool library loaded does *nothing* — the omnistat collector just sits with an empty endpoint. The `OMNISTAT_KERNEL_TRACE=1` switch in `sbatch_train_perf_amd.sh` enforces this with a hard `exit 2` if `libomnistat_trace.so` isn't found at the configured path; do **not** loosen that check, otherwise you re-create the exact "silent zero counters" failure mode from §8.
+
+**Build location:** Both omnistat artifacts (the Python extension and the kernel-trace tool library) must be built on a **compute node** inside the same SIF the workload runs in — login nodes don't have apptainer or the ROCm headers, and a host-side build will pick up the wrong libcurl / glibc. Standard build:
+
+```bash
+salloc -p lux -A vultr_lux -N 1 --time=00:15:00 --gpus-per-node=1 \
+  apptainer exec --rocm \
+    /shared/aaji/images/pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif \
+    bash -c 'cd /shared/aaji/tools/omnistat-src && \
+      cmake -S rocprofiler-sdk/ -B build-trace/ -DBUILD_KERNEL_TRACE_LIB=ON && \
+      cmake --build build-trace/ -j 8'
+```
+
+Verify with `ls -la /shared/aaji/tools/omnistat-src/build-trace/libomnistat_trace.so` (~MB-class file, not the tiny 4 kB stub you get when CMake fails halfway).
