@@ -464,3 +464,84 @@ export LD_LIBRARY_PATH="/opt/venv/lib/python3.12/site-packages/torch/lib:${LD_LI
 ```
 
 Only use `docker run -e` for variables you are **introducing** (e.g. `-e ORBIT2_ROOT=/orbit2`). Never use it for `LD_LIBRARY_PATH`.
+
+## Performance-analysis subagent workflow (TraceLens + Omnistat user-mode)
+
+This pattern lives in [material_science/models/HydraGNN/recipes/perf-analysis/](../../../material_science/models/HydraGNN/recipes/perf-analysis/) and is documented in detail in [.cursor/skills/ai4science-perf-analysis/SKILL.md](../ai4science-perf-analysis/SKILL.md). Lessons that apply to **any** ai4science model that wants the same workflow:
+
+### 1. ConfigParser does NOT interpolate `os.environ`
+
+Upstream Omnistat configs (`omnistat.ornl`, `omnistat.frontier`) include lines like:
+```ini
+victoria_datadir = /lustre/.../%(SLURM_JOB_ID)s
+```
+
+This **does not work** with stock omnistat-usermode because `omnistat.utils.readConfig` uses plain `configparser.ConfigParser()`, whose `BasicInterpolation` only resolves keys defined inside the config file (DEFAULT section or local section), **not** environment variables. Calling `.get()` on a key with `%(SLURM_JOB_ID)s` raises `InterpolationMissingOptionError`.
+
+**Fix:** Use a `@JOB_DIR@`-style placeholder in the template and run `sed` from the sbatch wrapper at submit time:
+```bash
+sed -e "s|@JOB_DIR@|${HG_OUTPUT_DIR}|g" omnistat-lux.config.template > $HG_OUTPUT_DIR/omnistat.config
+```
+
+### 2. omnistat-usermode `/tmp/omni_rmsjobinfo` permission collision
+
+If the cluster runs system-mode Omnistat as user `omnidc` (or any non-root, non-self user), `/tmp/omni_rmsjobinfo` will already exist and be owned by that user. omnistat-usermode's `omnistat-rms-env` step then fails with `PermissionError` on the very first `--start`, and **exporters never launch** (silent: VictoriaMetrics is up but DB stays empty).
+
+**Fix:** override the path in the user config:
+```ini
+[omnistat.collectors.rms]
+job_detection_mode = file-based
+job_detection_file = /shared/aaji/.../omni_rmsjobinfo
+step_detection_file = /shared/aaji/.../omni_rmsjobinfo_step
+```
+
+Path must be on a shared FS reachable by every compute node in the allocation (NFS/Lustre/etc.) because each node's `omnistat-rms-env` runs via `srun -N $NODES --ntasks-per-node=1` and writes to that path.
+
+### 3. VictoriaMetrics needs `-fs.disableMmap` on the login node
+
+Lux login node `vm.max_map_count` is 1048576 (high), but the cgroup memory limit is 8 GB, and even the small (1.6 MB) per-job Omnistat DB cannot mmap successfully — VM panics with:
+```
+FATAL: cannot mmap "/.../index.bin": cannot mmap file with size 4096 bytes; already memory mapped files: 0: no such device
+```
+
+**Fix:** add `-fs.disableMmap` to the VictoriaMetrics command line whenever you start VM on the login node to read a job-scoped DB:
+```bash
+victoria-metrics-prod -storageDataPath=$DB -fs.disableMmap -httpListenAddr=127.0.0.1:8428 ...
+```
+
+### 4. PromQL: filter by jobid via `rmsjob_info` join, not direct label
+
+`rocm_*` metrics from the omnistat collector do **not** carry a `jobid` label themselves. The omnistat-inspect query layer joins them with `rmsjob_info` per-instance:
+```promql
+avg(rocm_utilization_percentage * on (instance) group_left() (max by (instance) (rmsjob_info{jobid="6762"})))
+```
+
+A naive `rocm_utilization_percentage{jobid="6762"}` returns 0 series even though the data is there. Verifier subagents that re-derive metrics from raw curl must use the join pattern.
+
+### 5. HydraGNN `Profile` block goes under `NeuralNetwork`, not the top level
+
+`hydragnn.train.train_validate_test()` is invoked with `config["NeuralNetwork"]` and reads `config["Profile"]` inside that scope:
+```python
+profiler = Profiler("./logs/" + model_with_config_name)
+if "Profile" in config:
+    profiler.setup(config["Profile"])
+```
+
+So injecting `{"Profile": {"enable": 1, "target_epoch": 1}}` at the top of `gfm_mlip.json` does **nothing** — the profiler stays disabled. The block must be inside `NeuralNetwork`:
+```python
+cfg.setdefault("NeuralNetwork", {})["Profile"] = {"enable": 1, "target_epoch": epoch}
+```
+
+(This is specific to the HydraGNN multi-dataset HPO example; other HydraGNN entrypoints may pass the full config and behave differently. Always trace where the entrypoint reads `Profile` before injecting.)
+
+### 6. Two-phase analyst+verifier pattern
+
+Every claim from the analyst subagent (TraceLens or omnistat-inspect output) is independently re-derived by a verifier subagent from raw data:
+- TraceLens claims → re-derived by parsing the raw `.pt.trace.json` event stream.
+- Omnistat claims → re-derived via raw `curl` PromQL against the same VictoriaMetrics endpoint.
+
+This catches both tool bugs and analyst hallucinations. Refuted claims stay in `verified_claims.json` (so future iterations don't re-derive the same wrong conclusion); the synthesizer drops only `verdict=refuted` from the final report. In the smoke test, all 6 claims verified within tolerance, but the structure is what catches a future flaky case.
+
+### 7. Datetimes from omnistat-inspect are UTC
+
+`job_info.json` returns `start_time`/`end_time` as ISO-8601 strings without a `Z` or offset — they are **UTC**. Verifier subagents that build PromQL `start`/`end` from these MUST use `calendar.timegm(time.strptime(s, "%Y-%m-%dT%H:%M:%S"))`, **not** `time.mktime` (which interprets local time and produces wrong epoch on most clusters). Wrong epoch → empty PromQL result series → false "no data" finding.

@@ -1,0 +1,398 @@
+#!/usr/bin/env bash
+# HydraGNN 2-node training with PyTorch profiling + Omnistat user-mode telemetry.
+#
+# This is a thin variant of sbatch_train_amd.sh tailored for the perf-analysis
+# recipe at material_science/models/HydraGNN/recipes/perf-analysis/.
+#
+# Differences from sbatch_train_amd.sh:
+#   1. Wraps srun with omnistat-usermode --start/--stopexporters/--stopserver.
+#   2. Generates a per-job copy of gfm_mlip.json with a "Profile" block injected
+#      so HydraGNN's built-in torch.profiler captures rank-0 of node-0 only.
+#   3. Hard-codes the lux partition / vultr_lux account so this script works
+#      out-of-the-box on Lux. Override via SBATCH_PARTITION/SBATCH_ACCOUNT if
+#      submitting to a different cluster.
+#   4. Defaults are tuned for a quick perf run: --nodes=2, NUM_EPOCH=2,
+#      MAX_NUM_BATCH=30, time=00:30:00 — enough for the wait=5/warmup=3/active=3
+#      profiler schedule plus a clean epoch 0 for warm caches.
+#
+# Quick start:
+#   export AI4S_SHARED_DIR=/shared/aaji
+#   sbatch material_science/models/HydraGNN/examples/sbatch_train_perf_amd.sh
+#
+# Required:
+#   AI4S_SHARED_DIR — shared base path
+#   /shared/aaji/tools/omnistat-pr271/    (created by the launcher subagent)
+#   /shared/aaji/tools/victoriametrics/   (created by the launcher subagent)
+#
+# Optional env-var overrides (with defaults):
+#   HG_NUM_EPOCH=2
+#   HYDRAGNN_MAX_NUM_BATCH=30
+#   HG_PRECISION=fp64
+#   HG_BATCH_SIZE=200
+#   PROFILE_TARGET_EPOCH=1
+#   OMNISTAT_USERMODE_INTERVAL=1   # seconds
+
+#SBATCH --job-name=hydragnn-perf
+#SBATCH --partition=lux
+#SBATCH --account=vultr_lux
+#SBATCH --nodes=2
+#SBATCH --ntasks-per-node=8
+#SBATCH --gpus-per-node=8
+#SBATCH --cpus-per-task=16
+#SBATCH --time=00:30:00
+#SBATCH --output=hydragnn-train-%j.out
+#SBATCH --error=hydragnn-train-%j.out
+
+set -euo pipefail
+
+# ---------------------------------------------------------------------------
+# SCRIPT_DIR — works both at submit time and inside the SLURM spool
+# ---------------------------------------------------------------------------
+if [[ -n "${SLURM_JOB_ID:-}" ]]; then
+  _ORIG_CMD=$(scontrol show job "$SLURM_JOB_ID" | sed -n 's/.*Command=\(\S\+\).*/\1/p')
+  SCRIPT_DIR=$(cd "$(dirname "$_ORIG_CMD")" && pwd)
+else
+  SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+fi
+
+# ---------------------------------------------------------------------------
+# Paths and configuration
+# ---------------------------------------------------------------------------
+HG_BASE="${AI4S_SHARED_DIR:?AI4S_SHARED_DIR must be set}/models/HydraGNN"
+HG_SIF="${HG_SIF:-${AI4S_SHARED_DIR}/images/pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif}"
+HG_OVERLAY="${HG_OVERLAY:-${HG_BASE}/overlays/hydragnn-overlay.img}"
+HG_DATASETS="${HG_DATASETS:-ANI1x,Alexandria}"
+HG_DATA_DIR="${HG_DATA_DIR:-${HG_BASE}/weights}"
+HG_BATCH_SIZE="${HG_BATCH_SIZE:-200}"
+HG_NUM_EPOCH="${HG_NUM_EPOCH:-2}"
+HG_PRECISION="${HG_PRECISION:-fp64}"
+HG_OUTPUT_DIR="${HG_OUTPUT_DIR:-${HG_BASE}/perf-runs/${SLURM_JOB_ID:-$$}}"
+HG_REPO_DIR="${HG_REPO_DIR:-${HG_BASE}/code/HydraGNN}"
+HYDRAGNN_MAX_NUM_BATCH="${HYDRAGNN_MAX_NUM_BATCH:-30}"
+PROFILE_TARGET_EPOCH="${PROFILE_TARGET_EPOCH:-1}"
+
+OMNISTAT_VENV="${OMNISTAT_VENV:-/shared/aaji/tools/omnistat-pr271}"
+OMNISTAT_TEMPLATE="${OMNISTAT_TEMPLATE:-${HG_BASE}/perf-runs/omnistat-lux.config}"
+OMNISTAT_USERMODE_INTERVAL="${OMNISTAT_USERMODE_INTERVAL:-1}"
+
+NODES="${SLURM_JOB_NUM_NODES:-2}"
+GPUS_PER_NODE=8
+TOTAL_RANKS=$((NODES * GPUS_PER_NODE))
+
+# ---------------------------------------------------------------------------
+# Validate required files
+# ---------------------------------------------------------------------------
+for var in HG_SIF HG_OVERLAY OMNISTAT_TEMPLATE; do
+  if [[ ! -e "${!var}" ]]; then
+    echo "ERROR: $var not found: ${!var}" >&2
+    exit 2
+  fi
+done
+
+if [[ ! -x "${OMNISTAT_VENV}/bin/omnistat-usermode" ]]; then
+  echo "ERROR: omnistat-usermode not found at ${OMNISTAT_VENV}/bin/omnistat-usermode" >&2
+  echo "       Run the launcher subagent first to install (see recipes/perf-analysis/agents/launcher.md)" >&2
+  exit 2
+fi
+
+IFS=',' read -ra DATASET_ARRAY <<< "$HG_DATASETS"
+for ds in "${DATASET_ARRAY[@]}"; do
+  ds_path="${HG_DATA_DIR}/${ds}-v2.bp"
+  if [[ ! -d "$ds_path" ]]; then
+    echo "ERROR: Dataset not found: $ds_path" >&2
+    exit 2
+  fi
+done
+
+# ---------------------------------------------------------------------------
+# Clone HydraGNN source if not present (mirrors sbatch_train_amd.sh)
+# ---------------------------------------------------------------------------
+HG_HYDRAGNN_SHA="${HG_HYDRAGNN_SHA:-6c45f1682783e66dc89e9e23009f61716186432b}"
+if [[ ! -d "${HG_REPO_DIR}/examples/multidataset_hpo_sc26" ]]; then
+  echo "--- Cloning HydraGNN (pinned SHA: ${HG_HYDRAGNN_SHA}) ---"
+  git clone https://github.com/ORNL/HydraGNN.git "$HG_REPO_DIR"
+  git -C "$HG_REPO_DIR" checkout "$HG_HYDRAGNN_SHA"
+fi
+
+# ---------------------------------------------------------------------------
+# Symlink datasets into the expected location
+# ---------------------------------------------------------------------------
+EXAMPLE_DIR="${HG_REPO_DIR}/examples/multidataset_hpo_sc26"
+DATASET_DIR="${EXAMPLE_DIR}/dataset"
+mkdir -p "$DATASET_DIR"
+
+for ds in "${DATASET_ARRAY[@]}"; do
+  target="${DATASET_DIR}/${ds}-v2.bp"
+  source="${HG_DATA_DIR}/${ds}-v2.bp"
+  if [[ ! -e "$target" ]]; then
+    ln -sfn "$source" "$target"
+  fi
+done
+
+# ---------------------------------------------------------------------------
+# Render the per-job omnistat config from the template (substitute @JOB_DIR@)
+# This sidesteps configparser's lack of os.environ interpolation.
+# ---------------------------------------------------------------------------
+mkdir -p "$HG_OUTPUT_DIR"
+OMNISTAT_CONFIG="${HG_OUTPUT_DIR}/omnistat.config"
+sed -e "s|@JOB_DIR@|${HG_OUTPUT_DIR}|g" "$OMNISTAT_TEMPLATE" > "$OMNISTAT_CONFIG"
+
+# ---------------------------------------------------------------------------
+# Generate the per-job profile config (inject "Profile" block)
+# Done on the submit/host side (login or compute), uses python3 if available.
+# ---------------------------------------------------------------------------
+HG_CONFIG_OVERRIDE="${HG_OUTPUT_DIR}/gfm_mlip_profile.json"
+SRC_CONFIG="${EXAMPLE_DIR}/gfm_mlip.json"
+
+python3 - "$SRC_CONFIG" "$HG_CONFIG_OVERRIDE" "$PROFILE_TARGET_EPOCH" <<'PYEOF'
+import json, sys
+src, dst, epoch = sys.argv[1], sys.argv[2], int(sys.argv[3])
+with open(src) as f:
+    cfg = json.load(f)
+# HydraGNN's train_validate_test() is called with config["NeuralNetwork"];
+# its Profiler reads config["Profile"] from THAT scope, so the block must
+# go under NeuralNetwork, not at the top level.
+cfg.setdefault("NeuralNetwork", {})["Profile"] = {"enable": 1, "target_epoch": epoch}
+with open(dst, "w") as f:
+    json.dump(cfg, f, indent=2)
+print(f"Wrote {dst} with NeuralNetwork.Profile.enable=1, target_epoch={epoch}")
+PYEOF
+
+# ---------------------------------------------------------------------------
+# Print job configuration
+# ---------------------------------------------------------------------------
+echo "=== HydraGNN Perf Analysis Run ==="
+echo "  Nodes        : $NODES"
+echo "  GPUs/node    : $GPUS_PER_NODE"
+echo "  Total ranks  : $TOTAL_RANKS"
+echo "  SIF          : $HG_SIF"
+echo "  Overlay      : $HG_OVERLAY"
+echo "  Datasets     : $HG_DATASETS"
+echo "  Precision    : $HG_PRECISION"
+echo "  Batch size   : $HG_BATCH_SIZE"
+echo "  Num epochs   : $HG_NUM_EPOCH"
+echo "  Max batches  : $HYDRAGNN_MAX_NUM_BATCH"
+echo "  Profile epoch: $PROFILE_TARGET_EPOCH (rank-0 only)"
+echo "  Output dir   : $HG_OUTPUT_DIR"
+echo "  Repo dir     : $HG_REPO_DIR"
+echo "  Profile cfg  : $HG_CONFIG_OVERRIDE"
+echo "  Omnistat venv: $OMNISTAT_VENV"
+echo "  Omnistat tmpl: $OMNISTAT_TEMPLATE"
+echo "  Omnistat cfg : $OMNISTAT_CONFIG (rendered)"
+echo "  Node(s)      : ${SLURM_NODELIST:-$(hostname)}"
+echo "  Date         : $(date)"
+echo ""
+
+# ---------------------------------------------------------------------------
+# Start Omnistat user-mode (datadir from omnistat-lux.config: under HG_OUTPUT_DIR)
+# ---------------------------------------------------------------------------
+echo "--- Starting Omnistat user-mode (interval=${OMNISTAT_USERMODE_INTERVAL}s) ---"
+export PATH="${OMNISTAT_VENV}/bin:${PATH}"
+"${OMNISTAT_VENV}/bin/omnistat-usermode" --configfile "$OMNISTAT_CONFIG" --start --interval "$OMNISTAT_USERMODE_INTERVAL" \
+    2>&1 | tee "${HG_OUTPUT_DIR}/omnistat_start.log" || {
+  echo "WARN: omnistat-usermode --start returned nonzero; continuing without telemetry" >&2
+}
+
+# Make sure we tear down even if the training fails
+cleanup_omnistat() {
+  echo "--- Stopping Omnistat user-mode ---"
+  "${OMNISTAT_VENV}/bin/omnistat-usermode" --configfile "$OMNISTAT_CONFIG" --stopexporters || true
+  "${OMNISTAT_VENV}/bin/omnistat-usermode" --configfile "$OMNISTAT_CONFIG" --stopserver || true
+}
+trap cleanup_omnistat EXIT
+
+# ---------------------------------------------------------------------------
+# Write rank script (runs inside the container on every rank)
+# Mirrors sbatch_train_amd.sh but uses HG_CONFIG_OVERRIDE and gates the
+# profiler to rank 0 only via PROFILE_RANK0_ONLY.
+# ---------------------------------------------------------------------------
+RANK_SCRIPT="${HG_OUTPUT_DIR}/hydragnn-rank-${SLURM_JOB_ID:-$$}.sh"
+cat > "$RANK_SCRIPT" << 'RANKEOF'
+#!/usr/bin/env bash
+set -euo pipefail
+source /opt/venv/bin/activate
+
+export PYTHONPATH="/opt/hydragnn-pkgs:${PYTHONPATH:-}"
+export LD_LIBRARY_PATH="/opt/hydragnn-pkgs/adios2:/opt/ompi/lib:${LD_LIBRARY_PATH:-}"
+
+SCRATCH_RANK="${SCRATCH_LOCAL:-/scratch}/${USER:?}/hydragnn-${SLURM_JOB_ID:-$$}/${SLURM_PROCID:-0}"
+mkdir -p "$SCRATCH_RANK"
+export TMPDIR="$SCRATCH_RANK"
+
+export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-16}"
+export MIOPEN_DISABLE_CACHE=1
+export MIOPEN_USER_DB_PATH="${SCRATCH_RANK}/miopen"
+mkdir -p "$MIOPEN_USER_DB_PATH"
+export PYTHONNOUSERSITE=1
+
+export HYDRAGNN_USE_VARIABLE_GRAPH_SIZE=1
+export HYDRAGNN_AGGR_BACKEND=mpi
+export HYDRAGNN_VALTEST="${HYDRAGNN_VALTEST:-0}"
+export HYDRAGNN_USE_FSDP=0
+export HYDRAGNN_TRACE_LEVEL="${HYDRAGNN_TRACE_LEVEL:-1}"
+
+export HSA_NO_SCRATCH_RECLAIM=1
+
+cd "$HG_OUTPUT_DIR"
+
+export HYDRAGNN_AVG_NUM_NEIGHBORS="${HYDRAGNN_AVG_NUM_NEIGHBORS:-13.735293601560318}"
+
+# Profiler is enabled for the whole world (the JSON config already has
+# Profile.enable=1) but we want trace files from RANK 0 only so we don't
+# stomp on each other in $HG_OUTPUT_DIR/logs/. We disable it in the JSON
+# at runtime for non-zero ranks via a tiny monkey-patch in HydraGNN's
+# Profiler class.
+exec python -u -c "
+import sys, os, runpy
+
+# Rank 0 keeps the Profile block; others zero it out so HydraGNN's Profiler
+# falls through to the null context. Block lives under NeuralNetwork because
+# that is the dict train_validate_test() receives.
+if os.environ.get('PROFILE_RANK0_ONLY', '0') == '1' and os.environ.get('SLURM_PROCID', '0') != '0':
+    import json
+    cfg_path = os.environ['HG_CONFIG_OVERRIDE']
+    with open(cfg_path) as f:
+        cfg = json.load(f)
+    cfg.setdefault('NeuralNetwork', {}).setdefault('Profile', {})['enable'] = 0
+    # Write to a per-rank scratch path to avoid races with rank 0
+    rank_cfg = os.path.join(os.environ.get('TMPDIR', '/tmp'), 'gfm_mlip_profile_rank.json')
+    with open(rank_cfg, 'w') as f:
+        json.dump(cfg, f)
+    cfg_arg = rank_cfg
+else:
+    cfg_arg = os.environ['HG_CONFIG_OVERRIDE']
+
+avg_nn = float(os.environ.get('HYDRAGNN_AVG_NUM_NEIGHBORS', '0'))
+if avg_nn > 0:
+    import hydragnn.utils.datasets.adiosdataset as adm
+    _orig_init = adm.AdiosMultiDataset.__init__
+    def _patched_init(self, *a, **kw):
+        _orig_init(self, *a, **kw)
+        self.avg_num_neighbors = avg_nn
+    adm.AdiosMultiDataset.__init__ = _patched_init
+
+batch_size = int(os.environ.get('HG_BATCH_SIZE', '0') or 200)
+max_num_batch = int(os.environ.get('HYDRAGNN_MAX_NUM_BATCH', '0'))
+num_samples_val = max_num_batch * batch_size if max_num_batch > 0 else 0
+
+sys.argv = [
+    os.environ['HG_EXAMPLE_DIR'] + '/gfm_mlip_all_mpnn.py',
+    '--inputfile=' + cfg_arg,
+    '--multi',
+    '--everyone',
+    '--multi_model_list=' + os.environ['HG_DATASETS'],
+    '--precision=' + os.environ['HG_PRECISION'],
+    '--batch_size=' + str(batch_size),
+    '--num_epoch=' + os.environ.get('HG_NUM_EPOCH', '1'),
+    '--startfrom=none',
+    '--log=hydragnn-train-' + os.environ.get('SLURM_JOB_ID','0') + '-N' + os.environ.get('SLURM_JOB_NUM_NODES','1'),
+]
+
+if num_samples_val > 0:
+    sys.argv += [
+        '--num_samples=' + str(num_samples_val),
+        '--oversampling',
+        '--oversampling_num_samples=' + str(num_samples_val),
+    ]
+
+runpy.run_path(sys.argv[0], run_name='__main__')
+"
+RANKEOF
+chmod +x "$RANK_SCRIPT"
+
+# ---------------------------------------------------------------------------
+# Multi-node network environment (read from .cluster-config.yaml)
+# Identical to sbatch_train_amd.sh — kept verbatim to avoid drift.
+# ---------------------------------------------------------------------------
+RCCL_MULTINODE_ENVS=()
+MPI_MULTINODE_ENVS=()
+if [[ "$NODES" -gt 1 ]]; then
+  _CLUSTER_CFG="${SCRIPT_DIR}/../../../../.cluster-config.yaml"
+  if [[ -f "$_CLUSTER_CFG" ]]; then
+    _yaml_get() { grep "^  $1:" "$_CLUSTER_CFG" 2>/dev/null | sed 's/.*: *"\?\([^"]*\)"\?.*/\1/' | grep -v '^$'; }
+    : "${NCCL_IB_HCA:=$(_yaml_get ib_hca)}"
+    : "${NCCL_SOCKET_IFNAME:=$(_yaml_get mgmt_iface)}"
+    : "${RCCL_ANP_PLUGIN:=$(_yaml_get rccl_anp_plugin)}"
+    : "${LIBIONIC_PATH:=$(_yaml_get libionic_path)}"
+  fi
+
+  : "${NCCL_IB_HCA:?Set NCCL_IB_HCA or configure network.ib_hca in .cluster-config.yaml}"
+  : "${NCCL_SOCKET_IFNAME:?Set NCCL_SOCKET_IFNAME or configure network.mgmt_iface in .cluster-config.yaml}"
+  : "${RCCL_ANP_PLUGIN:?Set RCCL_ANP_PLUGIN or configure network.rccl_anp_plugin in .cluster-config.yaml}"
+  : "${LIBIONIC_PATH:?Set LIBIONIC_PATH or configure network.libionic_path in .cluster-config.yaml}"
+
+  MPI_MULTINODE_ENVS=(
+    --env OMPI_MCA_pml=ob1
+    --env OMPI_MCA_btl=tcp,self
+    --env OMPI_MCA_btl_tcp_if_include="$NCCL_SOCKET_IFNAME"
+    --env MPI4PY_RC_THREADS=false
+  )
+
+  RCCL_MULTINODE_ENVS=(
+    --bind "${RCCL_ANP_PLUGIN}:${RCCL_ANP_PLUGIN}:ro"
+    --bind "${LIBIONIC_PATH}:${LIBIONIC_PATH}:ro"
+    --env NCCL_NET_PLUGIN="$RCCL_ANP_PLUGIN"
+    --env NCCL_IB_HCA="$NCCL_IB_HCA"
+    --env NCCL_IB_GID_INDEX=1
+    --env NCCL_GDR_FLUSH_DISABLE=1
+    --env RCCL_GDR_FLUSH_GPU_MEM_NO_RELAXED_ORDERING=0
+    --env NCCL_GDRCOPY_ENABLE=0
+    --env NCCL_IB_QPS_PER_CONNECTION=1
+    --env HSA_NO_SCRATCH_RECLAIM=1
+    --env NCCL_IB_TC=96
+    --env NCCL_IB_FIFO_TC=192
+    --env NCCL_IGNORE_CPU_AFFINITY=1
+    --env NCCL_PXN_DISABLE=0
+    --env NET_OPTIONAL_RECV_COMPLETION=1
+    --env NCCL_IB_USE_INLINE=1
+    --env NCCL_SOCKET_IFNAME="$NCCL_SOCKET_IFNAME"
+    --env RCCL_LL128_FORCE_ENABLE=1
+    --env NCCL_IB_PCI_RELAXED_ORDERING=1
+    --env NCCL_DMABUF_ENABLE=1
+    --env NCCL_DEBUG="${NCCL_DEBUG:-WARN}"
+  )
+fi
+
+# ---------------------------------------------------------------------------
+# Launch distributed training via srun + apptainer
+# ---------------------------------------------------------------------------
+echo "--- Launching training: $TOTAL_RANKS ranks across $NODES nodes ---"
+echo ""
+
+srun --mpi=pmix \
+    apptainer exec \
+    --rocm \
+    --overlay "${HG_OVERLAY}:ro" \
+    --bind "/opt/ompi:/opt/ompi:ro" \
+    --bind "${SCRATCH_LOCAL:-/scratch}:${SCRATCH_LOCAL:-/scratch}" \
+    --bind "${HG_REPO_DIR}:${HG_REPO_DIR}:ro" \
+    --bind "${HG_DATA_DIR}:${HG_DATA_DIR}:ro" \
+    --bind "${HG_OUTPUT_DIR}:${HG_OUTPUT_DIR}" \
+    --env PMIX_MCA_gds=hash \
+    --env PMIX_MCA_psec=native \
+    "${MPI_MULTINODE_ENVS[@]}" \
+    --env SCRATCH_LOCAL="${SCRATCH_LOCAL:-/scratch}" \
+    --env HG_DATASETS="$HG_DATASETS" \
+    --env HG_PRECISION="$HG_PRECISION" \
+    --env HG_BATCH_SIZE="${HG_BATCH_SIZE:-200}" \
+    --env HG_NUM_EPOCH="${HG_NUM_EPOCH:-1}" \
+    --env HYDRAGNN_MAX_NUM_BATCH="${HYDRAGNN_MAX_NUM_BATCH:-}" \
+    --env HYDRAGNN_VALTEST="${HYDRAGNN_VALTEST:-0}" \
+    --env HYDRAGNN_TRACE_LEVEL="${HYDRAGNN_TRACE_LEVEL:-1}" \
+    --env HG_EXAMPLE_DIR="$EXAMPLE_DIR" \
+    --env HG_OUTPUT_DIR="$HG_OUTPUT_DIR" \
+    --env HG_CONFIG_OVERRIDE="$HG_CONFIG_OVERRIDE" \
+    --env PROFILE_RANK0_ONLY=1 \
+    "${RCCL_MULTINODE_ENVS[@]}" \
+    "$HG_SIF" \
+    bash "$RANK_SCRIPT"
+
+TRAIN_RC=$?
+
+echo ""
+echo "=== HydraGNN perf-analysis training complete (rc=$TRAIN_RC) ==="
+echo "  Logs: ${HG_OUTPUT_DIR}/"
+echo "  Trace dir: ${HG_OUTPUT_DIR}/logs/"
+echo "  Omnistat DB: ${HG_OUTPUT_DIR}/omnistat-db/"
+
+exit $TRAIN_RC
