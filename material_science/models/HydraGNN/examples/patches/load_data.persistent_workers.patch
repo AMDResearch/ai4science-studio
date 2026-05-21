@@ -1,0 +1,15 @@
+diff --git a/hydragnn/preprocess/load_data.py b/hydragnn/preprocess/load_data.py
+index f595e2b..cabff01 100644
+--- a/hydragnn/preprocess/load_data.py
++++ b/hydragnn/preprocess/load_data.py
+@@ -286,6 +286,10 @@ def create_dataloaders(
+         num_workers = 0
+         if os.getenv("HYDRAGNN_NUM_WORKERS") is not None:
+             num_workers = int(os.environ["HYDRAGNN_NUM_WORKERS"])
++        # ai4science-studio perf-analysis patch: opt-in persistent workers.
++        # Default behaviour unchanged (False) unless HYDRAGNN_PERSISTENT_WORKERS=1.
++        if os.getenv("HYDRAGNN_PERSISTENT_WORKERS") is not None and num_workers > 0:
++            persistent_workers = bool(int(os.environ["HYDRAGNN_PERSISTENT_WORKERS"]))
+ 
+         use_custom_dataloader = 0
+         if os.getenv("HYDRAGNN_CUSTOM_DATALOADER") is not None:

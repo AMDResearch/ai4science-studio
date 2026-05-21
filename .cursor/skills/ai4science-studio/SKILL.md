@@ -349,6 +349,58 @@ When using `srun --mpi=pmix` with Apptainer, ranks may segfault with `PMIx ERROR
 --env PMIX_MCA_psec=native
 ```
 
+## Never `import` mpi4py-bearing modules from a rank-0-only python before the real `srun`
+
+If a model script does `from mpi4py import MPI` at import time (most do — directly, or transitively via the model's `__init__.py`), the import calls `MPI_Init()` because `mpi4py.rc.initialize=True` is the default. Under `srun --mpi=pmix`, `MPI_Init()` is a **collective rendezvous**: every rank in the SLURM step must arrive at it together before any rank can return.
+
+**Anti-pattern that deadlocks the job:**
+```bash
+# Inside rank.sh — runs once per SLURM rank, 0..N-1
+if [[ "${SLURM_PROCID:-0}" == "0" ]]; then
+  python3 - <<'PYEOF'      # short-lived rank-0-only python
+    import hydragnn       # ← triggers mpi4py auto-MPI_Init on rank 0 alone
+    print("[verify] ...")
+PYEOF
+fi
+
+exec python -u -c "..."    # the real distributed python on every rank
+```
+
+**What goes wrong:** rank 0 enters `MPI_Init()` from the verify python and waits there. Ranks 1..N-1 reach `MPI_Init()` from the main python a moment later. PMIx counts rank 0 as already-arrived for *that* rendezvous, so the verify python returns and exits — taking rank 0's MPI participation with it. When rank 0's main python then calls `MPI_Init()` again, PMIx no longer matches it with ranks 1..N-1, and the whole job hangs in `dist.init_process_group → _create_c10d_store` with no useful error message until the 30-minute TCPStore timeout.
+
+**Symptoms (py-spy on a stuck rank):**
+```
+_create_c10d_store (torch/distributed/rendezvous.py:200)
+_env_rendezvous_handler (torch/distributed/rendezvous.py:281)
+init_process_group (torch/distributed/distributed_c10d.py:1806)
+setup_ddp (hydragnn/utils/distributed/distributed.py:254)
+```
+…on every rank except rank 0, which has died or is in a different MPI_Init that will never match.
+
+**Correct patterns (pick one):**
+
+1. **Move the verify inside the main python**, gated on `SLURM_PROCID == 0`. Same information gets logged, but mpi4py's `MPI_Init` happens once per rank, in lockstep:
+   ```python
+   exec python -u -c "
+   import os
+   if os.environ.get('SLURM_PROCID', '0') == '0':
+       import inspect, hydragnn
+       print('[verify]', hydragnn.__file__, flush=True)
+   # ...rest of training driver...
+   "
+   ```
+
+2. **Disable mpi4py auto-init at the top of the verify script** (only safe if the verify never actually calls any MPI op):
+   ```python
+   import mpi4py
+   mpi4py.rc.initialize = False
+   import hydragnn  # now safe to import without joining a rendezvous
+   ```
+
+3. **Print the verify info on rank 0 from the launching shell only**, never from a python that imports mpi4py-bearing modules.
+
+This bit us once on the HydraGNN perf-analysis recipe (see git log on `aaji/perf-agents-hydragnn`). Watch for it whenever you add `python3 -c "..."` scaffolding around an `srun` that uses `--mpi=pmix`.
+
 ---
 
 # Docker-specific patterns

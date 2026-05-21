@@ -107,7 +107,7 @@ done
 # ---------------------------------------------------------------------------
 # Clone HydraGNN source if not present (mirrors sbatch_train_amd.sh)
 # ---------------------------------------------------------------------------
-HG_HYDRAGNN_SHA="${HG_HYDRAGNN_SHA:-6c45f1682783e66dc89e9e23009f61716186432b}"
+HG_HYDRAGNN_SHA="${HG_HYDRAGNN_SHA:-2fb0bd0157e3c85a74f9841887155095bd163303}"
 if [[ ! -d "${HG_REPO_DIR}/examples/multidataset_hpo_sc26" ]]; then
   echo "--- Cloning HydraGNN (pinned SHA: ${HG_HYDRAGNN_SHA}) ---"
   git clone https://github.com/ORNL/HydraGNN.git "$HG_REPO_DIR"
@@ -212,6 +212,9 @@ cat > "$RANK_SCRIPT" << 'RANKEOF'
 set -euo pipefail
 source /opt/venv/bin/activate
 
+# The overlay's /opt/hydragnn-pkgs is rebuilt from HG_HYDRAGNN_SHA + patches/
+# (see build_overlay_amd.sh), so we import directly from there. Keep the
+# bind-mounted clone available for `examples/multidataset_hpo_sc26/*.py`.
 export PYTHONPATH="/opt/hydragnn-pkgs:${PYTHONPATH:-}"
 export LD_LIBRARY_PATH="/opt/hydragnn-pkgs/adios2:/opt/ompi/lib:${LD_LIBRARY_PATH:-}"
 
@@ -234,6 +237,11 @@ export HYDRAGNN_TRACE_LEVEL="${HYDRAGNN_TRACE_LEVEL:-1}"
 export HSA_NO_SCRATCH_RECLAIM=1
 
 cd "$HG_OUTPUT_DIR"
+# NOTE: do NOT `import hydragnn` from a separate rank-0-only python here.
+# That import triggers `from mpi4py import MPI` which calls MPI_Init() in
+# rank 0 only and leaves ranks 1..N-1 hanging in their later MPI_Init()
+# because the PMIX rendezvous requires all ranks concurrently. We log the
+# imported path inside the main python's first stanza instead.
 
 export HYDRAGNN_AVG_NUM_NEIGHBORS="${HYDRAGNN_AVG_NUM_NEIGHBORS:-13.735293601560318}"
 
@@ -244,6 +252,16 @@ export HYDRAGNN_AVG_NUM_NEIGHBORS="${HYDRAGNN_AVG_NUM_NEIGHBORS:-13.735293601560
 # Profiler class.
 exec python -u -c "
 import sys, os, runpy
+
+# Rank 0 logs which HydraGNN copy is being imported and from what SHA.
+# Done inside the main python (after MPI ranks align) — see the comment
+# above about why this cannot live in a separate rank-0-only python.
+if os.environ.get('SLURM_PROCID', '0') == '0':
+    import inspect, hydragnn, subprocess
+    pkg_dir = os.path.dirname(hydragnn.__file__)
+    src = inspect.getsource(__import__('hydragnn.preprocess.load_data', fromlist=['_']))
+    print('[hydragnn] imported from:', pkg_dir, flush=True)
+    print('[hydragnn] persistent_workers patch present:', 'HYDRAGNN_PERSISTENT_WORKERS' in src, flush=True)
 
 # Rank 0 keeps the Profile block; others zero it out so HydraGNN's Profiler
 # falls through to the null context. Block lives under NeuralNetwork because
@@ -381,7 +399,10 @@ srun --mpi=pmix \
     --env HYDRAGNN_TRACE_LEVEL="${HYDRAGNN_TRACE_LEVEL:-1}" \
     --env HG_EXAMPLE_DIR="$EXAMPLE_DIR" \
     --env HG_OUTPUT_DIR="$HG_OUTPUT_DIR" \
+    --env HG_REPO_DIR="$HG_REPO_DIR" \
     --env HG_CONFIG_OVERRIDE="$HG_CONFIG_OVERRIDE" \
+    --env HYDRAGNN_NUM_WORKERS="${HYDRAGNN_NUM_WORKERS:-}" \
+    --env HYDRAGNN_PERSISTENT_WORKERS="${HYDRAGNN_PERSISTENT_WORKERS:-}" \
     --env PROFILE_RANK0_ONLY=1 \
     "${RCCL_MULTINODE_ENVS[@]}" \
     "$HG_SIF" \

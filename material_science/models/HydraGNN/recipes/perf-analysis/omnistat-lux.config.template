@@ -16,7 +16,7 @@ enable_rocm_smi = False
 enable_amd_smi = True
 enable_ras_ecc = True
 enable_rms = True
-enable_rocprofiler = False
+enable_rocprofiler = True
 enable_network = True
 enable_vendor_counters = True
 enable_xgmi = True
@@ -46,15 +46,37 @@ step_detection_file = @JOB_DIR@/omni_rmsjobinfo_step
 [omnistat.collectors.host]
 enable_proc_io_stats = True
 
-# rocprofiler section kept as a reference for the verifier probe — disabled
-# above. Enable enable_rocprofiler=True + select a profile here for HBM/FLOPS
-# counters on a 1-node remedy probe only.
+# Rocprofiler — HBM bandwidth + FP64 VALU/MFMA counters in one block.
+# Counter group selection follows the user-validated pattern (one profile,
+# one sub-section, all counters listed together; rocprofiler-sdk
+# time-multiplexes hardware counter sets internally as needed).
+#
+# All eight counters below are defined for gfx950 (MI355X) in
+# /opt/rocm/share/rocprofiler-sdk/counter_defs.yaml; verified before pinning.
+#
+# Useful derivations from these raw counters (compute in the verifier or
+# downstream; rocprofiler-sdk also exposes derived counters
+# MfmaFlopsF64 and TotalFlopsF64 if a downstream consumer prefers those):
+#   peak_fp64_GFLOP/s = (SQ_INSTS_VALU_MFMA_MOPS_F64 * 512
+#                        + (SQ_INSTS_VALU_FMA_F64*2
+#                           + SQ_INSTS_VALU_ADD_F64
+#                           + SQ_INSTS_VALU_MUL_F64) * 64
+#                       ) / wall_seconds / 1e9
+#   HBM_GB/s = (FETCH_SIZE + WRITE_SIZE) / wall_seconds / 1e9
 [omnistat.collectors.rocprofiler]
-profile = hbm
+profile = hbm_flops_f64
 
-[omnistat.collectors.rocprofiler.hbm]
+[omnistat.collectors.rocprofiler.hbm_flops_f64]
 sampling_mode = constant
-counters = ["FETCH_SIZE", "WRITE_SIZE"]
+counters = [
+    "FETCH_SIZE",
+    "WRITE_SIZE",
+    "SQ_INSTS_VALU_ADD_F64",
+    "SQ_INSTS_VALU_MUL_F64",
+    "SQ_INSTS_VALU_TRANS_F64",
+    "SQ_INSTS_VALU_FMA_F64",
+    "SQ_INSTS_VALU_MFMA_MOPS_F64"
+]
 
 [omnistat.query]
 prometheus_url = http://localhost:8428
