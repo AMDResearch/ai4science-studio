@@ -67,16 +67,32 @@ enable_proc_io_stats = True
 profile = hbm_flops_f64
 
 [omnistat.collectors.rocprofiler.hbm_flops_f64]
+# MI355X (gfx950) rocprofiler counter limits — see ai4science-studio SKILL §10.
+#
+# Constraints surfaced on lux-mi355x-b1 / ROCm 7.2.2:
+#   * FETCH_SIZE + WRITE_SIZE in ONE profile fails: "error code 38: Request
+#     exceeds the capabilities of the hardware to collect" (both in TCC block).
+#   * FETCH_SIZE OR WRITE_SIZE + 4 x SQ_INSTS_VALU_*_F64 in one profile works.
+#   * sampling_mode = periodic in omnistat 1.12.0+git.65ea9ac (PR #271 + main)
+#     ONLY fires the first counter set — half the data silently lost. (See
+#     SKILL §11.)
+#
+# Workaround: use `constant` mode with a single counter set that fits the
+# hardware limits and the omnistat bug. We capture HBM read traffic only
+# (FETCH_SIZE) plus the 4 fp64 instruction counters needed to derive the
+# fp64 FLOP rate using the formula:
+#     fp64_GFLOP/s = (MFMA_MOPS_F64 * 512 + (FMA_F64*2 + ADD_F64 + MUL_F64) * 64)
+#                    / wall_seconds / 1e9
+# Drop SQ_INSTS_VALU_TRANS_F64 (not relevant for GEMM-heavy ML training).
+#
+# WRITE_SIZE (HBM-write bandwidth) is NOT collected in this profile until
+# upstream omnistat fixes the periodic-mode bug. For most ML training
+# workloads, FETCH_SIZE is the dominant component of HBM traffic anyway.
+#
+# All counters on one line: configparser multi-line values require every
+# continuation line (including the closing `]`) to have leading whitespace.
 sampling_mode = constant
-counters = [
-    "FETCH_SIZE",
-    "WRITE_SIZE",
-    "SQ_INSTS_VALU_ADD_F64",
-    "SQ_INSTS_VALU_MUL_F64",
-    "SQ_INSTS_VALU_TRANS_F64",
-    "SQ_INSTS_VALU_FMA_F64",
-    "SQ_INSTS_VALU_MFMA_MOPS_F64"
-]
+counters = ["FETCH_SIZE", "SQ_INSTS_VALU_ADD_F64", "SQ_INSTS_VALU_MUL_F64", "SQ_INSTS_VALU_FMA_F64", "SQ_INSTS_VALU_MFMA_MOPS_F64"]
 
 [omnistat.query]
 prometheus_url = http://localhost:8428

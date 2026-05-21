@@ -72,7 +72,12 @@ HYDRAGNN_MAX_NUM_BATCH="${HYDRAGNN_MAX_NUM_BATCH:-30}"
 PROFILE_TARGET_EPOCH="${PROFILE_TARGET_EPOCH:-1}"
 
 OMNISTAT_VENV="${OMNISTAT_VENV:-/shared/aaji/tools/omnistat-pr271}"
-OMNISTAT_TEMPLATE="${OMNISTAT_TEMPLATE:-${HG_BASE}/perf-runs/omnistat-lux.config}"
+# Read the omnistat config from the in-repo recipe (single source of truth).
+# Override with OMNISTAT_TEMPLATE=/path/to/file if you need a custom probe config.
+# A staged copy under ${HG_BASE}/perf-runs/ is intentionally NOT used as the
+# default — it has drifted in the past from the in-repo template, silently
+# disabling rocprofiler counters. See ai4science-studio SKILL.md for context.
+OMNISTAT_TEMPLATE="${OMNISTAT_TEMPLATE:-${SCRIPT_DIR}/../recipes/perf-analysis/omnistat-lux.config.template}"
 OMNISTAT_USERMODE_INTERVAL="${OMNISTAT_USERMODE_INTERVAL:-1}"
 
 NODES="${SLURM_JOB_NUM_NODES:-2}"
@@ -88,6 +93,11 @@ for var in HG_SIF HG_OVERLAY OMNISTAT_TEMPLATE; do
     exit 2
   fi
 done
+
+# Surface the rocprofiler state of the chosen template so a silent
+# "counters off" never happens again. Computed here, printed in the banner.
+_ROCPROF_STATE=$(awk -F'[= \t]+' '/^enable_rocprofiler/ {print $2; exit}' "$OMNISTAT_TEMPLATE")
+_ROCPROF_PROFILE=$(awk -F'[= \t]+' '/^profile/ {print $2; exit}' "$OMNISTAT_TEMPLATE")
 
 if [[ ! -x "${OMNISTAT_VENV}/bin/omnistat-usermode" ]]; then
   echo "ERROR: omnistat-usermode not found at ${OMNISTAT_VENV}/bin/omnistat-usermode" >&2
@@ -179,6 +189,10 @@ echo "  Profile cfg  : $HG_CONFIG_OVERRIDE"
 echo "  Omnistat venv: $OMNISTAT_VENV"
 echo "  Omnistat tmpl: $OMNISTAT_TEMPLATE"
 echo "  Omnistat cfg : $OMNISTAT_CONFIG (rendered)"
+echo "  Rocprofiler  : enable_rocprofiler=${_ROCPROF_STATE:-?} profile=${_ROCPROF_PROFILE:-?}"
+if [[ "$_ROCPROF_STATE" != "True" ]]; then
+  echo "  WARN         : rocprofiler counters DISABLED — HBM/FLOP counters will NOT be collected" >&2
+fi
 echo "  Node(s)      : ${SLURM_NODELIST:-$(hostname)}"
 echo "  Date         : $(date)"
 echo ""
