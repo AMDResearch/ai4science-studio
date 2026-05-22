@@ -113,21 +113,39 @@ Log `LEVER_PICK iter=<n> lever=<id> reason="<short>"`.
 
 **2c. STOP-flag gate.** Re-check; act as in 2a.
 
-**2d. Submit sbatch.** Build env-var diff: union of the current-best's env vars + the new lever's `env_vars`, minus any vars revert-method'd from rejected iters. Render an `iter-<N>-env.sh` file with all overrides (one `export KEY=VALUE` per line) under `loop-<uuid>/`. Submit:
+**2d. Submit sbatch.** Build env-var diff: union of the current-best's env vars + the new lever's `env_vars`, minus any vars revert-method'd from rejected iters. Render an `iter-<N>-env.sh` file with all overrides (one `export KEY=VALUE` per line) under `loop-<uuid>/`.
+
+**Before every sbatch**, read `loop-<uuid>/known_bad_nodes.txt` (one node per line, may be preseeded by the operator or appended by step 2e-bis from previous iters). If it exists and is non-empty, pass `--exclude=<comma-joined>` to sbatch. This carries the known-bad list across iters and across orchestrator restarts.
 
 ```bash
+EXCLUDE_ARG=""
+if [[ -s "loop-<uuid>/known_bad_nodes.txt" ]]; then
+  EXCLUDE_ARG="--exclude=$(paste -sd, loop-<uuid>/known_bad_nodes.txt)"
+fi
 ( set -a; source "loop-<uuid>/iter-<N>-env.sh"; set +a; \
   cd /home/aaji/git/ai4science-studio; \
-  sbatch material_science/models/HydraGNN/examples/sbatch_train_perf_amd.sh )
+  sbatch $EXCLUDE_ARG material_science/models/HydraGNN/examples/sbatch_train_perf_amd.sh )
 ```
 
-Capture the jobid from sbatch stdout. Log `ITER_SUBMIT iter=<n> lever=<id> jobid=<jid>`.
+Capture the jobid from sbatch stdout. Log `ITER_SUBMIT iter=<n> lever=<id> jobid=<jid>` (include `exclude=<list>` if non-empty).
 
 If the lever is `kind: rank_script_patch`, write the patch content from `lever_catalog.yaml` to `loop-<uuid>/iter-<N>-hook.py` and export `HG_RANK_PRE_TRAIN_HOOK=<path>` before sbatch. (The rank script must be extended to honor this var; see the rank-script extension note below.)
 
 **2e. Poll until terminal.** Every 30 s: `sacct -j <jobid> -X -n --format=State,ExitCode,Elapsed,NodeList -P`. Terminal states: COMPLETED, FAILED, TIMEOUT, CANCELLED, NODE_FAIL, OUT_OF_MEMORY. Hard exit if not terminal by 45 min; log `ITER_TIMEOUT iter=<n> jobid=<jid>`, treat as auto-reject (do_not_retry) and continue to next iter with current-best restored.
 
 Log `ITER_COMPLETE iter=<n> jobid=<jid> state=<s> runtime=<sec>`.
+
+**2e-bis. Broken-node detection (NODE_HEALTH_PROBE exit 42).** The sbatch script runs a per-node mount-health probe immediately after allocation and exits with code 42 if any allocated node has a broken `/home/$USER`, `/shared/$USER`, or SIF mount. When `sacct ExitCode` is `42:0`:
+
+1. Grep `<perf_run>/node_health_probe.txt` for `home=FAIL|shared=FAIL|sif=FAIL` lines; collect broken hostnames into a `BAD_NODES` comma-list.
+2. Log `ITER_BROKEN_NODE iter=<n> jobid=<jid> bad_nodes=<list> note=mount_fault_not_lever_regression`.
+3. **Do NOT** add the lever to `do_not_retry.json`. **Do NOT** advance `current_iter`. **Do NOT** restrict the node class.
+4. Append `BAD_NODES` to a persistent file `loop-<uuid>/known_bad_nodes.txt` (one node per line, deduped) for the duration of this loop.
+5. Retry the same lever immediately on the same iteration counter with `sbatch --exclude="$(paste -sd, loop-<uuid>/known_bad_nodes.txt)"`. Log `ITER_RESUBMIT iter=<n> lever=<id> exclude=<list> reason=mount_fault_retry`.
+6. If the **same** node appears in `known_bad_nodes.txt` 3 times across the loop without admin intervention, log `LOOP_ABORT reason=persistent_node_fault bad_nodes=<list>` and exit 2 — escalate to the human.
+7. After loop ends, the story_writer reads `known_bad_nodes.txt` and surfaces the list to the user as a Lessons entry, so the cluster admin can be notified.
+
+This handles the iter-1 case from loop-43b33ec1 correctly: only `lux-mi355x-a6` had broken mounts; `lux-mi355x-a1` in the same alloc was healthy. The orchestrator's job is to flag the specific bad node and route around it, not to penalize the lever or shrink the node pool by class.
 
 **2f. STOP-flag gate.** Re-check before the analysis phase. If set, still analyze the just-completed iter (we paid for it), then exit gracefully.
 
@@ -203,6 +221,7 @@ This is a single-edit, one-time change to the existing rank script. The orchestr
 |---|---|
 | `sinfo` shows cluster drained | PREFLIGHT_FAIL reason=cluster_down; exit 2 |
 | sbatch returns nonzero | log ITER_SBATCH_FAIL; treat as auto-reject; continue |
+| sacct ExitCode 42:0 (NODE_HEALTH_PROBE failed) | see step 2e-bis — retry with `--exclude=<bad-nodes>`, do NOT penalize lever, do NOT shrink node class |
 | sacct never reaches terminal in 45 min | log ITER_TIMEOUT; auto-reject; continue |
 | analyst/verifier returns STATUS=fail | log ANALYZE_FAIL; retry next iter; if 2 in a row, do_not_retry the lever with reason=repeated_analysis_fail |
 | fom_extractor returns STATUS=fail | treat as accepted=false reason=fom_extraction_fail; do NOT add to do_not_retry; orchestrator should investigate manually next morning |

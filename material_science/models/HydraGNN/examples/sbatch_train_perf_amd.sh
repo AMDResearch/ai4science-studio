@@ -240,6 +240,57 @@ echo "  Date         : $(date)"
 echo ""
 
 # ---------------------------------------------------------------------------
+# Per-node mount-health probe (lesson from loop-43b33ec1, iter-1, job 7088)
+#
+# Background: an allocation can land on a node where the per-user autofs/NFS
+# mount of /home (or a shared dir under /shared) silently fails. The job then
+# wedges in a pmix collective fence until SLURM kills it at the wall, wasting
+# the iteration budget. We surface that condition immediately so the caller
+# can retry with `sbatch --exclude=<bad-node>` (NEVER blanket-exclude a node
+# class — see story.md Lessons #1 in any optimizer-loop dir).
+#
+# Override probe by setting HG_SKIP_NODE_HEALTH_PROBE=1 (not recommended).
+# ---------------------------------------------------------------------------
+HG_SKIP_NODE_HEALTH_PROBE="${HG_SKIP_NODE_HEALTH_PROBE:-0}"
+if [[ "$HG_SKIP_NODE_HEALTH_PROBE" != "1" ]]; then
+  echo "--- Per-node mount-health probe ($(scontrol show hostnames "$SLURM_NODELIST" | tr '\n' ',' | sed 's/,$//')) ---"
+  _PROBE_OUT="${HG_OUTPUT_DIR}/node_health_probe.txt"
+  # One task per node, no-kill so we get reports from healthy nodes even if some fail.
+  # Each task reports: hostname, /home/$USER existence, /shared/$USER existence, SIF readability.
+  srun --no-kill --kill-on-bad-exit=0 -N "$SLURM_JOB_NUM_NODES" --ntasks-per-node=1 \
+       --cpus-per-task=1 --gres=none --output="${_PROBE_OUT}" --error="${_PROBE_OUT}" \
+    bash -c '
+      H=$(hostname)
+      HM=$(test -d "/home/$USER" 2>/dev/null && echo OK || echo FAIL)
+      SH=$(test -d "'"$AI4S_SHARED_DIR"'/$USER" 2>/dev/null || test -d "'"$AI4S_SHARED_DIR"'" 2>/dev/null && echo OK || echo FAIL)
+      SIF_CHECK=$(test -f "'"$SIF"'" 2>/dev/null && echo OK || echo FAIL)
+      echo "NODE_HEALTH $H home=$HM shared=$SH sif=$SIF_CHECK"
+    ' 2>&1 || true
+  echo ""
+  echo "  Probe results:"
+  if [[ -s "$_PROBE_OUT" ]]; then
+    grep "^NODE_HEALTH" "$_PROBE_OUT" | sed 's/^/    /'
+    _BAD_NODES=$(grep "^NODE_HEALTH" "$_PROBE_OUT" | awk '/home=FAIL|shared=FAIL|sif=FAIL/ {print $2}' | sort -u | tr '\n' ',' | sed 's/,$//')
+  else
+    echo "    (no output captured; assuming all nodes healthy)"
+    _BAD_NODES=""
+  fi
+  _MISSING_REPORTS=$(( SLURM_JOB_NUM_NODES - $(grep -c "^NODE_HEALTH" "$_PROBE_OUT" 2>/dev/null || echo 0) ))
+  if [[ -n "$_BAD_NODES" ]]; then
+    echo "" >&2
+    echo "FATAL: NODE_HEALTH_PROBE detected broken mounts on: $_BAD_NODES" >&2
+    echo "       Retry with:  sbatch --exclude=$_BAD_NODES $0" >&2
+    echo "       Do NOT blanket-exclude the node class (a* or b*); only specific bad nodes." >&2
+    echo "       Notify cluster admin so the broken node can be repaired." >&2
+    exit 42
+  fi
+  if (( _MISSING_REPORTS > 0 )); then
+    echo "WARN: $_MISSING_REPORTS of $SLURM_JOB_NUM_NODES nodes did not return a health-probe result; proceeding anyway" >&2
+  fi
+  echo "  All $SLURM_JOB_NUM_NODES nodes healthy."
+fi
+
+# ---------------------------------------------------------------------------
 # Start Omnistat user-mode (datadir from omnistat-lux.config: under HG_OUTPUT_DIR)
 # ---------------------------------------------------------------------------
 echo "--- Starting Omnistat user-mode (interval=${OMNISTAT_USERMODE_INTERVAL}s) ---"

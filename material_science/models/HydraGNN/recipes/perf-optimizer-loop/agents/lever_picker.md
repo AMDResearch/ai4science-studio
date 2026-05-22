@@ -31,6 +31,8 @@ Read catalog; drop:
 - Any lever id already accepted in `foms.csv` (we don't re-pick already-applied levers; the new "best" already has them baked in).
 - `kernel_trace_diag_only` — see special gate below.
 
+**Do NOT** drop levers that appear in `foms.csv` with `accepted=false` if the failure was infrastructural (e.g. `ITER_BROKEN_NODE`, `ITER_SBATCH_FAIL`, `ANALYZE_FAIL`). Those failures are not evidence about the lever — the orchestrator handles them by retry. Cross-check by reading STATUS.txt: if the most recent ITER_DECISION for a lever was preceded by `ITER_BROKEN_NODE` for the same jobid, treat the lever as untried.
+
 If the candidate set is empty: emit `STATUS=partial; reason=catalog_exhausted`.
 
 ### 2. Score remaining candidates
