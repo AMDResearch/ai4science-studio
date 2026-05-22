@@ -71,6 +71,16 @@ The `combined_report.md` is the deliverable: ranked bottlenecks, remedies tried 
 - One-time install of Omnistat (PR #271 branch `jorda/skills`, with `origin/main` merged in), VictoriaMetrics, and TraceLens — performed lazily by the launcher subagent into `/shared/aaji/tools/`.
 - The launcher writes `gfm_mlip_with_profile.json` at submit time (does not modify the upstream `gfm_mlip.json`).
 
+## Telemetry knobs (set at `sbatch` submit time)
+
+| Env var | Default | What it does |
+|---|---|---|
+| `OMNISTAT_KERNEL_TRACE` | `0` | When `1`, loads `libomnistat_trace.so` via `ROCP_TOOL_LIBRARIES` on every rank and turns on the omnistat kernel-trace collector. Adds per-kernel dispatch count + duration time series across all 8 cards on every node. Requires the library to be built once (see `agents/launcher.md` step 1e). Validated end-to-end on job 7034. |
+| `OMNISTAT_TRACE_LIB` | `/shared/aaji/tools/omnistat-src/build-trace/libomnistat_trace.so` | Override only for development. The wrapper hard-fails if the path is missing when `OMNISTAT_KERNEL_TRACE=1`. |
+| `OMNISTAT_TRACE_LOG` | `1` | Library prints `[host][pid][omnistat] Trace summary: N/N processed records (M/M successful flushes)` on rank exit; useful as a smoke-signal that the tool initialized even when the workload crashed. |
+
+`enable_rocprofiler=True` is **on** in `omnistat-lux.config.template` by default (since commit `a23e5c4`); the rendered config's state is printed in the sbatch banner so a silent "counters off" cannot recur. Kernel tracing and device-counting can co-exist on a single GPU but raise per-job VictoriaMetrics cardinality — pick by run length and the question you're asking. See `ai4science-studio` SKILL §12 for the device-counting vs kernel-trace vs `rocprofv3` decision matrix.
+
 ## Bottleneck taxonomy (used by analysts and verifier)
 
 Each claim must map to one of:
@@ -103,7 +113,6 @@ The orchestrating agent dispatches each as a Task subagent (or shell script in i
 
 - LangGraph or any async backplane — subagents communicate via JSON files only.
 - Multi-rank trace fusion (`TraceLens_generate_multi_rank_collective_report_pytorch`) — single-rank trace for now.
-- rocprofiler hardware counters in user-mode Omnistat — disabled by default; verifier may turn on for one targeted probe.
 - A/B comparative runs — recommended in `combined_report.md` but not auto-launched.
 - Editing upstream HydraGNN — everything driven via JSON config + env vars.
 
