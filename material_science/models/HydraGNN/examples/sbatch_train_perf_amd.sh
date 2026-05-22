@@ -88,7 +88,13 @@ OMNISTAT_USERMODE_INTERVAL="${OMNISTAT_USERMODE_INTERVAL:-1}"
 # for how to build libomnistat_trace.so on a compute node.
 OMNISTAT_KERNEL_TRACE="${OMNISTAT_KERNEL_TRACE:-0}"
 OMNISTAT_TRACE_LIB="${OMNISTAT_TRACE_LIB:-/shared/aaji/tools/omnistat-src/build-trace/libomnistat_trace.so}"
-OMNISTAT_TRACE_ENDPOINT_PORT="${OMNISTAT_TRACE_ENDPOINT_PORT:-8001}"
+# IMPORTANT: the kernel-trace collector registers /kernel_trace on the SAME
+# Flask app as the other omnistat endpoints, so the tool library must POST to
+# the [omnistat.collectors] `port` (8101 here), NOT the library's own default
+# of 8001. Mismatch = silent zero kernel metrics. Auto-derive from the
+# template so we can never drift.
+_OMNI_PORT=$(awk -F'[= \t]+' '/^[[:space:]]*port[[:space:]]*=/ {print $2; exit}' "$OMNISTAT_TEMPLATE")
+OMNISTAT_TRACE_ENDPOINT_PORT="${OMNISTAT_TRACE_ENDPOINT_PORT:-${_OMNI_PORT:-8101}}"
 
 NODES="${SLURM_JOB_NUM_NODES:-2}"
 GPUS_PER_NODE=8
@@ -437,6 +443,22 @@ if [[ "$OMNISTAT_KERNEL_TRACE" == "1" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
+# Optional env passthrough — only forward HYDRAGNN_NUM_WORKERS /
+# HYDRAGNN_PERSISTENT_WORKERS / HYDRAGNN_MAX_NUM_BATCH when set NON-EMPTY.
+# HydraGNN's load_data.py uses `os.getenv(KEY) is not None` to detect the
+# var, so an empty string passes the check and then `int("")` blows up.
+# Building a separate array keeps `apptainer exec` from receiving stale
+# `--env KEY=` flags. (See SKILL §11; observed on probe job 7033.)
+# ---------------------------------------------------------------------------
+OPT_ENVS=()
+for k in HYDRAGNN_NUM_WORKERS HYDRAGNN_PERSISTENT_WORKERS HYDRAGNN_MAX_NUM_BATCH; do
+  v="${!k:-}"
+  if [[ -n "$v" ]]; then
+    OPT_ENVS+=( --env "${k}=${v}" )
+  fi
+done
+
+# ---------------------------------------------------------------------------
 # Launch distributed training via srun + apptainer
 # ---------------------------------------------------------------------------
 echo "--- Launching training: $TOTAL_RANKS ranks across $NODES nodes ---"
@@ -460,15 +482,13 @@ srun --mpi=pmix \
     --env HG_PRECISION="$HG_PRECISION" \
     --env HG_BATCH_SIZE="${HG_BATCH_SIZE:-200}" \
     --env HG_NUM_EPOCH="${HG_NUM_EPOCH:-1}" \
-    --env HYDRAGNN_MAX_NUM_BATCH="${HYDRAGNN_MAX_NUM_BATCH:-}" \
     --env HYDRAGNN_VALTEST="${HYDRAGNN_VALTEST:-0}" \
     --env HYDRAGNN_TRACE_LEVEL="${HYDRAGNN_TRACE_LEVEL:-1}" \
     --env HG_EXAMPLE_DIR="$EXAMPLE_DIR" \
     --env HG_OUTPUT_DIR="$HG_OUTPUT_DIR" \
     --env HG_REPO_DIR="$HG_REPO_DIR" \
     --env HG_CONFIG_OVERRIDE="$HG_CONFIG_OVERRIDE" \
-    --env HYDRAGNN_NUM_WORKERS="${HYDRAGNN_NUM_WORKERS:-}" \
-    --env HYDRAGNN_PERSISTENT_WORKERS="${HYDRAGNN_PERSISTENT_WORKERS:-}" \
+    "${OPT_ENVS[@]}" \
     --env PROFILE_RANK0_ONLY=1 \
     "${RCCL_MULTINODE_ENVS[@]}" \
     "$HG_SIF" \

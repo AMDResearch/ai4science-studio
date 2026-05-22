@@ -687,3 +687,40 @@ salloc -p lux -A vultr_lux -N 1 --time=00:15:00 --gpus-per-node=1 \
 ```
 
 Verify with `ls -la /shared/aaji/tools/omnistat-src/build-trace/libomnistat_trace.so` (~MB-class file, not the tiny 4 kB stub you get when CMake fails halfway).
+
+**Lux SIF build prerequisites (one-time gotchas):** the `pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif` ships **without** `cmake` and **without** libcurl headers (only the `.so.4` runtime). Both omnistat artifacts need cmake; the kernel-trace library additionally needs `<curl/curl.h>`. Working build recipe inside the SIF:
+
+1. `python -m venv /tmp/build_venv && /tmp/build_venv/bin/pip install cmake nanobind zstandard` — installs `cmake` 4.x as a wheel, plus `zstandard` for unpacking modern Ubuntu `.deb` files (which use `data.tar.zst`).
+2. Fetch `libcurl4-openssl-dev_*.deb` from `archive.ubuntu.com/ubuntu/pool/main/c/curl/`, `ar x` it, decompress `data.tar.zst` with `zstandard.ZstdDecompressor` in Python, untar to a tmp prefix.
+3. Pass `-DCURL_INCLUDE_DIR=<prefix>/usr/include/x86_64-linux-gnu -DCURL_LIBRARY=/usr/lib/x86_64-linux-gnu/libcurl.so.4` to cmake configure. The library finds rocprofiler-sdk via `/opt/rocm/lib/cmake/rocprofiler-sdk/`.
+
+Verified on `lux-mi355x-b1` job 7030: 533 kB `libomnistat_trace.so`, ELF64, all rocprofiler-sdk symbols resolved, env vars `OMNISTAT_TRACE_{MAX_INTERVAL,BUFFER_SIZE,ENDPOINT_PORT,LOG}` baked in. `apt-get download` does **not** work in the SIF — apt sources aren't configured — so don't waste a node on it.
+
+**Endpoint port alignment:** the kernel-trace **collector** registers `/kernel_trace` on the same Flask app as the rest of the omnistat exporter, so it listens on `[omnistat.collectors] port` (8101 in our config). The kernel-trace **tool library**'s default `OMNISTAT_TRACE_ENDPOINT_PORT` is 8001, which is wrong for our setup — they must match or every dispatch record gets a connection-refused. The sbatch wrapper auto-derives the port from the rendered config; do not hard-code 8001.
+
+### 13. Empty-string env passthrough breaks `os.getenv() is not None` checks (HydraGNN-class trap)
+
+HydraGNN's `train_validate_test.py` and `preprocess/load_data.py` detect optional knobs with the idiom
+
+```python
+if os.getenv("HYDRAGNN_NUM_WORKERS") is not None:
+    num_workers = int(os.environ["HYDRAGNN_NUM_WORKERS"])
+```
+
+This **fails** when the variable is set to the empty string: `getenv() is not None` returns `True`, and `int("")` raises `ValueError`. Our older `--env KEY="${KEY:-}"` passthrough pattern passes empty strings whenever the wrapper's caller didn't set the var, which masquerades as "set but empty" inside the container.
+
+**Symptom (probe job 7033 on this repo):** all 8 ranks crash on the second line of `create_dataloaders` with `ValueError: invalid literal for int() with base 10: ''` before any kernel ever launches.
+
+**Fix:** build a separate array of `--env` flags that are only appended when the value is non-empty:
+
+```bash
+OPT_ENVS=()
+for k in HYDRAGNN_NUM_WORKERS HYDRAGNN_PERSISTENT_WORKERS HYDRAGNN_MAX_NUM_BATCH; do
+  v="${!k:-}"
+  [[ -n "$v" ]] && OPT_ENVS+=( --env "${k}=${v}" )
+done
+
+srun ... apptainer exec ... "${OPT_ENVS[@]}" "$HG_SIF" bash "$RANK_SCRIPT"
+```
+
+Applied to both `sbatch_train_amd.sh` and `sbatch_train_perf_amd.sh` for HydraGNN. **General lesson** for any model recipe: never use `--env KEY="${KEY:-}"` for variables that the workload reads with `os.getenv(K) is not None` — either pass a numeric default (`--env KEY="${KEY:-0}"`) or use the conditional-array pattern above. Audit every `*/models/*/examples/*.sh` against this when introducing new optional env knobs.
