@@ -311,6 +311,18 @@ fi
 echo "--- Launching training: $TOTAL_RANKS ranks across $NODES nodes ---"
 echo ""
 
+# Optional env passthrough — HydraGNN's training code uses
+# `os.getenv(KEY) is not None` to detect these knobs, so an empty string
+# passes the check and then `int("")` blows up. Build a separate array of
+# `--env` flags that are only added when the var is set non-empty.
+OPT_ENVS=()
+for k in HYDRAGNN_MAX_NUM_BATCH HYDRAGNN_NUM_WORKERS HYDRAGNN_PERSISTENT_WORKERS; do
+  v="${!k:-}"
+  if [[ -n "$v" ]]; then
+    OPT_ENVS+=( --env "${k}=${v}" )
+  fi
+done
+
 srun --mpi=pmix \
     apptainer exec \
     --rocm \
@@ -328,11 +340,11 @@ srun --mpi=pmix \
     --env HG_PRECISION="$HG_PRECISION" \
     --env HG_BATCH_SIZE="${HG_BATCH_SIZE:-200}" \
     --env HG_NUM_EPOCH="${HG_NUM_EPOCH:-1}" \
-    --env HYDRAGNN_MAX_NUM_BATCH="${HYDRAGNN_MAX_NUM_BATCH:-}" \
     --env HYDRAGNN_VALTEST="${HYDRAGNN_VALTEST:-0}" \
     --env HYDRAGNN_TRACE_LEVEL="${HYDRAGNN_TRACE_LEVEL:-1}" \
     --env HG_EXAMPLE_DIR="$EXAMPLE_DIR" \
     --env HG_OUTPUT_DIR="$HG_OUTPUT_DIR" \
+    "${OPT_ENVS[@]}" \
     "${RCCL_MULTINODE_ENVS[@]}" \
     "$HG_SIF" \
     bash "$RANK_SCRIPT"
