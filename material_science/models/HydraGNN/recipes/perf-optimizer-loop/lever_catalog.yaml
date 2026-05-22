@@ -1,0 +1,182 @@
+# HydraGNN perf-optimizer-loop — lever catalog
+#
+# Each entry describes ONE atomic change the orchestrator may apply between
+# iterations. Levers are tried in `catalog_order` priority. After an iteration
+# the lever id is recorded in `foms.csv`; if it regressed the primary FOM
+# (epoch_time_s), the lever id is appended to `do_not_retry.json` and the
+# orchestrator restores the previous-best config.
+#
+# Schema:
+#   id              str  unique short id (used in foms.csv and do_not_retry.json)
+#   description     str  one-line human description
+#   catalog_order   int  smaller = tried earlier; baseline=0
+#   kind            str  env_only | rank_script_patch | diagnostic
+#   env_vars        map  vars to add/change to the sbatch submission (override)
+#   rank_script_patch  str (optional) — single line of python that wraps the model
+#                       construction in the rank script. Only used when kind=rank_script_patch.
+#                       Applied via HG_RANK_PRE_TRAIN_HOOK env var (orchestrator writes
+#                       a small python file and bind-mounts it; the rank script invokes
+#                       runpy on the hook before train_validate_test()).
+#   diagnostic_only bool — when true, FOM accept/reject is skipped; counts against budget
+#   expected_payoff str  qualitative ("high"|"medium"|"low") — used by lever_picker for ranking
+#   risk            str  ("low"|"medium"|"high") — used by lever_picker
+#   revert_method   str  ("drop_env"|"drop_hook") — how the orchestrator undoes the change
+#   citation        url  source for the recommendation (ROCm blog/doc, or "local")
+#   notes           str  any caveats the lever_picker should consider
+
+levers:
+
+  - id: baseline
+    description: "Baseline run with current R2 defaults (HG_BATCH_SIZE=400, fp64, persistent_workers=1, num_workers=8). Must be iter-0."
+    catalog_order: 0
+    kind: env_only
+    env_vars:
+      HG_BATCH_SIZE: "400"
+      HG_PRECISION: "fp64"
+      HYDRAGNN_NUM_WORKERS: "8"
+      HYDRAGNN_PERSISTENT_WORKERS: "1"
+      HG_NUM_EPOCH: "3"
+      HYDRAGNN_MAX_NUM_BATCH: "50"
+      PROFILE_TARGET_EPOCH: "2"
+    diagnostic_only: false
+    expected_payoff: "n/a (baseline)"
+    risk: "low"
+    revert_method: "drop_env"
+    citation: "/shared/aaji/models/HydraGNN/perf-runs/6985/combined_report.md"
+    notes: "Reference state. Establishes the FOM denominator for all subsequent iters."
+
+  - id: batch_800
+    description: "Double batch size: HG_BATCH_SIZE 400 -> 800. R2 #1 next-lever recommendation; VRAM headroom is 24/288 GB."
+    catalog_order: 1
+    kind: env_only
+    env_vars:
+      HG_BATCH_SIZE: "800"
+    diagnostic_only: false
+    expected_payoff: "high"
+    risk: "low"
+    revert_method: "drop_env"
+    citation: "/shared/aaji/models/HydraGNN/perf-runs/6985/combined_report.md"
+    notes: "R2 showed 200->400 gave +1.80x util and +2.41x MFMA. Diminishing returns expected; if delta < 30%, move on."
+
+  - id: torch_compile_e3nn
+    description: "Wrap the HydraGNN model in torch.compile(fullgraph=False, mode='max-autotune') to fuse aten::bmm launches in e3nn tensor-product layers. R2 #2 next-lever."
+    catalog_order: 2
+    kind: rank_script_patch
+    env_vars:
+      HG_TORCH_COMPILE: "1"
+      HG_TORCH_COMPILE_MODE: "max-autotune"
+      TORCHINDUCTOR_MAX_AUTOTUNE: "1"
+    rank_script_patch: |
+      # Applied via HG_RANK_PRE_TRAIN_HOOK. Monkeypatches the HydraGNN model
+      # right after it is built inside train_validate_test, before the first
+      # forward. We patch hydragnn.utils.model.print_model so that it is
+      # called once after model construction; rather than rely on that hook,
+      # we wrap hydragnn.train.train.train (the inner train loop) to compile
+      # the model on first call. Reason: hydragnn does not expose a
+      # post-build hook, but the inner train function receives the model
+      # as an arg and is called once per epoch.
+      import os
+      import hydragnn.train.train as _hg_train
+      _orig_train = _hg_train.train
+      _compiled = {"done": False}
+      import torch
+      def _patched_train(model, *a, **kw):
+          if not _compiled["done"] and os.environ.get("HG_TORCH_COMPILE", "0") == "1":
+              mode = os.environ.get("HG_TORCH_COMPILE_MODE", "max-autotune")
+              try:
+                  model = torch.compile(model, fullgraph=False, mode=mode)
+                  if int(os.environ.get("SLURM_PROCID", "0")) == 0:
+                      print(f"[hg_hook] torch.compile applied (mode={mode})", flush=True)
+              except Exception as e:
+                  if int(os.environ.get("SLURM_PROCID", "0")) == 0:
+                      print(f"[hg_hook] torch.compile FAILED: {e}; falling back to eager", flush=True)
+              _compiled["done"] = True
+          return _orig_train(model, *a, **kw)
+      _hg_train.train = _patched_train
+    diagnostic_only: false
+    expected_payoff: "high"
+    risk: "medium"
+    revert_method: "drop_hook"
+    citation: "https://rocm.docs.amd.com/en/latest/how-to/tuning-guides/mi300x/workload.html"
+    notes: "If first-iter compile overhead dominates wall time, set HYDRAGNN_MAX_NUM_BATCH=80 next round to amortize. May trigger Triton autotune cache warmup that costs ~30-60s on iter-0 of compile."
+
+  - id: rccl_high_priority
+    description: "RCCL stream priority and HIP hardware queue count: TORCH_NCCL_HIGH_PRIORITY=1, GPU_MAX_HW_QUEUES=2. Improves compute<->RCCL overlap."
+    catalog_order: 3
+    kind: env_only
+    env_vars:
+      TORCH_NCCL_HIGH_PRIORITY: "1"
+      GPU_MAX_HW_QUEUES: "2"
+    diagnostic_only: false
+    expected_payoff: "medium"
+    risk: "low"
+    revert_method: "drop_env"
+    citation: "https://rocm.docs.amd.com/en/latest/how-to/tuning-guides/mi300x/workload.html"
+    notes: "R2 already showed exposed NCCL was only 3% of fused-step wall; expected payoff at N=2 is small. Pick after compute-side levers (batch_800, torch_compile) are exhausted."
+
+  - id: tunable_op
+    description: "Enable PyTorch TunableOp to pick fastest hipBLASLt GEMM kernels per shape: PYTORCH_TUNABLEOP_ENABLED=1, PYTORCH_TUNABLEOP_TUNING=1."
+    catalog_order: 4
+    kind: env_only
+    env_vars:
+      PYTORCH_TUNABLEOP_ENABLED: "1"
+      PYTORCH_TUNABLEOP_TUNING: "1"
+      PYTORCH_TUNABLEOP_VERBOSE: "1"
+    diagnostic_only: false
+    expected_payoff: "medium"
+    risk: "low"
+    revert_method: "drop_env"
+    citation: "https://rocm.docs.amd.com/en/latest/how-to/tuning-guides/mi300x/workload.html"
+    notes: "First iter with TunableOp on will have measurable tuning overhead — interpret epoch_time delta cautiously; rerun if first epoch is clearly polluted by tuning."
+
+  - id: num_workers_12
+    description: "DataLoader: HYDRAGNN_NUM_WORKERS 8 -> 12 (persistent_workers already on). Picks at headroom if R2 dataloader bursts persist."
+    catalog_order: 5
+    kind: env_only
+    env_vars:
+      HYDRAGNN_NUM_WORKERS: "12"
+    diagnostic_only: false
+    expected_payoff: "low"
+    risk: "low"
+    revert_method: "drop_env"
+    citation: "local"
+    notes: "R2 reported dataloader was non-bottleneck in steady-state windows; expected payoff is small. Only pick when other levers exhausted."
+
+  - id: nccl_minchannels
+    description: "NCCL_MIN_NCHANNELS=112: forces more channels for collective dispatch, helps when message size is moderate (HydraGNN allreduces are 11.3 MB)."
+    catalog_order: 6
+    kind: env_only
+    env_vars:
+      NCCL_MIN_NCHANNELS: "112"
+    diagnostic_only: false
+    expected_payoff: "low"
+    risk: "low"
+    revert_method: "drop_env"
+    citation: "https://rocm.docs.amd.com/en/docs-7.0.1/how-to/rocm-for-ai/system-setup/multi-node-setup.html"
+    notes: "Mostly relevant at N >= 8 nodes. Low priority for the 2-node loop; included for completeness."
+
+  - id: precision_fp32
+    description: "HG_PRECISION fp64 -> fp32. gfx950 fp32 MFMA peak (~157 TFLOP/s) is ~2x fp64 (~78.6 TFLOP/s). Numerical floor for MACE-style equivariance."
+    catalog_order: 7
+    kind: env_only
+    env_vars:
+      HG_PRECISION: "fp32"
+    diagnostic_only: false
+    expected_payoff: "medium"
+    risk: "medium"
+    revert_method: "drop_env"
+    citation: "local + gfx950 spec sheet"
+    notes: "If the run is still dispatch-bound (mean util < 20%), fp32 wont move the needle much; orchestrator should ONLY pick this lever when fom_extractor reports the most recent best-iter is compute-bound (mfma_tflops > 30% of fp64 peak in best 10-s burst). bf16 is INTENTIONALLY EXCLUDED from this catalog: it breaks equivariance for MACE-class features."
+
+  - id: kernel_trace_diag_only
+    description: "DIAGNOSTIC: enable OMNISTAT_KERNEL_TRACE=1 for ONE iteration to capture per-kernel-name dispatch counts/durations. Fires only when the 1-s TraceLens<->Omnistat correlation cannot attribute the dominant kernel."
+    catalog_order: 8
+    kind: diagnostic
+    env_vars:
+      OMNISTAT_KERNEL_TRACE: "1"
+    diagnostic_only: true
+    expected_payoff: "n/a (diagnostic)"
+    risk: "medium"
+    revert_method: "drop_env"
+    citation: "../../../../../.cursor/skills/ai4science-studio/SKILL.md#12-three-rocprofiler-sdk-surfaces-pick-the-right-one"
+    notes: "Costs ~1000x VictoriaMetrics cardinality vs default. Use only when lever_picker decides per-kernel attribution is needed AND the kernel_correlation.csv from fom_extractor is too coarse. At most 1 of 5 iters."

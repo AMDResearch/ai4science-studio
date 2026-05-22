@@ -345,6 +345,24 @@ if avg_nn > 0:
         self.avg_num_neighbors = avg_nn
     adm.AdiosMultiDataset.__init__ = _patched_init
 
+# Optional pre-train hook used by the perf-optimizer-loop recipe to apply a
+# rank_script_patch lever (e.g. torch.compile wrapping). The orchestrator writes
+# a small python file into the loop dir and exports HG_RANK_PRE_TRAIN_HOOK to
+# its absolute path; the hook executes in this rank's interpreter BEFORE
+# train_validate_test() runs, so it can monkey-patch hydragnn modules.
+# Hook is expected to be small + idempotent; errors are logged on rank 0 but
+# never abort the training (so a hook bug doesn't waste a whole 2-node sbatch).
+_hook = os.environ.get('HG_RANK_PRE_TRAIN_HOOK', '')
+if _hook and os.path.isfile(_hook):
+    if os.environ.get('SLURM_PROCID', '0') == '0':
+        print(f'[rank_hook] executing pre-train hook: {_hook}', flush=True)
+    try:
+        with open(_hook) as _hf:
+            exec(_hf.read(), {'__name__': '__hg_rank_hook__'})
+    except Exception as _e:
+        if os.environ.get('SLURM_PROCID', '0') == '0':
+            print(f'[rank_hook] FAILED: {type(_e).__name__}: {_e}', flush=True)
+
 batch_size = int(os.environ.get('HG_BATCH_SIZE', '0') or 200)
 max_num_batch = int(os.environ.get('HYDRAGNN_MAX_NUM_BATCH', '0'))
 num_samples_val = max_num_batch * batch_size if max_num_batch > 0 else 0
@@ -449,14 +467,45 @@ fi
 # var, so an empty string passes the check and then `int("")` blows up.
 # Building a separate array keeps `apptainer exec` from receiving stale
 # `--env KEY=` flags. (See SKILL §11; observed on probe job 7033.)
+#
+# The same conditional-forward pattern applies to lever knobs from the
+# perf-optimizer-loop recipe (HG_TORCH_COMPILE, TORCH_NCCL_HIGH_PRIORITY,
+# PYTORCH_TUNABLEOP_ENABLED, etc.) — most of these are read via plain
+# `os.environ.get(K, default)` so an empty string would override the default
+# back to "" rather than the desired default. Forward only when non-empty.
 # ---------------------------------------------------------------------------
 OPT_ENVS=()
-for k in HYDRAGNN_NUM_WORKERS HYDRAGNN_PERSISTENT_WORKERS HYDRAGNN_MAX_NUM_BATCH; do
+for k in \
+    HYDRAGNN_NUM_WORKERS HYDRAGNN_PERSISTENT_WORKERS HYDRAGNN_MAX_NUM_BATCH \
+    HG_TORCH_COMPILE HG_TORCH_COMPILE_MODE TORCHINDUCTOR_MAX_AUTOTUNE \
+    TORCH_NCCL_HIGH_PRIORITY GPU_MAX_HW_QUEUES \
+    PYTORCH_TUNABLEOP_ENABLED PYTORCH_TUNABLEOP_TUNING PYTORCH_TUNABLEOP_VERBOSE \
+    NCCL_MIN_NCHANNELS; do
   v="${!k:-}"
   if [[ -n "$v" ]]; then
     OPT_ENVS+=( --env "${k}=${v}" )
   fi
 done
+
+# ---------------------------------------------------------------------------
+# Optional pre-train hook (perf-optimizer-loop rank_script_patch lever).
+# When HG_RANK_PRE_TRAIN_HOOK points at a host-side .py file, bind-mount its
+# parent dir read-only and forward the env var. The rank script's main
+# python -c block sources this file before train_validate_test().
+# ---------------------------------------------------------------------------
+HOOK_BIND_ENVS=()
+if [[ -n "${HG_RANK_PRE_TRAIN_HOOK:-}" ]]; then
+  if [[ -f "$HG_RANK_PRE_TRAIN_HOOK" ]]; then
+    _HOOK_DIR=$(cd "$(dirname "$HG_RANK_PRE_TRAIN_HOOK")" && pwd)
+    HOOK_BIND_ENVS=(
+      --bind "${_HOOK_DIR}:${_HOOK_DIR}:ro"
+      --env HG_RANK_PRE_TRAIN_HOOK="$HG_RANK_PRE_TRAIN_HOOK"
+    )
+    echo "  PreTrainHook : $HG_RANK_PRE_TRAIN_HOOK (bind-mounted ${_HOOK_DIR})"
+  else
+    echo "WARN: HG_RANK_PRE_TRAIN_HOOK=$HG_RANK_PRE_TRAIN_HOOK is set but file not found; continuing without hook" >&2
+  fi
+fi
 
 # ---------------------------------------------------------------------------
 # Launch distributed training via srun + apptainer
@@ -489,6 +538,7 @@ srun --mpi=pmix \
     --env HG_REPO_DIR="$HG_REPO_DIR" \
     --env HG_CONFIG_OVERRIDE="$HG_CONFIG_OVERRIDE" \
     "${OPT_ENVS[@]}" \
+    "${HOOK_BIND_ENVS[@]}" \
     --env PROFILE_RANK0_ONLY=1 \
     "${RCCL_MULTINODE_ENVS[@]}" \
     "$HG_SIF" \

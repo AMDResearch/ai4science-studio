@@ -272,6 +272,73 @@ def plot_convergence(records: list[dict], plot_path: str, mode: str = "slurm"):
     print(f"Plot saved to {plot_path}")
 
 
+def aggregate_foms_from_records(records: list[dict]) -> dict:
+    """Aggregate per-epoch records into the FOM JSON consumed by the
+    perf-optimizer-loop's fom_extractor subagent.
+
+    Returns a dict with:
+      num_epochs_completed, mean_epoch_time_excluding_epoch_0,
+      epoch_times_s, final_train_loss, final_val_loss.
+    Any field may be None if the underlying data is absent (e.g. HYDRAGNN_VALTEST=0
+    omits val/test losses; older HydraGNN may omit per-epoch wall times).
+    """
+    epoch_summary_records = [r for r in records if r.get("source") == "epoch_summary"]
+    tqdm_records = [r for r in records if r.get("source") == "tqdm_final"]
+
+    # Prefer epoch_summary wall_time_s only when it provides per-epoch values
+    # (>= 2 of them). HydraGNN's existing log format usually attaches the
+    # "train_validate_test" timer to only the FINAL epoch (cumulative whole-job
+    # wall), which is useless for per-epoch FOMs. In that case, fall through to
+    # the per-epoch tqdm_final records which always provide s/it × batches.
+    epoch_times: list[float] = []
+    summary_walls = [float(r["wall_time_s"]) for r in epoch_summary_records
+                     if r.get("wall_time_s") is not None]
+    if len(summary_walls) >= 2:
+        epoch_times = summary_walls
+    elif tqdm_records:
+        for r in tqdm_records:
+            rate = r.get("wall_time_s")
+            batch = r.get("batch")
+            if rate is not None and batch:
+                epoch_times.append(float(rate) * float(batch))
+    elif summary_walls:
+        epoch_times = summary_walls  # single epoch; better than nothing
+
+    if epoch_times:
+        if len(epoch_times) >= 2:
+            mean_excluding_epoch_0 = sum(epoch_times[1:]) / float(len(epoch_times) - 1)
+            warning = None
+        else:
+            mean_excluding_epoch_0 = epoch_times[0]
+            warning = "single epoch, epoch_0 not dropped"
+    else:
+        mean_excluding_epoch_0 = None
+        warning = "no epoch wall_time_s present in log"
+
+    final_train_loss = None
+    final_val_loss = None
+    if epoch_summary_records:
+        final_train_loss = epoch_summary_records[-1].get("train_loss")
+        final_val_loss = epoch_summary_records[-1].get("val_loss")
+
+    foms = {
+        "num_epochs_completed": len(epoch_summary_records) if epoch_summary_records else len(tqdm_records),
+        "mean_epoch_time_excluding_epoch_0": mean_excluding_epoch_0,
+        "epoch_times_s": epoch_times if epoch_times else None,
+        "final_train_loss": final_train_loss,
+        "final_val_loss": final_val_loss,
+        # Note: total_batches_observed is intentionally NOT derived from the log
+        # here. The existing HydraGNN entrypoint emits the "Max memory allocated"
+        # line ONCE per job on rank 0, not per batch. The fom_extractor subagent
+        # computes samples_processed from manifest values
+        # (num_epochs * max_num_batch * batch_size * ranks) which is the
+        # correct denominator for throughput / energy_per_sample FOMs.
+    }
+    if warning:
+        foms["warning"] = warning
+    return foms
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Extract convergence metrics from HydraGNN training runs."
@@ -293,6 +360,13 @@ def main():
     parser.add_argument(
         "--json", action="store_true",
         help="Also write a JSON summary alongside the CSV"
+    )
+    parser.add_argument(
+        "--json-foms", type=str, default=None,
+        help=("If set, write an aggregated FOM JSON to this path "
+              "(consumed by perf-optimizer-loop's fom_extractor subagent). "
+              "Includes num_epochs_completed, mean_epoch_time_excluding_epoch_0, "
+              "epoch_times_s, final_train_loss, final_val_loss."),
     )
 
     args = parser.parse_args()
@@ -333,6 +407,16 @@ def main():
 
     if args.plot:
         plot_convergence(records, args.plot, mode=mode)
+
+    if args.json_foms:
+        if mode != "slurm":
+            print("WARNING: --json-foms only supported with --log mode; skipping.",
+                  file=sys.stderr)
+        else:
+            foms = aggregate_foms_from_records(records)
+            with open(args.json_foms, "w") as f:
+                json.dump(foms, f, indent=2)
+            print(f"FOMs JSON written to {args.json_foms}")
 
     # Print summary
     if mode == "slurm" and records:
