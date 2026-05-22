@@ -724,3 +724,31 @@ srun ... apptainer exec ... "${OPT_ENVS[@]}" "$HG_SIF" bash "$RANK_SCRIPT"
 ```
 
 Applied to both `sbatch_train_amd.sh` and `sbatch_train_perf_amd.sh` for HydraGNN. **General lesson** for any model recipe: never use `--env KEY="${KEY:-}"` for variables that the workload reads with `os.getenv(K) is not None` — either pass a numeric default (`--env KEY="${KEY:-0}"`) or use the conditional-array pattern above. Audit every `*/models/*/examples/*.sh` against this when introducing new optional env knobs.
+
+### 14. Cluster-state checks before queueing build/probe jobs on Lux
+
+`sinfo -p lux,rad` is the cheapest way to know whether a build alloc will ever start. Lux and rad partitions get drained for slurm maintenance roughly every few weeks — the symptom is `salloc: job NNNN queued and waiting for resources` followed by `(Nodes required for job are DOWN, DRAINED or reserved for jobs in higher priority partitions)`. The drain reasons are visible via `sinfo -R`; treat any `slurm deploy maintenance`-class reason as "wait, don't queue". Cancel pending allocs with `scancel` when you discover the drain — they don't time out on their own.
+
+When the cluster is up but you only need a one-shot interactive build inside the SIF, **prefer `srun --no-shell`-equivalent direct exec over `salloc + apptainer exec`**:
+
+```bash
+srun -p lux -A vultr_lux -N 1 --time=00:15:00 --gpus-per-node=1 --cpus-per-task=8 \
+  --job-name=<descriptive> \
+  apptainer exec --rocm \
+    --bind /shared/aaji/tools:/shared/aaji/tools \
+    "$HG_SIF" \
+    bash -c '<your build commands>'
+```
+
+Why: `salloc` doesn't auto-bind `/shared/aaji/tools/` into the apptainer namespace (only the `omnistat-src` symlink, which is bind-mounted system-wide, makes it through). Direct `srun … apptainer exec --bind …` forces the bind explicitly and writes the build artifact to its persistent NFS path in one shot. Verified during the kernel-trace library build (job 7030).
+
+### 15. Dual-failure debug pattern — separate "tool wired correctly?" from "workload happy?"
+
+When a probe job fails, ask **two** questions before retrying with a bigger run:
+
+1. **Did the new tool/instrumentation initialize?** Look for its banner / startup log even on a crashed run — a healthy tool prints something before the workload imports anything heavy.
+2. **Did the workload reach the part the tool measures?** A crash at line 863 of `gfm_mlip_all_mpnn.py` (HydraGNN's `create_dataloaders`) is upstream of any GPU kernel launch, so any "0 dispatches captured" is consistent with both "tool broken" and "workload broken before kernels".
+
+**Concrete example from this session (kernel-trace probe job 7033):** all 8 ranks crashed in `int(os.environ["HYDRAGNN_NUM_WORKERS"])` (`ValueError: invalid literal for int() with base 10: ''`). The kernel-trace library *also* printed `[hostname][pid][omnistat] Trace summary: 0/0 processed records (0/0 successful flushes)` per rank — meaning the rocprofiler-sdk tool loaded, registered its callback, and only saw zero dispatches because the workload crashed first. Fixing the env-passthrough bug (§13) and re-running gave 22.5k records/rank — the kernel-trace wiring was correct all along.
+
+**Action:** when you see "0 records / 0 events / 0 metrics" after a failed probe, *don't* re-build the instrumentation. Read the workload error, fix that, and re-run before changing anything tool-side. This saved one full rebuild cycle here.
