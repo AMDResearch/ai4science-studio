@@ -29,6 +29,7 @@ Read catalog; drop:
 - `baseline` (iter-0 only; never picked again).
 - Any lever id in `do_not_retry.json`.
 - Any lever id already accepted in `foms.csv` (we don't re-pick already-applied levers; the new "best" already has them baked in).
+- Any lever with `status: blocked` in the catalog (these are permanently broken on this stack; the catalog entry exists only as a cautionary record — never pick them). Read each lever's `blocked_reason` and `blocked_evidence` fields when explaining the candidate set; this is how we avoid wasting iterations on known-dead levers like `torch_compile_e3nn` (double-backward + AOT Autograd) or `tunable_op_live` (GPU mem fault during live hipBLASLt tuning).
 - `kernel_trace_diag_only` — see special gate below.
 
 **Do NOT** drop levers that appear in `foms.csv` with `accepted=false` if the failure was infrastructural (e.g. `ITER_BROKEN_NODE`, `ITER_SBATCH_FAIL`, `ANALYZE_FAIL`). Those failures are not evidence about the lever — the orchestrator handles them by retry. Cross-check by reading STATUS.txt: if the most recent ITER_DECISION for a lever was preceded by `ITER_BROKEN_NODE` for the same jobid, treat the lever as untried.

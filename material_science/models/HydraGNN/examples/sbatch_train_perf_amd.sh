@@ -263,7 +263,7 @@ if [[ "$HG_SKIP_NODE_HEALTH_PROBE" != "1" ]]; then
       H=$(hostname)
       HM=$(test -d "/home/$USER" 2>/dev/null && echo OK || echo FAIL)
       SH=$(test -d "'"$AI4S_SHARED_DIR"'/$USER" 2>/dev/null || test -d "'"$AI4S_SHARED_DIR"'" 2>/dev/null && echo OK || echo FAIL)
-      SIF_CHECK=$(test -f "'"$SIF"'" 2>/dev/null && echo OK || echo FAIL)
+      SIF_CHECK=$(test -f "'"$HG_SIF"'" 2>/dev/null && echo OK || echo FAIL)
       echo "NODE_HEALTH $H home=$HM shared=$SH sif=$SIF_CHECK"
     ' 2>&1 || true
   echo ""

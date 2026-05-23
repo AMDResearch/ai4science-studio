@@ -59,46 +59,56 @@ levers:
     notes: "R2 showed 200->400 gave +1.80x util and +2.41x MFMA. Diminishing returns expected; if delta < 30%, move on."
 
   - id: torch_compile_e3nn
-    description: "Wrap the HydraGNN model in torch.compile(fullgraph=False, mode='max-autotune') to fuse aten::bmm launches in e3nn tensor-product layers. R2 #2 next-lever."
+    description: "BLOCKED — torch.compile is fundamentally incompatible with HydraGNN GFM-MLIP under PyTorch 2.10 / ROCm 7.2.2. Documented here so the lever_picker NEVER re-tries it."
     catalog_order: 2
     kind: rank_script_patch
+    status: "blocked"
+    blocked_reason: "AOT-Autograd-double-backward"
+    blocked_evidence: "compile-investigation-aa480554 (2026-05-23): 6 hooks across 3 hypotheses, all fail with same root cause."
     env_vars:
       HG_TORCH_COMPILE: "1"
-      HG_TORCH_COMPILE_MODE: "max-autotune"
-      TORCHINDUCTOR_MAX_AUTOTUNE: "1"
+      HG_TORCH_COMPILE_MODE: "reduce-overhead"
     rank_script_patch: |
-      # Applied via HG_RANK_PRE_TRAIN_HOOK. Monkeypatches the HydraGNN model
-      # right after it is built inside train_validate_test, before the first
-      # forward. We patch hydragnn.utils.model.print_model so that it is
-      # called once after model construction; rather than rely on that hook,
-      # we wrap hydragnn.train.train.train (the inner train loop) to compile
-      # the model on first call. Reason: hydragnn does not expose a
-      # post-build hook, but the inner train function receives the model
-      # as an arg and is called once per epoch.
-      import os
-      import hydragnn.train.train as _hg_train
-      _orig_train = _hg_train.train
-      _compiled = {"done": False}
-      import torch
-      def _patched_train(model, *a, **kw):
-          if not _compiled["done"] and os.environ.get("HG_TORCH_COMPILE", "0") == "1":
-              mode = os.environ.get("HG_TORCH_COMPILE_MODE", "max-autotune")
-              try:
-                  model = torch.compile(model, fullgraph=False, mode=mode)
-                  if int(os.environ.get("SLURM_PROCID", "0")) == 0:
-                      print(f"[hg_hook] torch.compile applied (mode={mode})", flush=True)
-              except Exception as e:
-                  if int(os.environ.get("SLURM_PROCID", "0")) == 0:
-                      print(f"[hg_hook] torch.compile FAILED: {e}; falling back to eager", flush=True)
-              _compiled["done"] = True
-          return _orig_train(model, *a, **kw)
-      _hg_train.train = _patched_train
+      # KNOWN-BROKEN — kept for reference only. Do NOT enable this lever.
+      #
+      # Root cause: HydraGNN's energy_force_loss (hydragnn/models/create.py:718)
+      # calls torch.autograd.grad(graph_energy_pred, data.pos, create_graph=True).
+      # With create_graph=True, training requires DOUBLE BACKWARD
+      # (loss.backward differentiates through forces, which themselves came
+      # from autograd.grad over the forward). PyTorch's AOT Autograd — used
+      # by every torch.compile mode (default, reduce-overhead, max-autotune) —
+      # pre-compiles the backward as a joint program and cannot itself be
+      # differentiated. Verbatim error (every rank):
+      #   RuntimeError: torch.compile with aot_autograd does not currently
+      #   support double backward
+      #     at torch/_functorch/_aot_autograd/runtime_wrappers.py:2356
+      #
+      # Strategies tested and rejected in compile-investigation-aa480554:
+      #   H1 — compile inner self.model (MACEStack) only → AOT boundary
+      #        severs data.pos lineage → "differentiated Tensors appears
+      #        not to have been used in the graph"
+      #   H2 — outer compile + dynamo.allow_in_graph(autograd.grad)
+      #        (the MACE upstream pattern) → allow_in_graph only prevents
+      #        dynamo from tracing THROUGH the call; FakeTensor symbolic
+      #        execution still runs autograd.grad and fails
+      #   H3 — compile only one RealAgnosticAttResidualInteractionBlock
+      #        submodule → still triggers AOT for that submodule's
+      #        backward → same double-backward error
+      #
+      # To unblock requires upstream HydraGNN source change: move
+      # energy_force_loss INTO EnhancedModelWrapper.forward so the
+      # autograd.grad call is inside the compiled forward, mirroring the
+      # canonical MACE/Allegro/NequIP pattern. ~30-50 LOC across
+      # hydragnn/models/create.py:622-758 and
+      # hydragnn/train/train_validate_test.py:725-735. Config-gated to
+      # preserve non-MLIP HydraGNN paths.
+      raise RuntimeError("torch_compile_e3nn is BLOCKED for HydraGNN MLIP; see lever_catalog.yaml")
     diagnostic_only: false
-    expected_payoff: "high"
-    risk: "medium"
+    expected_payoff: "none (blocked)"
+    risk: "blocked"
     revert_method: "drop_hook"
-    citation: "https://rocm.docs.amd.com/en/latest/how-to/tuning-guides/mi300x/workload.html"
-    notes: "If first-iter compile overhead dominates wall time, set HYDRAGNN_MAX_NUM_BATCH=80 next round to amortize. May trigger Triton autotune cache warmup that costs ~30-60s on iter-0 of compile."
+    citation: "/shared/aaji/models/HydraGNN/perf-runs/compile-investigation-aa480554-2a15-4e04-80dd-c58afc672a8d/INVESTIGATION_REPORT.md"
+    notes: "DO NOT pick this lever until HydraGNN upstream patches energy_force_loss into forward(). The lever_picker subagent must treat status:blocked as equivalent to do_not_retry."
 
   - id: rccl_high_priority
     description: "RCCL stream priority and HIP hardware queue count: TORCH_NCCL_HIGH_PRIORITY=1, GPU_MAX_HW_QUEUES=2. Improves compute<->RCCL overlap."
@@ -114,33 +124,75 @@ levers:
     citation: "https://rocm.docs.amd.com/en/latest/how-to/tuning-guides/mi300x/workload.html"
     notes: "R2 already showed exposed NCCL was only 3% of fused-step wall; expected payoff at N=2 is small. Pick after compute-side levers (batch_800, torch_compile) are exhausted."
 
-  - id: tunable_op
-    description: "Enable PyTorch TunableOp to pick fastest hipBLASLt GEMM kernels per shape: PYTORCH_TUNABLEOP_ENABLED=1, PYTORCH_TUNABLEOP_TUNING=1."
+  - id: tunable_op_live
+    description: "BLOCKED on this stack — TunableOp LIVE tuning mode (PYTORCH_TUNABLEOP_TUNING=1) causes GPU memory access faults on MI355X / ROCm 7.2.2 / PyTorch 2.10 with HydraGNN. Use tunable_op_warmup_then_use instead."
     catalog_order: 4
     kind: env_only
+    status: "blocked"
+    blocked_reason: "GPU-mem-access-fault-during-hipBLASLt-live-tuning"
+    blocked_evidence: "loop-c3e4df1c iter-3 (job 7188, 2026-05-22): all 16 GPUs reported 'Memory access fault by GPU node-N' during hipBLASLt kernel autotuning phase; job aborted with signal 6."
     env_vars:
       PYTORCH_TUNABLEOP_ENABLED: "1"
       PYTORCH_TUNABLEOP_TUNING: "1"
       PYTORCH_TUNABLEOP_VERBOSE: "1"
     diagnostic_only: false
+    expected_payoff: "none (blocked)"
+    risk: "blocked"
+    revert_method: "drop_env"
+    citation: "https://rocm.docs.amd.com/en/latest/how-to/tuning-guides/mi300x/workload.html"
+    notes: "Live tuning racing with training data is unsafe here. Pick tunable_op_warmup_then_use instead, which separates the tuning phase into a dedicated short job."
+
+  - id: tunable_op_warmup_then_use
+    description: "2-phase safe TunableOp pattern: a dedicated 1-batch warmup job generates tunableop_results_<N>.csv files, then the actual training job runs with PYTORCH_TUNABLEOP_ENABLED=1 (no _TUNING) to consume the pre-tuned results."
+    catalog_order: 4
+    kind: rank_script_patch
+    env_vars:
+      PYTORCH_TUNABLEOP_ENABLED: "1"
+      PYTORCH_TUNABLEOP_TUNING: "0"
+      PYTORCH_TUNABLEOP_FILENAME: "/shared/aaji/models/HydraGNN/tunableop_results/tunableop_results_%d.csv"
+    rank_script_patch: |
+      # 2-phase TunableOp pattern.
+      #
+      # Phase 1 (separate sbatch, NOT this lever) — orchestrator must run
+      # this BEFORE picking the lever:
+      #   1. mkdir -p /shared/aaji/models/HydraGNN/tunableop_results
+      #   2. sbatch with PYTORCH_TUNABLEOP_ENABLED=1 PYTORCH_TUNABLEOP_TUNING=1
+      #      PYTORCH_TUNABLEOP_FILENAME=/shared/.../tunableop_results_%d.csv
+      #      HG_NUM_EPOCH=1 HYDRAGNN_MAX_NUM_BATCH=5
+      #      (short job; expect failure but the per-rank CSVs are written
+      #       incrementally as each shape gets tuned, so partial results
+      #       are still usable)
+      #   3. verify CSVs exist: ls /shared/.../tunableop_results_*.csv
+      #
+      # Phase 2 (this lever) — the actual training run consumes the CSVs
+      # with TUNING=0; if a shape is missing, TunableOp falls back to
+      # the default kernel (no fault). No hook code needed beyond the
+      # env vars; this stanza is present so the orchestrator can record
+      # the 2-phase intent in iter-<N>-lever.json.
+      import os
+      if int(os.environ.get("SLURM_PROCID", "0")) == 0:
+          import glob
+          _n_csv = len(glob.glob("/shared/aaji/models/HydraGNN/tunableop_results/tunableop_results_*.csv"))
+          print(f"[tunable_op_warmup] consuming {_n_csv} pre-tuned CSV files", flush=True)
+    diagnostic_only: false
     expected_payoff: "medium"
     risk: "low"
     revert_method: "drop_env"
-    citation: "https://rocm.docs.amd.com/en/latest/how-to/tuning-guides/mi300x/workload.html"
-    notes: "First iter with TunableOp on will have measurable tuning overhead — interpret epoch_time delta cautiously; rerun if first epoch is clearly polluted by tuning."
+    citation: "https://rocm.docs.amd.com/en/latest/how-to/tuning-guides/mi300x/workload.html#tunableop"
+    notes: "If the warmup phase did NOT complete (no CSVs), pick a different lever. The orchestrator should add `setup: tunableop_warmup_sbatch` as a precondition before this lever is offered."
 
   - id: num_workers_12
-    description: "DataLoader: HYDRAGNN_NUM_WORKERS 8 -> 12 (persistent_workers already on). Picks at headroom if R2 dataloader bursts persist."
+    description: "DataLoader: HYDRAGNN_NUM_WORKERS 8 -> 12 (persistent_workers already on). Node-class-dependent — helped on a-nodes (-12.4% in loop 43b33ec1), regressed on b-nodes (+10.7% in loop c3e4df1c)."
     catalog_order: 5
     kind: env_only
     env_vars:
       HYDRAGNN_NUM_WORKERS: "12"
     diagnostic_only: false
-    expected_payoff: "low"
+    expected_payoff: "node-class-dependent"
     risk: "low"
     revert_method: "drop_env"
-    citation: "local"
-    notes: "R2 reported dataloader was non-bottleneck in steady-state windows; expected payoff is small. Only pick when other levers exhausted."
+    citation: "local (loop 43b33ec1 + loop c3e4df1c)"
+    notes: "lever_picker should only consider this lever on a-nodes. On b-nodes, num_workers=8 is the sweet spot (verified in iter-2 of loop c3e4df1c with epoch_time=75 s, the current best). If the kernel_correlation.csv from fom_extractor shows dataloader prefetch gaps > 10 ms on b-nodes, try num_workers=10 (not 12)."
 
   - id: nccl_minchannels
     description: "NCCL_MIN_NCHANNELS=112: forces more channels for collective dispatch, helps when message size is moderate (HydraGNN allreduces are 11.3 MB)."
