@@ -18,6 +18,12 @@ Add a new model to this repository following all repo conventions.
    - Task description
    - License (SPDX id or direct link)
    - Upstream code repo and paper links
+   - **Acknowledgements and citation section** (required — see template):
+     - Upstream repo URL
+     - Paper citation (author, title, venue, DOI or arXiv id)
+     - BibTeX or DOI-based "cite as" block copied from the upstream repo or model card
+     - ROCm blog URL and author names (AMD Silo AI) if a blog post exists
+     - Any named collaboration (e.g. AstraZeneca × AMD, ORNL × AMD)
 
 5. **Add recipes** under `<slug>/recipes/`. Use one subfolder per task (`recipes/inference/`, `recipes/finetune/`, etc.). Each recipe subfolder needs a `README.md`.
 
@@ -42,9 +48,11 @@ Add a new model to this repository following all repo conventions.
    - `healthcare/` (Healthcare & Life Sciences): add research/engineering-only disclaimer; no PHI; copy intended-use and limitations from the model card.
    - `physics_simulation/`: state physical domain (fluid dynamics, plasma, etc.), dataset format (HDF5, NetCDF), and HPC/multi-node requirements.
 
-9. **Do not commit** large checkpoints, datasets, `.env` files, or tokens — document how users obtain them instead.
+9. **Update `ACKNOWLEDGEMENTS.md`** at the repo root — add a per-model entry under the appropriate domain section following the existing format. Include paper citation, upstream repo, ROCm blog + author (if applicable), and any collaboration callout.
 
-10. **Git workflow** — always branch, never commit directly to `main`:
+10. **Do not commit** large checkpoints, datasets, `.env` files, or tokens — document how users obtain them instead.
+
+11. **Git workflow** — always branch, never commit directly to `main`:
     1. `git fetch origin && git checkout -b <your-username>/<model-slug> origin/main`
     2. Create all files, set scripts `chmod +x`.
     3. `git add <domain>/models/<slug>/` and commit.
