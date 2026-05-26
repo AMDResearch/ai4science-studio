@@ -46,7 +46,7 @@ levers:
     notes: "Reference state. Establishes the FOM denominator for all subsequent iters."
 
   - id: batch_800
-    description: "Double batch size: HG_BATCH_SIZE 400 -> 800. R2 #1 next-lever recommendation; VRAM headroom is 24/288 GB. NODE-CLASS-DEPENDENT: regresses on both a-nodes (+56.8%) and b-nodes (+87.2%) for HydraGNN GFM-MLIP MACE."
+    description: "Double batch size: HG_BATCH_SIZE 400 -> 800. R2 #1 next-lever recommendation; VRAM headroom is 24/288 GB. CONFIRMED REGRESSOR for HydraGNN GFM-MLIP MACE: regressed on both tested loops (+56.8%, +87.2%) — both runs were on lux-mi355x-b[1-2]."
     catalog_order: 1
     kind: env_only
     env_vars:
@@ -55,8 +55,8 @@ levers:
     expected_payoff: "none-for-MLIP-MACE"
     risk: "high"
     revert_method: "drop_env"
-    citation: "loop-43b33ec1 iter-2 (a-nodes, +56.76%) + loop-e3fac2af iter-1 (b-nodes, +87.2%)"
-    notes: "The lever_picker should NOT pick batch_800 for HydraGNN MLIP MACE on either node class. Cross-loop evidence shows the MACE equivariant message-passing stack saturates dispatch at batch=400 and doubling work-per-iter doubles wall-time without proportional GPU occupancy gain. The R2 recommendation was based on an earlier non-MLIP HydraGNN config — DOES NOT apply to gfm_mlip_all_mpnn.py. Keep entry as cautionary record. May still be worth re-trying ONLY if upstream HydraGNN fuses small e3nn kernels first."
+    citation: "loop-43b33ec1 iter-2 (b1+b2, +56.76%) + loop-e3fac2af iter-1 (b1+b2, +87.2%)"
+    notes: "The lever_picker should NOT pick batch_800 for HydraGNN MLIP MACE. The MACE equivariant message-passing stack saturates dispatch at batch=400 and doubling work-per-iter doubles wall-time without proportional GPU occupancy gain. The R2 recommendation was based on an earlier non-MLIP HydraGNN config — DOES NOT apply to gfm_mlip_all_mpnn.py. [REVISED 2026-05-26] previously described as 'node-class-dependent' but in fact both tested loops ran on b1+b2; the regression is workload-specific, not node-class. Keep entry as cautionary record. May still be worth re-trying ONLY if upstream HydraGNN fuses small e3nn kernels first."
 
   - id: torch_compile_e3nn
     description: "BLOCKED — torch.compile is fundamentally incompatible with HydraGNN GFM-MLIP under PyTorch 2.10 / ROCm 7.2.2. Documented here so the lever_picker NEVER re-tries it."
@@ -166,7 +166,7 @@ levers:
     risk: "low"
     revert_method: "drop_env"
     citation: "loop-c3e4df1c iter-2 / jobid 7187: -1.3% epoch_time (76.0->75.0 s) AND -8.4% energy/sample (1.781->1.631 J/sample). Mean power dropped 4885W->4552W."
-    notes: "ACCEPTED. The only lever across 3 loops that produced a real improvement. Now part of the baseline contract for HydraGNN GFM-MLIP on b-nodes. lever_picker should treat this as 'already applied' and skip it in candidate set (foms.csv has it accepted with delta_pct=-1.316)."
+    notes: "ACCEPTED. The only lever across 3 loops that produced a real improvement. Now part of the baseline contract for HydraGNN GFM-MLIP. [REVISED 2026-05-26] previously framed as 'on b-nodes' but the validating runs were specifically on lux-mi355x-b[1-2]; a-vs-b microbench (2026-05-26) shows no class difference, so this likely applies to a-nodes too — re-verify on a-pair before declaring class-portability. lever_picker should treat this as 'already applied' and skip it in candidate set (foms.csv has it accepted with delta_pct=-1.316)."
 
   - id: tunable_op_live
     description: "BLOCKED on this stack — TunableOp LIVE tuning mode (PYTORCH_TUNABLEOP_TUNING=1) causes GPU memory access faults on MI355X / ROCm 7.2.2 / PyTorch 2.10 with HydraGNN. Use tunable_op_warmup_then_use instead."
@@ -229,17 +229,17 @@ levers:
     notes: "If the warmup phase did NOT complete (no CSVs), pick a different lever. The orchestrator should add `setup: tunableop_warmup_sbatch` as a precondition before this lever is offered."
 
   - id: num_workers_12
-    description: "DataLoader: HYDRAGNN_NUM_WORKERS 8 -> 12 (persistent_workers already on). Node-class-dependent — helped on a-nodes (-12.4% in loop 43b33ec1), regressed on b-nodes (+10.7% in loop c3e4df1c)."
+    description: "DataLoader: HYDRAGNN_NUM_WORKERS 8 -> 12 (persistent_workers already on). HIGH RUN-TO-RUN VARIANCE: helped in loop-43b33ec1 (-12.4%) and regressed in loop-c3e4df1c (+10.7%) — both ran on lux-mi355x-b[1-2], so this is intra-pair variance, not class behavior. Treat as unreliable until replicated within ±5% on the same nodes."
     catalog_order: 5
     kind: env_only
     env_vars:
       HYDRAGNN_NUM_WORKERS: "12"
     diagnostic_only: false
-    expected_payoff: "node-class-dependent"
+    expected_payoff: "unreliable (variance > effect)"
     risk: "low"
     revert_method: "drop_env"
-    citation: "local (loop 43b33ec1 + loop c3e4df1c)"
-    notes: "lever_picker should only consider this lever on a-nodes. On b-nodes, num_workers=8 is the sweet spot (verified in iter-2 of loop c3e4df1c with epoch_time=75 s, the current best). If the kernel_correlation.csv from fom_extractor shows dataloader prefetch gaps > 10 ms on b-nodes, try num_workers=10 (not 12)."
+    citation: "local (loop 43b33ec1 + loop c3e4df1c, both on b1+b2)"
+    notes: "[REVISED 2026-05-26] previously believed to be node-class-dependent (a-nodes vs b-nodes), but both observations were on the same b1+b2 pair, so the result is run-to-run noise on a single pair. Recommended next step: re-run num_workers={8,10,12} three times each on the SAME node pair with the SAME warm/cold cache state. If the kernel_correlation.csv from fom_extractor shows dataloader prefetch gaps > 10 ms, that's a stronger signal than the epoch-time delta. Until then the lever_picker should rank this lever LOWER than levers with smaller variance."
 
   - id: nccl_minchannels
     description: "NCCL_MIN_NCHANNELS=112: forces more channels for collective dispatch, helps when message size is moderate. CONFIRMED REGRESSOR at N=2 (+10.3%)."
@@ -266,7 +266,7 @@ levers:
     risk: "low"
     revert_method: "drop_env"
     citation: "loop-e3fac2af iter-4 (job 7203): +1.3% epoch_time (78->79 s) confirmed in fp32 (precision-diagnostic logs show model_param_dtype=torch.float32, first_batch_float_dtype=torch.float32)"
-    notes: "RAN GENUINELY IN FP32 (verified by precision-diagnostic). fp32 MFMA peak on gfx950 is 2x fp64 peak, so a compute-bound workload would show ~50% speedup. Observed ~0% speedup proves HydraGNN GFM-MLIP MACE on b-nodes is dispatch-bound. lever_picker should NOT re-pick this lever unless the run is explicitly switching to a-nodes (where the compute/dispatch balance may differ). bf16 remains INTENTIONALLY EXCLUDED: breaks equivariance for MACE-class features. The fp32-vs-fp64 comparison is now the canonical low-cost dispatch-vs-compute discriminator for any future HydraGNN-class workload — see ai4science-perf-analysis/SKILL.md lesson #13."
+    notes: "RAN GENUINELY IN FP32 (verified by precision-diagnostic). fp32 MFMA peak on gfx950 is 2x fp64 peak, so a compute-bound workload would show ~50% speedup. Observed ~0% speedup proves HydraGNN GFM-MLIP MACE is dispatch-bound. [REVISED 2026-05-26] previously hedged with 'on b-nodes; may differ on a-nodes'; a-vs-b microbench (2026-05-26) confirmed identical HIP launch latency (3.7 us/launch) on every tested node of both classes, so the dispatch ceiling is class-portable — fp32 will not help on a-nodes either. lever_picker should NOT re-pick this lever. bf16 remains INTENTIONALLY EXCLUDED: breaks equivariance for MACE-class features. The fp32-vs-fp64 comparison is now the canonical low-cost dispatch-vs-compute discriminator for any future HydraGNN-class workload — see ai4science-perf-analysis/SKILL.md lesson #13."
 
   - id: kernel_trace_diag_only
     description: "DIAGNOSTIC: enable OMNISTAT_KERNEL_TRACE=1 for ONE iteration to capture per-kernel-name dispatch counts/durations. Fires only when the 1-s TraceLens<->Omnistat correlation cannot attribute the dominant kernel."
