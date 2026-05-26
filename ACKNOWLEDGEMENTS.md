@@ -105,7 +105,7 @@ AI4Science Studio curates recipes for open AI-for-science models. The models the
 
 ## AMD Silo AI
 
-ROCm-specific recipes for many models in this repository were authored by the [AMD Silo AI](https://silo.ai) team and published on the [ROCm Blogs](https://rocm.blogs.amd.com) platform. Contributors across these recipes include: Pauli Pihajoki, Luka Tsabadze, Rahul Biswas, Sopiko Kurdadze, Daniel Warna, Baiqiang Xia, Joaquin Rives Gambin, Vasumathi Neralla, David Björelind, and Rui Sampaio.
+ROCm-specific recipes for many models in this repository were authored by the [AMD Silo AI](https://www.amd.com/en/solutions/ai/silo-ai.html) team and published on the [ROCm Blogs](https://rocm.blogs.amd.com) platform. Contributors across these recipes include: Pauli Pihajoki, Luka Tsabadze, Rahul Biswas, Sopiko Kurdadze, Daniel Warna, Baiqiang Xia, Joaquin Rives Gambin, Vasumathi Neralla, David Björelind, and Rui Sampaio.
 
 ## AstraZeneca × AMD Collaboration
 
