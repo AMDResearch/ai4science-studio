@@ -135,6 +135,7 @@ Agents read these files to understand the repo:
 |------|---------|
 | [`models.yaml`](models.yaml) | Index of all 15 models across 5 domains |
 | `<model>/model.yaml` | Per-model manifest: HF id, license, recipes, env vars, hardware |
+| [`ACKNOWLEDGEMENTS.md`](ACKNOWLEDGEMENTS.md) | Per-model attribution: upstream authors, papers, ROCm blog credits |
 | `.cursor/skills/` | Agent skills for Cursor (run models, discover, domain conventions) |
 | `.cursor/rules/` | Contextual rules that fire when editing specific file types |
 | `.claude/commands/` | Slash commands for Claude Code |
@@ -172,7 +173,8 @@ If you prefer to do it manually:
 2. Copy [`_template/`](_template/) to your domain and model folder.
 3. Fill in the model README, create a `model.yaml`, and add at minimum one runnable recipe.
 4. Add the model to [`models.yaml`](models.yaml).
-5. Open a pull request.
+5. Add an entry to [`ACKNOWLEDGEMENTS.md`](ACKNOWLEDGEMENTS.md) crediting the upstream authors, paper, and any ROCm blog post.
+6. Open a pull request.
 
 See each domain's `models/README.md` for slug conventions and domain-specific notes.
 
@@ -182,3 +184,4 @@ See each domain's `models/README.md` for slug conventions and domain-specific no
 - Each model is under its **upstream license**; check the model card on Hugging Face before use.
 - **Healthcare & Life Sciences** content is for research and engineering only. Do not commit patient-identifiable data or PHI.
 - AMD/ROCm notes in individual recipes reflect what maintainers have tested—they do not replace upstream install matrices or official product documentation.
+- Full attribution for upstream authors, papers, and ROCm blog contributors is in [`ACKNOWLEDGEMENTS.md`](ACKNOWLEDGEMENTS.md).
