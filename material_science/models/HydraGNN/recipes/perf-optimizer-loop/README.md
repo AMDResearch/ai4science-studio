@@ -4,6 +4,8 @@ Multi-iteration optimizer that runs HydraGNN on 2 nodes × 8 × MI355X (gfx950),
 
 > Audience: AMD performance engineering. Output is a diagnosis + tunings, not a HydraGNN scientific claim.
 
+> **Picking up this work? Read [`HANDOFF.md`](HANDOFF.md) first.** It has the current state (best epoch time, blocked levers, next-work priority list, landmines to avoid, and pointers to all the runtime artefacts outside the repo).
+
 ## What this recipe adds on top of `perf-analysis/`
 
 | Concern | `perf-analysis/` | `perf-optimizer-loop/` |

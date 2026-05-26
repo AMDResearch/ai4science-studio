@@ -14,8 +14,10 @@ Default target: HydraGNN on Lux MI355X. The same pattern can extend to ORBIT-2 /
 ## Repository entry points
 
 - Recipe: [material_science/models/HydraGNN/recipes/perf-analysis/](../../../material_science/models/HydraGNN/recipes/perf-analysis/)
+- Iterative-loop recipe: [material_science/models/HydraGNN/recipes/perf-optimizer-loop/](../../../material_science/models/HydraGNN/recipes/perf-optimizer-loop/) — **see [`HANDOFF.md`](../../../material_science/models/HydraGNN/recipes/perf-optimizer-loop/HANDOFF.md) for current state, what works, what's blocked, and next-work priorities**
 - Sbatch wrapper: [material_science/models/HydraGNN/examples/sbatch_train_perf_amd.sh](../../../material_science/models/HydraGNN/examples/sbatch_train_perf_amd.sh)
-- Agent prompt files: `material_science/models/HydraGNN/recipes/perf-analysis/agents/*.md`
+- Reusable node-health probe: [material_science/models/HydraGNN/examples/microbench_node_health.sh](../../../material_science/models/HydraGNN/examples/microbench_node_health.sh)
+- Agent prompt files: `material_science/models/HydraGNN/recipes/perf-analysis/agents/*.md` and `material_science/models/HydraGNN/recipes/perf-optimizer-loop/agents/*.md`
 
 ## Orchestration loop (what the main agent does)
 
