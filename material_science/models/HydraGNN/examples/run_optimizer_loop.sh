@@ -17,7 +17,7 @@
 #   n_iters_budget  Max iterations (recommend 5).
 #
 # Abort:
-#   Graceful: touch /shared/aaji/models/HydraGNN/perf-runs/loop-<uuid>/STOP
+#   Graceful: touch $AI4S_SHARED_DIR/models/HydraGNN/perf-runs/loop-<uuid>/STOP
 #   Emergency: scancel <jobid> + tmux kill-session -t hg-loop
 
 set -euo pipefail
@@ -44,7 +44,7 @@ RECIPE_DIR="${REPO_ROOT}/material_science/models/HydraGNN/recipes/perf-optimizer
 ORCH_PROMPT="${RECIPE_DIR}/agents/orchestrator.md"
 
 # Loop-dir convention matches recipes/perf-optimizer-loop/README.md
-AI4S_SHARED_DIR="${AI4S_SHARED_DIR:-/shared/aaji}"
+: "${AI4S_SHARED_DIR:?AI4S_SHARED_DIR must be set (e.g. export AI4S_SHARED_DIR=/shared/\$USER)}"
 HG_BASE="${AI4S_SHARED_DIR}/models/HydraGNN"
 PERF_RUNS_DIR="${HG_BASE}/perf-runs"
 LOOP_DIR="${PERF_RUNS_DIR}/loop-${LOOP_UUID}"
@@ -72,10 +72,10 @@ PREFLIGHT_NOTES=()
 
 # 1. cluster up
 if command -v sinfo > /dev/null 2>&1; then
-  _IDLE_OR_MIX=$(sinfo -p lux,rad -h -o '%t' 2>/dev/null | grep -cE '^(idle|mix|alloc)$' || true)
+  _IDLE_OR_MIX=$(sinfo -h -o '%t' 2>/dev/null | grep -cE '^(idle|mix|alloc)$' || true)
   if [[ "${_IDLE_OR_MIX:-0}" -eq 0 ]]; then
     PREFLIGHT_FAIL_REASON="cluster_down"
-    PREFLIGHT_NOTES+=("sinfo reports 0 usable nodes on partitions lux,rad")
+    PREFLIGHT_NOTES+=("sinfo reports 0 usable nodes — check partition names in .cluster-config.yaml")
   fi
 else
   PREFLIGHT_FAIL_REASON="no_slurm"
@@ -93,8 +93,8 @@ fi
 
 # 3. tools present
 for _bin in \
-    /shared/aaji/tools/omnistat-pr271/bin/omnistat-usermode \
-    /shared/aaji/tools/victoriametrics/victoria-metrics-prod; do
+    "${AI4S_SHARED_DIR}/tools/omnistat-pr271/bin/omnistat-usermode" \
+    "${AI4S_SHARED_DIR}/tools/victoriametrics/victoria-metrics-prod"; do
   if [[ -z "$PREFLIGHT_FAIL_REASON" && ! -x "$_bin" ]]; then
     PREFLIGHT_FAIL_REASON="tool_missing"
     PREFLIGHT_NOTES+=("missing: $_bin (run the perf-analysis launcher subagent first to install)")
@@ -104,7 +104,7 @@ done
 # 4. SIF + overlay
 for _f in \
     "${HG_BASE}/overlays/hydragnn-overlay.img" \
-    "${AI4S_SHARED_DIR}/images/pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif"; do
+    "${AI4S_SHARED_DIR}/images/pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif"; do  # set AI4S_SHARED_DIR to your cluster's shared storage root
   if [[ -z "$PREFLIGHT_FAIL_REASON" && ! -f "$_f" ]]; then
     PREFLIGHT_FAIL_REASON="image_missing"
     PREFLIGHT_NOTES+=("missing: $_f")
@@ -151,7 +151,7 @@ if [[ -n "$PREFLIGHT_FAIL_REASON" ]]; then
 fi
 
 _DISK_FREE=$(df -h "$PERF_RUNS_DIR" | awk 'NR==2 {print $4}')
-_log_status "PREFLIGHT_OK cluster=lux disk_free=${_DISK_FREE} claude_cli=ok api_egress=ok orch_prompt=ok"
+_log_status "PREFLIGHT_OK disk_free=${_DISK_FREE} claude_cli=ok api_egress=ok orch_prompt=ok"
 
 if [[ $PREFLIGHT_ONLY -eq 1 ]]; then
   _log_status "PREFLIGHT_ONLY mode: exiting before invoking orchestrator"

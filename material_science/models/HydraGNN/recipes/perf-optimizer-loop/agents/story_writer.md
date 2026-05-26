@@ -27,7 +27,7 @@ once the loop has completed (or aborted). Reads only files; writes only
 ```markdown
 # HydraGNN iterative-sysopt-loop — <uuid>
 
-**Hardware:** 2 nodes × 8 GPUs MI355X (gfx950, vultr_lux).
+**Hardware:** 2 nodes × 8 GPUs MI355X (gfx950).
 **Image:** `pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0`.
 **Loop:** <N> iterations, started <ISO timestamp>, ended <ISO timestamp>, total wall <H>h<M>m.
 **Primary FOM:** `epoch_time_s` (mean over epoch >= 1, drops warm-up).
@@ -156,7 +156,7 @@ fig.tight_layout()
 fig.savefig(out_png_path, dpi=150, bbox_inches="tight")
 ```
 
-Use `matplotlib.use("Agg")` for headless rendering. Do NOT use seaborn (extra dep not in the omnistat venv). Use the same omnistat venv `/shared/aaji/tools/omnistat-pr271/bin/python` which already has matplotlib via TraceLens deps.
+Use `matplotlib.use("Agg")` for headless rendering. Do NOT use seaborn (extra dep not in the omnistat venv). Use the omnistat venv at `$AI4S_SHARED_DIR/tools/omnistat-pr271/bin/python` which already has matplotlib via TraceLens deps.
 
 ## Style rules
 

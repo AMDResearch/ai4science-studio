@@ -68,7 +68,7 @@ omnistat kernel-trace collector).
 
 ```bash
 set -euo pipefail
-. /shared/aaji/tools/omnistat-pr271/bin/activate
+. "${AI4S_SHARED_DIR}/tools/omnistat-pr271/bin/activate"
 PERF_RUN=$(jq -r .perf_run_dir <manifest>)
 JOBID=$(jq -r .jobid <manifest>)
 RUNTIME=$(jq -r .runtime_seconds <manifest>)
@@ -81,7 +81,7 @@ TRACE=$(jq -r '.trace_paths[0] // empty' <manifest>)
 Use the existing parser, extended with a `--json-foms` flag (see "parse_convergence.py extension" below):
 
 ```bash
-python3 /home/aaji/git/ai4science-studio/material_science/models/HydraGNN/examples/parse_convergence.py \
+python3 "$REPO_ROOT/material_science/models/HydraGNN/examples/parse_convergence.py" \
     --log "$PERF_RUN/hydragnn-train-$JOBID.out" \
     --output "$PERF_RUN/convergence.csv" \
     --json-foms "$PERF_RUN/_convergence_foms.json"
@@ -102,7 +102,7 @@ Start a local VictoriaMetrics if not already running:
 PORT=8428
 ss -lnt "sport = :$PORT" 2>/dev/null | grep -q LISTEN && PORT=8429
 if ! curl -sf "http://127.0.0.1:$PORT/api/v1/status/tsdb" > /dev/null 2>&1; then
-  nohup /shared/aaji/tools/victoriametrics/victoria-metrics-prod \
+  nohup "${AI4S_SHARED_DIR}/tools/victoriametrics/victoria-metrics-prod" \
       -storageDataPath="$PERF_RUN/omnistat-db" \
       -httpListenAddr=127.0.0.1:$PORT \
       -retentionPeriod=100y -fs.disableMmap \
@@ -234,7 +234,7 @@ The orchestrator handles `partial` by recording the FOM row with `null`s and a n
 
 ## Notes for the implementing agent
 
-- This subagent runs on the login node, after omnistat_analyst has started VictoriaMetrics on this perf-run. If VM isn't already up, start a second instance on a different port — the omnistat datadir is read-only friendly under VM.
+- This subagent runs on the login node, after omnistat_analyst has started VictoriaMetrics on this perf-run. If VM isn't already up, start a second instance on a different port — the omnistat datadir is read-only friendly under VM. Requires `AI4S_SHARED_DIR` and `REPO_ROOT` to be set.
 - Do NOT call `omnistat-inspect`; that's the analyst's job. We go straight to PromQL here because we need finer-grained queries than what `omnistat-inspect` exposes.
 - Read at most: manifest.json, hydragnn-train-<jobid>.out, the rank-0 trace, omnistat-db (via VM). Cap trace read at 4 GB.
 - Write at most: foms.json, kernel_correlation.csv, vm_for_foms.{log,pid}.

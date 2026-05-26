@@ -8,21 +8,20 @@
 #   1. Wraps srun with omnistat-usermode --start/--stopexporters/--stopserver.
 #   2. Generates a per-job copy of gfm_mlip.json with a "Profile" block injected
 #      so HydraGNN's built-in torch.profiler captures rank-0 of node-0 only.
-#   3. Hard-codes the lux partition / vultr_lux account so this script works
-#      out-of-the-box on Lux. Override via SBATCH_PARTITION/SBATCH_ACCOUNT if
-#      submitting to a different cluster.
+#   3. Defaults to a cluster partition/account that can be overridden via
+#      SBATCH_PARTITION/SBATCH_ACCOUNT env vars for your cluster.
 #   4. Defaults are tuned for a quick perf run: --nodes=2, NUM_EPOCH=2,
 #      MAX_NUM_BATCH=30, time=00:30:00 — enough for the wait=5/warmup=3/active=3
 #      profiler schedule plus a clean epoch 0 for warm caches.
 #
 # Quick start:
-#   export AI4S_SHARED_DIR=/shared/aaji
+#   export AI4S_SHARED_DIR=/shared/$USER
 #   sbatch material_science/models/HydraGNN/examples/sbatch_train_perf_amd.sh
 #
 # Required:
 #   AI4S_SHARED_DIR — shared base path
-#   /shared/aaji/tools/omnistat-pr271/    (created by the launcher subagent)
-#   /shared/aaji/tools/victoriametrics/   (created by the launcher subagent)
+#   $AI4S_SHARED_DIR/tools/omnistat-pr271/    (created by the launcher subagent)
+#   $AI4S_SHARED_DIR/tools/victoriametrics/   (created by the launcher subagent)
 #
 # Optional env-var overrides (with defaults):
 #   HG_NUM_EPOCH=2
@@ -33,8 +32,8 @@
 #   OMNISTAT_USERMODE_INTERVAL=1   # seconds
 
 #SBATCH --job-name=hydragnn-perf
-#SBATCH --partition=lux
-#SBATCH --account=vultr_lux
+#SBATCH --partition=gpu
+#SBATCH --account=default
 #SBATCH --nodes=2
 #SBATCH --ntasks-per-node=8
 #SBATCH --gpus-per-node=8
@@ -71,7 +70,7 @@ HG_REPO_DIR="${HG_REPO_DIR:-${HG_BASE}/code/HydraGNN}"
 HYDRAGNN_MAX_NUM_BATCH="${HYDRAGNN_MAX_NUM_BATCH:-30}"
 PROFILE_TARGET_EPOCH="${PROFILE_TARGET_EPOCH:-1}"
 
-OMNISTAT_VENV="${OMNISTAT_VENV:-/shared/aaji/tools/omnistat-pr271}"
+OMNISTAT_VENV="${OMNISTAT_VENV:-${AI4S_SHARED_DIR}/tools/omnistat-pr271}"
 # Read the omnistat config from the in-repo recipe (single source of truth).
 # Override with OMNISTAT_TEMPLATE=/path/to/file if you need a custom probe config.
 # A staged copy under ${HG_BASE}/perf-runs/ is intentionally NOT used as the
@@ -87,7 +86,7 @@ OMNISTAT_USERMODE_INTERVAL="${OMNISTAT_USERMODE_INTERVAL:-1}"
 # See material_science/models/HydraGNN/recipes/perf-analysis/agents/launcher.md
 # for how to build libomnistat_trace.so on a compute node.
 OMNISTAT_KERNEL_TRACE="${OMNISTAT_KERNEL_TRACE:-0}"
-OMNISTAT_TRACE_LIB="${OMNISTAT_TRACE_LIB:-/shared/aaji/tools/omnistat-src/build-trace/libomnistat_trace.so}"
+OMNISTAT_TRACE_LIB="${OMNISTAT_TRACE_LIB:-${AI4S_SHARED_DIR}/tools/omnistat-src/build-trace/libomnistat_trace.so}"
 # IMPORTANT: the kernel-trace collector registers /kernel_trace on the SAME
 # Flask app as the other omnistat endpoints, so the tool library must POST to
 # the [omnistat.collectors] `port` (8101 here), NOT the library's own default
@@ -173,9 +172,9 @@ if [[ "$OMNISTAT_KERNEL_TRACE" == "1" ]]; then
     echo "ERROR: OMNISTAT_KERNEL_TRACE=1 but tool library not found:" >&2
     echo "       $OMNISTAT_TRACE_LIB" >&2
     echo "       Build it on a compute node:" >&2
-    echo "         salloc -p lux -A vultr_lux -N 1 --time=00:15:00 --gpus-per-node=1 \\" >&2
+    echo "         salloc -p <partition> -A <account> -N 1 --time=00:15:00 --gpus-per-node=1 \\" >&2
     echo "           apptainer exec --rocm \"\$HG_SIF\" bash -c '" >&2
-    echo "             cd /shared/aaji/tools/omnistat-src && \\" >&2
+    echo "             cd \$AI4S_SHARED_DIR/tools/omnistat-src && \\" >&2
     echo "             cmake -S rocprofiler-sdk/ -B build-trace/ -DBUILD_KERNEL_TRACE_LIB=ON && \\" >&2
     echo "             cmake --build build-trace/ -j 8'" >&2
     exit 2

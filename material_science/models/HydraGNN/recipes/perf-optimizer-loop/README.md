@@ -51,10 +51,10 @@ flowchart TD
 ## Quick start (overnight unattended via Claude Code CLI in tmux)
 
 ```bash
-ssh aaji@rad-vultr-login
+ssh <login-node>
 export ANTHROPIC_API_KEY=...                    # user sets manually; never committed
-cd /home/aaji/git/ai4science-studio
-git checkout aaji/perf-optimizer-loop-hydragnn
+export AI4S_SHARED_DIR=<your-shared-storage-root>
+cd <repo-root>
 tmux new -s hg-loop
 bash material_science/models/HydraGNN/examples/run_optimizer_loop.sh $(uuidgen) 5
 # Ctrl-b d to detach. tmux session lives until login-node reboot.
@@ -63,14 +63,14 @@ bash material_science/models/HydraGNN/examples/run_optimizer_loop.sh $(uuidgen) 
 Morning workflow:
 
 ```bash
-cat /shared/aaji/models/HydraGNN/perf-runs/loop-<uuid>/STATUS.txt | tail -50
-cat /shared/aaji/models/HydraGNN/perf-runs/loop-<uuid>/story.md
+cat $AI4S_SHARED_DIR/models/HydraGNN/perf-runs/loop-<uuid>/STATUS.txt | tail -50
+cat $AI4S_SHARED_DIR/models/HydraGNN/perf-runs/loop-<uuid>/story.md
 ```
 
 ## Artifact layout (per-loop)
 
 ```
-/shared/aaji/models/HydraGNN/perf-runs/
+$AI4S_SHARED_DIR/models/HydraGNN/perf-runs/
 ├── loop-<uuid>.json                  # registers loop id, baseline jobid, best jobid
 ├── loop-<uuid>/
 │   ├── STATUS.txt                    # append-only event log (driver writes after every step)
@@ -145,13 +145,13 @@ See [`lever_catalog.yaml`](lever_catalog.yaml) for the full machine-readable lis
 
 ## Abort controls
 
-- **Graceful:** `touch /shared/aaji/models/HydraGNN/perf-runs/loop-<uuid>/STOP`. Driver checks the flag (a) before every `sbatch`, (b) before every analyst phase, (c) before every iteration decision. Active SLURM jobs run to completion and get analyzed; no further iterations launch.
+- **Graceful:** `touch $AI4S_SHARED_DIR/models/HydraGNN/perf-runs/loop-<uuid>/STOP`. Driver checks the flag (a) before every `sbatch`, (b) before every analyst phase, (c) before every iteration decision. Active SLURM jobs run to completion and get analyzed; no further iterations launch.
 - **Emergency:** `scancel <jobid>` for the active job + `tmux kill-session -t hg-loop` (or `kill -INT <driver_pid>`). The driver traps SIGINT and writes `LOOP_ABORT reason=signal` to STATUS.txt before exiting.
 
 ## Disk budget
 
 - Per iteration footprint: ~135 MB (matches R2 shape: kineto trace 110-125 MB + TraceLens 8 MB + omnistat-db 1-3 MB + omnistat inspect ~200 KB).
-- 5-iter loop projected: ~0.7 GB. `/shared` has 26 TB free (18% used); not pressured.
+- 5-iter loop projected: ~0.7 GB. Check `df -h $AI4S_SHARED_DIR` before starting.
 - No per-loop quota enforced; orchestrator logs `du -sh loop-<uuid>/` after each iter to STATUS.txt for visibility.
 - `OMNISTAT_KERNEL_TRACE=1` raises VictoriaMetrics cardinality ~1000× (per [SKILL §12](../../../../../.cursor/skills/ai4science-studio/SKILL.md)). The `kernel_trace_diag_only` lever is gated `diagnostic_only=true` and only fires when the 1-s correlation falls short — at most 1 of 5 iterations.
 

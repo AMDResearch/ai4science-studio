@@ -10,13 +10,13 @@ on the login node, or directly inside a Cursor agent session).
 ## Inputs
 
 - Loop arguments (passed in the user message): `<loop-uuid>`, `<n_iters_budget>`.
-- Repo at `/home/aaji/git/ai4science-studio` on branch `aaji/perf-optimizer-loop-hydragnn`.
+- Repo root read from the calling shell's working directory or `REPO_ROOT` env var.
 - Cluster config at `.cluster-config.yaml`.
 - [`lever_catalog.yaml`](../lever_catalog.yaml) — single source of truth for allowed levers.
 
 ## Outputs
 
-Per loop, under `/shared/aaji/models/HydraGNN/perf-runs/loop-<uuid>/`:
+Per loop, under `$AI4S_SHARED_DIR/models/HydraGNN/perf-runs/loop-<uuid>/`:
 
 - `STATUS.txt` — append-only event log; one line per event (see schema below).
 - `foms.csv` — one row per iteration: `iter,jobid,lever_id,env_diff,accepted,epoch_time_s,throughput_samples_per_s,mfma_tflops,energy_J,mean_power_W,energy_per_sample_J,final_loss,primary_fom_delta_pct,du_loop_dir,notes`.
@@ -25,7 +25,7 @@ Per loop, under `/shared/aaji/models/HydraGNN/perf-runs/loop-<uuid>/`:
 - `story.md` — written by story_writer at end of loop.
 - `foms.png` — written by story_writer at end of loop.
 
-Per iteration, all artifacts already written by the existing `recipes/perf-analysis/` subagents land under `/shared/aaji/models/HydraGNN/perf-runs/<jobid>/` plus:
+Per iteration, all artifacts already written by the existing `recipes/perf-analysis/` subagents land under `$AI4S_SHARED_DIR/models/HydraGNN/perf-runs/<jobid>/` plus:
 
 - `foms.json` — written by fom_extractor.
 - `kernel_correlation.csv` — written by fom_extractor.
@@ -36,7 +36,7 @@ Per iteration, all artifacts already written by the existing `recipes/perf-analy
 2. **Exactly one lever per iteration.** Multi-variable changes break delta attribution.
 3. **Respect the STOP flag.** Check `loop-<uuid>/STOP` before every sbatch submission, before every analyst phase, and before every iteration decision. If present, write `LOOP_ABORT reason=stop_flag`, finish processing the currently-running iter if any, then exit 0.
 4. **Single source of truth for state is on disk.** `foms.csv`, `do_not_retry.json`, and STATUS.txt are the only state — no in-memory state survives a restart. The orchestrator must be able to resume mid-loop by reading these files.
-5. **Never modify files outside `/shared/aaji/models/HydraGNN/perf-runs/` and `/tmp/`.** No repo edits during the loop. (Repo edits to capture lessons happen AFTER the loop, by a separate pass.)
+5. **Never modify files outside `$AI4S_SHARED_DIR/models/HydraGNN/perf-runs/` and `/tmp/`.** No repo edits during the loop. (Repo edits to capture lessons happen AFTER the loop, by a separate pass.)
 6. **All subagent invocations write structured JSON to disk and end with `STATUS=ok|partial|fail`.** The orchestrator parses the final line; never inline-trusts chat content.
 
 ## Loop control parameters
@@ -87,10 +87,10 @@ Run these checks in sequence; abort with `PREFLIGHT_FAIL reason=<short>` on the 
 
 - `sinfo -p lux,rad -h` → if zero `IDLE` or `MIX` nodes, abort. Cluster may be in maintenance (see SKILL §14).
 - `df -h /shared | tail -1` → abort if `Use%` > 95.
-- `test -x /shared/aaji/tools/omnistat-pr271/bin/omnistat-usermode` → abort if missing.
-- `test -x /shared/aaji/tools/victoriametrics/victoria-metrics-prod` → abort if missing.
-- `test -f /shared/aaji/models/HydraGNN/overlays/hydragnn-overlay.img` → abort if missing.
-- `test -f /shared/aaji/images/pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif` → abort if missing.
+- `test -x $AI4S_SHARED_DIR/tools/omnistat-pr271/bin/omnistat-usermode` → abort if missing.
+- `test -x $AI4S_SHARED_DIR/tools/victoriametrics/victoria-metrics-prod` → abort if missing.
+- `test -f $AI4S_SHARED_DIR/models/HydraGNN/overlays/hydragnn-overlay.img` → abort if missing.
+- `test -f $AI4S_SHARED_DIR/images/pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif` → abort if missing.
 - If invoked via Claude Code CLI on the login node: `[[ -n "$ANTHROPIC_API_KEY" ]]` and `curl -fsS https://api.anthropic.com/v1/models > /dev/null` (5 s timeout) → abort if either fails.
 
 Write `PREFLIGHT_OK` line.
@@ -123,7 +123,7 @@ if [[ -s "loop-<uuid>/known_bad_nodes.txt" ]]; then
   EXCLUDE_ARG="--exclude=$(paste -sd, loop-<uuid>/known_bad_nodes.txt)"
 fi
 ( set -a; source "loop-<uuid>/iter-<N>-env.sh"; set +a; \
-  cd /home/aaji/git/ai4science-studio; \
+  cd "$REPO_ROOT"; \
   sbatch $EXCLUDE_ARG material_science/models/HydraGNN/examples/sbatch_train_perf_amd.sh )
 ```
 
@@ -145,7 +145,7 @@ Log `ITER_COMPLETE iter=<n> jobid=<jid> state=<s> runtime=<sec>`.
 6. If the **same** node appears in `known_bad_nodes.txt` 3 times across the loop without admin intervention, log `LOOP_ABORT reason=persistent_node_fault bad_nodes=<list>` and exit 2 — escalate to the human.
 7. After loop ends, the story_writer reads `known_bad_nodes.txt` and surfaces the list to the user as a Lessons entry, so the cluster admin can be notified.
 
-This handles the iter-1 case from loop-43b33ec1 correctly: only `lux-mi355x-a6` had broken mounts; `lux-mi355x-a1` in the same alloc was healthy. The orchestrator's job is to flag the specific bad node and route around it, not to penalize the lever or shrink the node pool by class.
+This handles the iter-1 case from one of our pilot loops correctly: only the specific failing node had broken mounts; a sibling node in the same alloc was healthy. The orchestrator's job is to flag the specific bad node and route around it, not to penalize the lever or shrink the node pool by class.
 
 **2f. STOP-flag gate.** Re-check before the analysis phase. If set, still analyze the just-completed iter (we paid for it), then exit gracefully.
 

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # microbench_node_health.sh
 #
-# Per-node hardware/firmware/health survey for AMD MI355X (gfx950) nodes on
-# Vultr Lux. Runs four micro-tests in ~30 wall-clock seconds:
+# Per-node hardware/firmware/health survey for AMD MI355X (gfx950) nodes.
+# Runs four micro-tests in ~30 wall-clock seconds:
 #   1. host inventory                  - CPU, NUMA, kernel, NICs, PCIe link, mounts, /tmp dd
 #   2. GPU + driver inventory          - rocminfo, rocm-smi (vbios/fw/topo), PCIe link state
 #   3. CPU dual-NUMA STREAM            - COPY/SCALE/ADD/TRIAD, 128 threads, NUMA-interleaved
@@ -24,7 +24,7 @@
 #         and one summary line of pass/fail to stdout.
 #
 # Env vars (all optional, with defaults):
-#   OUT_DIR            (default: /shared/$USER/microbench-node-health)
+#   OUT_DIR            (default: $AI4S_SHARED_DIR/microbench-node-health)
 #   HG_SIF             (default: $AI4S_SHARED_DIR/images/pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif)
 #   AI4S_SHARED_DIR    (default: /shared/$USER)
 #   STREAM_THRESHOLD_COPY_GBPS    (default: 200)    - dual-NUMA COPY pass floor
@@ -33,8 +33,8 @@
 #
 # SBATCH directives:
 #SBATCH --job-name=node-health
-#SBATCH --partition=lux
-#SBATCH --account=vultr_lux
+#SBATCH --partition=gpu
+#SBATCH --account=default
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=128
@@ -47,11 +47,11 @@
 set -u
 
 H=$(hostname -s)
-OUT_DIR="${OUT_DIR:-/shared/$USER/microbench-node-health}"
+OUT_DIR="${OUT_DIR:-${AI4S_SHARED_DIR:-/tmp}/microbench-node-health}"
 HOST_OUT="$OUT_DIR/$H"
 mkdir -p "$HOST_OUT"
 
-AI4S_SHARED_DIR="${AI4S_SHARED_DIR:-/shared/$USER}"
+AI4S_SHARED_DIR="${AI4S_SHARED_DIR:-/tmp}"  # set AI4S_SHARED_DIR to your cluster's shared storage root
 HG_SIF="${HG_SIF:-${AI4S_SHARED_DIR}/images/pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif}"
 STREAM_THRESHOLD_COPY_GBPS="${STREAM_THRESHOLD_COPY_GBPS:-200}"
 STREAM_THRESHOLD_TRIAD_GBPS="${STREAM_THRESHOLD_TRIAD_GBPS:-200}"
