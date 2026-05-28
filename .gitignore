@@ -45,6 +45,7 @@ secrets/
 
 # SLURM job output
 *-*.out
+*-slurm.err
 # SLURM job artifacts named foo.<jobid>.out (e.g. omnistat_failed_hosts.6851.out)
 *.[0-9][0-9][0-9][0-9].out
 

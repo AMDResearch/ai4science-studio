@@ -33,6 +33,7 @@ Match the user's request to a recipe in `model.yaml`:
 - "run inference" / "predict" / "generate" → look for `task: inference`
 - "train" / "fine-tune" / "pair-tune" → look for `task: train` or `task: finetune`
 - "ensemble" → look for `task: ensemble`
+- "omnihub" / "train-omnihub" → look for `task: train-omnihub` and use `.cursor/skills/ai4science-omnihub/SKILL.md`
 
 ## Step 3: Ask the user for required inputs
 

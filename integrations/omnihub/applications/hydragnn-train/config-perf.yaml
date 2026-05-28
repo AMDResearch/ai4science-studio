@@ -1,0 +1,11 @@
+entrypoint: applications/ai4science-hydragnn-train/train_wrapper.py
+
+# Perf-analysis variant: epoch-gated kineto on rank 0 (use with --perf in generate-job.sh)
+
+HydraGNN:
+  datasets: ANI1x,Alexandria
+  batch_size: 200
+  num_epoch: 2
+  precision: fp64
+  max_num_batch: 30
+  profile_target_epoch: 1

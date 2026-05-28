@@ -40,3 +40,11 @@ network:
   ib_hca: ""             # IB HCA device list for RCCL (discover: ibstat | grep 'CA ')
   rccl_anp_plugin: ""    # Path to librccl-anp.so on host (default: /opt/rocm/lib/librccl-anp.so)
   libionic_path: ""      # Path to libionic.so.1 on host (default: /usr/lib/x86_64-linux-gnu/libionic.so.1)
+
+# OmniHub integration (sibling repo — see integrations/omnihub/README.md)
+omnihub:
+  repo_dir: ""             # e.g. /home/$USER/git/omnihub
+  cluster: vultr           # maps to omnihub config/vultr.yaml on Lux
+  shared_dir: /shared/omnihub
+  results_dir: ""          # default: /shared/$USER/results/omnihub
+  rocm_version: "7.2.2"
