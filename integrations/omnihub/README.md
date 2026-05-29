@@ -37,9 +37,7 @@ $OMNIHUB_DIR/omnihub-index --results-dir /shared/$USER/results/omnihub --output 
 integrations/omnihub/
 ├── README.md                 # this file
 ├── sync-to-omnihub.sh        # rsync apps → $OMNIHUB_DIR/applications/
-├── render-cluster-config.sh  # validate .cluster-config vs vultr.yaml
 ├── generate-job.sh           # sync + omnihub-generate-job + HydraGNN apptainer patches
-├── omnistat-parity-check.sh  # compare /shared/omnihub vs omnistat-pr271
 └── applications/
     └── hydragnn-train/       # OmniHub app (synced into omnihub repo)
 ```

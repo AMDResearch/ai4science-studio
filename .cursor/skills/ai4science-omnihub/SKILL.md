@@ -13,12 +13,7 @@ Integrates this repo with a sibling [OmniHub](https://github.com/AMDResearch/omn
 2. Set `export OMNIHUB_DIR=/path/to/omnihub` and `export AI4S_SHARED_DIR=/shared/$USER` (or your site path).
 3. HydraGNN assets: SIF, overlay, datasets, code clone under `$AI4S_SHARED_DIR/models/HydraGNN/`.
 
-Validate cluster alignment:
-
-```bash
-./integrations/omnihub/render-cluster-config.sh
-./integrations/omnihub/omnistat-parity-check.sh
-```
+> **Omnistat note:** OmniHub's `/shared/omnihub/tools/omnistat` has no `omnistat-inspect`, so don't expect inspect JSON from OmniHub jobs — read `omnihub-process` output under `processed-data/` instead. For deep `omnistat-inspect`/PromQL workflows use the legacy `omnistat-pr271` path (see perf-analysis recipe).
 
 ## Workflow: HydraGNN train-omnihub
 
@@ -94,5 +89,5 @@ When working inside `$OMNIHUB_DIR`, also use:
 |-------|-----|
 | App config not found | Run `sync-to-omnihub.sh` first |
 | ROCm / overlay missing | Verify `HG_OVERLAY`, `HG_SIF`; check generate-job injected binds |
-| Omnistat empty | Confirm `/shared/omnihub/tools/omnistat/`; run parity check |
+| Omnistat empty | Confirm `/shared/omnihub/tools/omnistat/` exists and VictoriaMetrics binary is present |
 | TraceLens skipped | Install venv at `/shared/omnihub/tools/tracelens/venv` or set `TRACELENS_VENV` |
