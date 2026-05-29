@@ -11,7 +11,7 @@ Submits a 2-node HydraGNN training on Lux with PyTorch profiling and Omnistat us
 ## Outputs
 
 - `/shared/omnihub/tools/omnihub-inspect/` — Python venv with omnistat (PR #271 + main merged) and TraceLens.
-- `/shared/aaji/tools/victoriametrics/victoria-metrics-prod` — VictoriaMetrics binary.
+- `/shared/omnihub/tools/victoriametrics/victoria-metrics-prod` — VictoriaMetrics binary.
 - `/shared/aaji/models/HydraGNN/perf-runs/omnistat-lux.config` — Omnistat user-mode config.
 - `/shared/aaji/models/HydraGNN/perf-runs/<jobid>/manifest.json` — manifest schema below.
 - `/shared/aaji/models/HydraGNN/perf-runs/<jobid>/hydragnn-train-<jobid>.out` — symlinked from output dir.
@@ -57,7 +57,7 @@ Submits a 2-node HydraGNN training on Lux with PyTorch profiling and Omnistat us
 
 ```bash
 set -euo pipefail
-TOOLS=/shared/aaji/tools
+TOOLS=/shared/omnihub/tools
 mkdir -p "$TOOLS"
 
 # 1a. Omnistat: jorda/skills branch with origin/main merged in
@@ -122,7 +122,7 @@ if [[ "${OMNISTAT_KERNEL_TRACE:-0}" == "1" && ! -f "$TRACE_LIB" ]]; then
 fi
 ```
 
-The sbatch wrapper expects the `.so` at `/shared/aaji/tools/omnistat-src/build-trace/libomnistat_trace.so` by default; override with `OMNISTAT_TRACE_LIB=/path/to/lib.so`. See `ai4science-studio` SKILL §12 for when to enable kernel tracing vs the default device-counting collector.
+The sbatch wrapper expects the `.so` at `/shared/omnihub/tools/omnistat-src/build-trace/libomnistat_trace.so` by default; override with `OMNISTAT_TRACE_LIB=/path/to/lib.so`. See `ai4science-studio` SKILL §12 for when to enable kernel tracing vs the default device-counting collector.
 
 ### 2. Author the Omnistat user-mode config (once, in repo `perf-runs/`)
 

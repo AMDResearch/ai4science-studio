@@ -681,12 +681,12 @@ Omnistat exposes **two** independent rocprofiler-sdk integrations, and there's a
 salloc -p lux -A vultr_lux -N 1 --time=00:15:00 --gpus-per-node=1 \
   apptainer exec --rocm \
     /shared/aaji/images/pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif \
-    bash -c 'cd /shared/aaji/tools/omnistat-src && \
+    bash -c 'cd /shared/omnihub/tools/omnistat-src && \
       cmake -S rocprofiler-sdk/ -B build-trace/ -DBUILD_KERNEL_TRACE_LIB=ON && \
       cmake --build build-trace/ -j 8'
 ```
 
-Verify with `ls -la /shared/aaji/tools/omnistat-src/build-trace/libomnistat_trace.so` (~MB-class file, not the tiny 4 kB stub you get when CMake fails halfway).
+Verify with `ls -la /shared/omnihub/tools/omnistat-src/build-trace/libomnistat_trace.so` (~MB-class file, not the tiny 4 kB stub you get when CMake fails halfway).
 
 **Lux SIF build prerequisites (one-time gotchas):** the `pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif` ships **without** `cmake` and **without** libcurl headers (only the `.so.4` runtime). Both omnistat artifacts need cmake; the kernel-trace library additionally needs `<curl/curl.h>`. Working build recipe inside the SIF:
 
@@ -735,12 +735,12 @@ When the cluster is up but you only need a one-shot interactive build inside the
 srun -p lux -A vultr_lux -N 1 --time=00:15:00 --gpus-per-node=1 --cpus-per-task=8 \
   --job-name=<descriptive> \
   apptainer exec --rocm \
-    --bind /shared/aaji/tools:/shared/aaji/tools \
+    --bind /shared/omnihub/tools:/shared/omnihub/tools \
     "$HG_SIF" \
     bash -c '<your build commands>'
 ```
 
-Why: `salloc` doesn't auto-bind `/shared/aaji/tools/` into the apptainer namespace (only the `omnistat-src` symlink, which is bind-mounted system-wide, makes it through). Direct `srun … apptainer exec --bind …` forces the bind explicitly and writes the build artifact to its persistent NFS path in one shot. Verified during the kernel-trace library build (job 7030).
+Why: `salloc` doesn't auto-bind `/shared/omnihub/tools/` into the apptainer namespace. Direct `srun … apptainer exec --bind …` forces the bind explicitly and writes the build artifact to its persistent NFS path in one shot. Verified during the kernel-trace library build (job 7030).
 
 ### 15. Dual-failure debug pattern — separate "tool wired correctly?" from "workload happy?"
 
