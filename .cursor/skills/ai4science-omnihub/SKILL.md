@@ -62,15 +62,17 @@ sbatch -A vultr_lux /tmp/hydragnn-perf.slurm
 
 Legacy HydraGNN perf (`sbatch_train_perf_amd.sh` + `omnihub-inspect` + subagent claims) remains for deep PromQL/inspect workflows. See `material_science/models/HydraGNN/recipes/perf-analysis/README.md`.
 
-## Key paths (Lux / vultr)
+## Key paths
 
-| Resource | Path |
+Cluster-specific paths come from `.cluster-config.yaml` (`omnihub.shared_dir`, `omnihub.tools_dir`, `omnihub.results_dir`). Resolve them from there rather than assuming literals. The values below are the **Lux / vultr** defaults (`shared_dir: /shared/omnihub`, `tools_dir: /shared/omnihub/tools`).
+
+| Resource | Path (`<tools_dir>` = `omnihub.tools_dir`) |
 |----------|------|
-| OmniHub shared | `/shared/omnihub` |
-| Omnistat | `/shared/omnihub/tools/omnistat/` → use `--tools omnistat` |
-| Omnistat + PMC | `/shared/omnihub/tools/omnistat-rocprofiler/` → use `--tools omnistat-rocprofiler-pmc1` for hardware counters |
-| Omnistat inspect | `/shared/omnihub/tools/omnihub-inspect/` → has `omnistat-inspect` + TraceLens CLI (legacy deep-dive venv) |
-| Results | `/shared/$USER/results/omnihub/$SLURM_JOB_ID/` |
+| OmniHub shared | `omnihub.shared_dir` (Lux: `/shared/omnihub`) |
+| Omnistat | `<tools_dir>/omnistat/` → use `--tools omnistat` |
+| Omnistat + PMC | `<tools_dir>/omnistat-rocprofiler/` → use `--tools omnistat-rocprofiler-pmc1` for hardware counters |
+| Omnistat inspect | `<tools_dir>/omnihub-inspect/` → has `omnistat-inspect` + TraceLens CLI (legacy deep-dive venv) |
+| Results | `omnihub.results_dir` (Lux: `/shared/$USER/results/omnihub/$SLURM_JOB_ID/`) |
 | HydraGNN overlay | `$AI4S_SHARED_DIR/models/HydraGNN/overlays/hydragnn-overlay.img` |
 
 ## Runner

@@ -48,3 +48,9 @@ omnihub:
   shared_dir: /shared/omnihub
   results_dir: ""          # default: /shared/$USER/results/omnihub
   rocm_version: "7.2.2"
+  # Shared perf/telemetry tools. Cluster-specific — set per site, do not hardcode
+  # these into recipes/scripts. Default: <shared_dir>/tools.
+  tools_dir: ""            # default: /shared/omnihub/tools
+  #   <tools_dir>/omnistat              GPU telemetry, no PMC          (--tools omnistat)
+  #   <tools_dir>/omnistat-rocprofiler  adds rocprofiler PMC counters  (--tools omnistat-rocprofiler-pmc1)
+  #   <tools_dir>/omnihub-inspect       omnistat-inspect + TraceLens venv (legacy deep-dive)
