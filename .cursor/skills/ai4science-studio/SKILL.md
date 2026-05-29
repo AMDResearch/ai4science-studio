@@ -399,7 +399,7 @@ setup_ddp (hydragnn/utils/distributed/distributed.py:254)
 
 3. **Print the verify info on rank 0 from the launching shell only**, never from a python that imports mpi4py-bearing modules.
 
-This bit us once on the HydraGNN perf-analysis recipe (see git log on `aaji/perf-agents-hydragnn`). Watch for it whenever you add `python3 -c "..."` scaffolding around an `srun` that uses `--mpi=pmix`.
+This bit us once on the HydraGNN perf-analysis recipe. Watch for it whenever you add `python3 -c "..."` scaffolding around an `srun` that uses `--mpi=pmix`.
 
 ---
 
@@ -532,7 +532,7 @@ This **does not work** with stock omnistat-usermode because `omnistat.utils.read
 
 **Fix:** Use a `@JOB_DIR@`-style placeholder in the template and run `sed` from the sbatch wrapper at submit time:
 ```bash
-sed -e "s|@JOB_DIR@|${HG_OUTPUT_DIR}|g" omnistat-lux.config.template > $HG_OUTPUT_DIR/omnistat.config
+sed -e "s|@JOB_DIR@|${HG_OUTPUT_DIR}|g" omnistat.config.template > $HG_OUTPUT_DIR/omnistat.config
 ```
 
 ### 2. omnistat-usermode `/tmp/omni_rmsjobinfo` permission collision
@@ -543,15 +543,15 @@ If the cluster runs system-mode Omnistat as user `omnidc` (or any non-root, non-
 ```ini
 [omnistat.collectors.rms]
 job_detection_mode = file-based
-job_detection_file = /shared/aaji/.../omni_rmsjobinfo
-step_detection_file = /shared/aaji/.../omni_rmsjobinfo_step
+job_detection_file = $AI4S_SHARED_DIR/.../omni_rmsjobinfo
+step_detection_file = $AI4S_SHARED_DIR/.../omni_rmsjobinfo_step
 ```
 
 Path must be on a shared FS reachable by every compute node in the allocation (NFS/Lustre/etc.) because each node's `omnistat-rms-env` runs via `srun -N $NODES --ntasks-per-node=1` and writes to that path.
 
 ### 3. VictoriaMetrics needs `-fs.disableMmap` on the login node
 
-Lux login node `vm.max_map_count` is 1048576 (high), but the cgroup memory limit is 8 GB, and even the small (1.6 MB) per-job Omnistat DB cannot mmap successfully — VM panics with:
+A login node may have a high `vm.max_map_count` (e.g. 1048576) but a tight cgroup memory limit (e.g. 8 GB), and even the small (1.6 MB) per-job Omnistat DB cannot mmap successfully — VM panics with:
 ```
 FATAL: cannot mmap "/.../index.bin": cannot mmap file with size 4096 bytes; already memory mapped files: 0: no such device
 ```
@@ -600,7 +600,7 @@ This catches both tool bugs and analyst hallucinations. Refuted claims stay in `
 
 ### 8. Never read configs from a `/shared` "staged copy" — always from the in-repo template
 
-We hit this once: the omnistat config under `/shared/aaji/models/HydraGNN/perf-runs/omnistat-lux.config` was a stale copy of the in-repo `omnistat-lux.config.template`, with `enable_rocprofiler = False` left over from an early v1 decision. The in-repo template had since been updated to `enable_rocprofiler = True` with the `hbm_flops_f64` profile, but the staged copy was never refreshed, so two perf-analysis runs (jobs 6762 and 6840) silently collected zero hardware counters (no HBM bandwidth, no fp64 VALU/MFMA FLOPs). The TraceLens analytical roofline still ran fine, masking the gap until someone asked "where are the HBM counters?"
+We hit this once: the omnistat config under `$AI4S_SHARED_DIR/models/HydraGNN/perf-runs/omnistat.config` was a stale copy of the in-repo `omnistat.config.template`, with `enable_rocprofiler = False` left over from an early v1 decision. The in-repo template had since been updated to `enable_rocprofiler = True` with the `hbm_flops_f64` profile, but the staged copy was never refreshed, so two perf-analysis runs silently collected zero hardware counters (no HBM bandwidth, no fp64 VALU/MFMA FLOPs). The TraceLens analytical roofline still ran fine, masking the gap until someone asked "where are the HBM counters?"
 
 Two compounding mistakes:
 1. The sbatch script defaulted `OMNISTAT_TEMPLATE` to the `/shared` staged path, not the in-repo path.
@@ -637,7 +637,7 @@ ROCm rocprofiler-sdk on gfx950 returns
 ```
 create profile failed with error code 38: Request exceeds the capabilities of the hardware to collect
 ```
-when a single profile asks for more counters than fit in the per-block register file. Per-block limits are not documented uniformly; we determined empirically on `lux-mi355x-b1` (ROCm 7.2.2):
+when a single profile asks for more counters than fit in the per-block register file. Per-block limits are not documented uniformly; we determined empirically on MI355X (gfx950, ROCm 7.2.2):
 
 - **TCC (L2 cache) block**: **`FETCH_SIZE` AND `WRITE_SIZE` together fail.** Either one alone works (with up to 4 SQ_INSTS_VALU_*_F64 counters in the same profile).
 - **SQ (scalar/vector unit) block**: ≥4 SQ_INSTS_VALU_*_F64 counters in one profile work.
@@ -647,7 +647,7 @@ Always probe interactively first (1 node `salloc`, run `omnistat-monitor --confi
 
 ### 11. Omnistat `sampling_mode = periodic` only fires the first set in this build
 
-In `omnistat 1.12.0+git.65ea9ac` (PR #271 + main merged) on `lux-mi355x-b1` with rocprofiler-sdk freshly built, `sampling_mode = periodic` with two counter sets only fires the FIRST set. Every subsequent set returns identically zero across all cards and timestamps. Half the intended counter coverage is silently lost.
+In `omnistat 1.12.0+git.65ea9ac` (PR #271 + main merged) on MI355X (gfx950) with rocprofiler-sdk freshly built, `sampling_mode = periodic` with two counter sets only fires the FIRST set. Every subsequent set returns identically zero across all cards and timestamps. Half the intended counter coverage is silently lost.
 
 We surfaced this with the `[[FETCH+4×SQ_F64], [WRITE+4×SQ_F64]]` config: FETCH and MFMA_MOPS samples were healthy (~50% non-zero, ~7% non-zero respectively), but WRITE and FMA/ADD/MUL were uniformly zero. Workaround: use `sampling_mode = constant` and a single counter set that fits in the per-block hardware limits — for fp64 + HBM-read on gfx950 that's:
 ```ini
@@ -663,7 +663,7 @@ Omnistat exposes **two** independent rocprofiler-sdk integrations, and there's a
 
 | Surface | What you get | Cardinality / cost | Build artifact | Switch in our stack |
 |---|---|---|---|---|
-| **Device counting** (omnistat collector, `enable_rocprofiler=True`) | Whole-card hardware counters: FETCH_SIZE, fp64 VALU/MFMA, etc. Sampled at 1 Hz, scraped by the omnistat exporter. | One time-series per (card, counter). Constant-mode is essentially free. | `omnistat/rocprofiler_sdk_extension.cpython-*.so` (Python binding, built in-place from `rocprofiler-sdk/CMakeLists.txt` with `BUILD_KERNEL_TRACE_LIB=OFF`) | `enable_rocprofiler = True` in `omnistat-lux.config.template` (default). |
+| **Device counting** (omnistat collector, `enable_rocprofiler=True`) | Whole-card hardware counters: FETCH_SIZE, fp64 VALU/MFMA, etc. Sampled at 1 Hz, scraped by the omnistat exporter. | One time-series per (card, counter). Constant-mode is essentially free. | `omnistat/rocprofiler_sdk_extension.cpython-*.so` (Python binding, built in-place from `rocprofiler-sdk/CMakeLists.txt` with `BUILD_KERNEL_TRACE_LIB=OFF`) | `enable_rocprofiler = True` in `omnistat.config.template` (default). |
 | **Kernel tracing** (omnistat collector, `enable_kernel_trace=True`) | Per-kernel-name dispatch count and total duration on every card, every node. Aggregated in 1 s bins, POSTed via HTTP to the omnistat exporter. | One time-series per (card, kernel-name) — can be 1k+ unique kernel names per training step. Light overhead per dispatch (microseconds), but cardinality blows up VictoriaMetrics if left on for hours. | `build-trace/libomnistat_trace.so` (standalone C++ tool library, built from same CMake with `-DBUILD_KERNEL_TRACE_LIB=ON`) | `OMNISTAT_KERNEL_TRACE=1` env-gate in `sbatch_train_perf_amd.sh` — flips `enable_kernel_trace=True` in the rendered config and exports `ROCP_TOOL_LIBRARIES=<path-to-libomnistat_trace.so>` into the apptainer exec. |
 | **`rocprofv3` standalone trace** (no omnistat) | Full kernel + memcpy + HSA API trace on a single rank. JSON / Perfetto / CSV output you read with TraceLens or chrome://tracing. | One trace file per rank, multi-MB per second of training. Heaviest of the three. | None — uses `/opt/rocm/bin/rocprofv3` directly. | Wrap a single rank's command in `rocprofv3 --kernel-trace -o ./rank0_trace -- python ...`. We don't run this in our standard sbatch yet. |
 
@@ -678,9 +678,9 @@ Omnistat exposes **two** independent rocprofiler-sdk integrations, and there's a
 **Build location:** Both omnistat artifacts (the Python extension and the kernel-trace tool library) must be built on a **compute node** inside the same SIF the workload runs in — login nodes don't have apptainer or the ROCm headers, and a host-side build will pick up the wrong libcurl / glibc. `OMNIHUB_TOOLS_DIR` is the shared tools dir from `.cluster-config.yaml` `omnihub.tools_dir` (e.g. `/shared/omnihub/tools`); export it first. Standard build:
 
 ```bash
-salloc -p lux -A vultr_lux -N 1 --time=00:15:00 --gpus-per-node=1 \
+salloc -p <partition> -A <account> -N 1 --time=00:15:00 --gpus-per-node=1 \
   apptainer exec --rocm \
-    /shared/aaji/images/pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif \
+    "${AI4S_SHARED_DIR}/images/pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif" \
     bash -c "cd ${OMNIHUB_TOOLS_DIR}/omnistat-src && \
       cmake -S rocprofiler-sdk/ -B build-trace/ -DBUILD_KERNEL_TRACE_LIB=ON && \
       cmake --build build-trace/ -j 8"
@@ -688,13 +688,13 @@ salloc -p lux -A vultr_lux -N 1 --time=00:15:00 --gpus-per-node=1 \
 
 Verify with `ls -la ${OMNIHUB_TOOLS_DIR}/omnistat-src/build-trace/libomnistat_trace.so` (~MB-class file, not the tiny 4 kB stub you get when CMake fails halfway).
 
-**Lux SIF build prerequisites (one-time gotchas):** the `pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif` ships **without** `cmake` and **without** libcurl headers (only the `.so.4` runtime). Both omnistat artifacts need cmake; the kernel-trace library additionally needs `<curl/curl.h>`. Working build recipe inside the SIF:
+**SIF build prerequisites (one-time gotchas):** the `pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif` ships **without** `cmake` and **without** libcurl headers (only the `.so.4` runtime). Both omnistat artifacts need cmake; the kernel-trace library additionally needs `<curl/curl.h>`. Working build recipe inside the SIF:
 
 1. `python -m venv /tmp/build_venv && /tmp/build_venv/bin/pip install cmake nanobind zstandard` — installs `cmake` 4.x as a wheel, plus `zstandard` for unpacking modern Ubuntu `.deb` files (which use `data.tar.zst`).
 2. Fetch `libcurl4-openssl-dev_*.deb` from `archive.ubuntu.com/ubuntu/pool/main/c/curl/`, `ar x` it, decompress `data.tar.zst` with `zstandard.ZstdDecompressor` in Python, untar to a tmp prefix.
 3. Pass `-DCURL_INCLUDE_DIR=<prefix>/usr/include/x86_64-linux-gnu -DCURL_LIBRARY=/usr/lib/x86_64-linux-gnu/libcurl.so.4` to cmake configure. The library finds rocprofiler-sdk via `/opt/rocm/lib/cmake/rocprofiler-sdk/`.
 
-Verified on `lux-mi355x-b1` job 7030: 533 kB `libomnistat_trace.so`, ELF64, all rocprofiler-sdk symbols resolved, env vars `OMNISTAT_TRACE_{MAX_INTERVAL,BUFFER_SIZE,ENDPOINT_PORT,LOG}` baked in. `apt-get download` does **not** work in the SIF — apt sources aren't configured — so don't waste a node on it.
+Verified on MI355X (gfx950): 533 kB `libomnistat_trace.so`, ELF64, all rocprofiler-sdk symbols resolved, env vars `OMNISTAT_TRACE_{MAX_INTERVAL,BUFFER_SIZE,ENDPOINT_PORT,LOG}` baked in. `apt-get download` does **not** work in the SIF — apt sources aren't configured — so don't waste a node on it.
 
 **Endpoint port alignment:** the kernel-trace **collector** registers `/kernel_trace` on the same Flask app as the rest of the omnistat exporter, so it listens on `[omnistat.collectors] port` (8101 in our config). The kernel-trace **tool library**'s default `OMNISTAT_TRACE_ENDPOINT_PORT` is 8001, which is wrong for our setup — they must match or every dispatch record gets a connection-refused. The sbatch wrapper auto-derives the port from the rendered config; do not hard-code 8001.
 
@@ -725,14 +725,14 @@ srun ... apptainer exec ... "${OPT_ENVS[@]}" "$HG_SIF" bash "$RANK_SCRIPT"
 
 Applied to both `sbatch_train_amd.sh` and `sbatch_train_perf_amd.sh` for HydraGNN. **General lesson** for any model recipe: never use `--env KEY="${KEY:-}"` for variables that the workload reads with `os.getenv(K) is not None` — either pass a numeric default (`--env KEY="${KEY:-0}"`) or use the conditional-array pattern above. Audit every `*/models/*/examples/*.sh` against this when introducing new optional env knobs.
 
-### 14. Cluster-state checks before queueing build/probe jobs on Lux
+### 14. Cluster-state checks before queueing build/probe jobs
 
-`sinfo -p lux,rad` is the cheapest way to know whether a build alloc will ever start. Lux and rad partitions get drained for slurm maintenance roughly every few weeks — the symptom is `salloc: job NNNN queued and waiting for resources` followed by `(Nodes required for job are DOWN, DRAINED or reserved for jobs in higher priority partitions)`. The drain reasons are visible via `sinfo -R`; treat any `slurm deploy maintenance`-class reason as "wait, don't queue". Cancel pending allocs with `scancel` when you discover the drain — they don't time out on their own.
+`sinfo -p <partition>` is the cheapest way to know whether a build alloc will ever start. Partitions get drained for slurm maintenance roughly every few weeks — the symptom is `salloc: job NNNN queued and waiting for resources` followed by `(Nodes required for job are DOWN, DRAINED or reserved for jobs in higher priority partitions)`. The drain reasons are visible via `sinfo -R`; treat any `slurm deploy maintenance`-class reason as "wait, don't queue". Cancel pending allocs with `scancel` when you discover the drain — they don't time out on their own.
 
 When the cluster is up but you only need a one-shot interactive build inside the SIF, **prefer `srun --no-shell`-equivalent direct exec over `salloc + apptainer exec`**:
 
 ```bash
-srun -p lux -A vultr_lux -N 1 --time=00:15:00 --gpus-per-node=1 --cpus-per-task=8 \
+srun -p <partition> -A <account> -N 1 --time=00:15:00 --gpus-per-node=1 --cpus-per-task=8 \
   --job-name=<descriptive> \
   apptainer exec --rocm \
     --bind ${OMNIHUB_TOOLS_DIR}:${OMNIHUB_TOOLS_DIR} \

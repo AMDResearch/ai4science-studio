@@ -59,7 +59,7 @@ One line per event. Format: `<ISO8601 UTC> <EVENT> <key=value pairs>`. Examples:
 
 ```
 2026-05-22T22:14:03Z LOOP_START uuid=<uuid> n_iters_budget=5 driver=claude-code-cli
-2026-05-22T22:14:09Z PREFLIGHT_OK cluster=lux disk_free=26T claude_cli=ok api_egress=ok
+2026-05-22T22:14:09Z PREFLIGHT_OK disk_free=26T claude_cli=ok api_egress=ok
 2026-05-22T22:14:11Z LEVER_PICK iter=0 lever=baseline reason="establishing fresh baseline"
 2026-05-22T22:15:11Z ITER_SUBMIT iter=0 lever=baseline jobid=7050
 2026-05-22T22:23:48Z ITER_COMPLETE iter=0 jobid=7050 state=COMPLETED runtime=487s
@@ -86,8 +86,8 @@ Read `loop-<uuid>/foms.csv` if it exists. If iter rows are present, set `current
 Run these checks in sequence; abort with `PREFLIGHT_FAIL reason=<short>` on the first failure:
 
 - Ensure `AI4S_SHARED_DIR` and `OMNIHUB_TOOLS_DIR` are exported (the latter from `.cluster-config.yaml` `omnihub.tools_dir`, e.g. `/shared/omnihub/tools`); abort if either is unset. All tool paths below derive from `$OMNIHUB_TOOLS_DIR` — never hardcode a cluster path.
-- `sinfo -p lux,rad -h` → if zero `IDLE` or `MIX` nodes, abort. Cluster may be in maintenance (see SKILL §14).
-- `df -h /shared | tail -1` → abort if `Use%` > 95.
+- `sinfo -p <partition> -h` (partition from `.cluster-config.yaml`) → if zero `IDLE` or `MIX` nodes, abort. Cluster may be in maintenance (see SKILL §14).
+- `df -h "$AI4S_SHARED_DIR" | tail -1` → abort if `Use%` > 95.
 - `test -x ${OMNIHUB_TOOLS_DIR}/omnihub-inspect/bin/omnistat-usermode` → abort if missing.
 - `test -x ${OMNIHUB_TOOLS_DIR}/victoriametrics/victoria-metrics-prod` → abort if missing.
 - `test -f $AI4S_SHARED_DIR/models/HydraGNN/overlays/hydragnn-overlay.img` → abort if missing.

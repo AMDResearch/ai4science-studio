@@ -40,7 +40,7 @@ Default target: HydraGNN on AMD MI355X. The same pattern can extend to ORBIT-2 /
 - Never escalate to multi-node `srun`; verifiers may use **at most one** 1-node `srun -N1 --time=00:05:00` interactive probe (partition/account from `.cluster-config.yaml`).
 - Never edit files outside `$AI4S_SHARED_DIR/models/HydraGNN/perf-runs/<jobid>/`.
 
-## Cluster constraints (Lux)
+## Cluster constraints (AMD Instinct MI355X)
 
 - Partition / account: read from [.cluster-config.yaml](../../../.cluster-config.yaml).
 - Central Prometheus may be **unreachable from compute nodes** (check your cluster's network policy). Always use the user-mode VictoriaMetrics that the launcher started.
@@ -58,7 +58,7 @@ Default target: HydraGNN on AMD MI355X. The same pattern can extend to ORBIT-2 /
 
 ## Lessons captured (smoke-test on JOB 6762)
 
-The first 2-node end-to-end run on Lux exposed five real bugs that are now all worked around in [`sbatch_train_perf_amd.sh`](../../../material_science/models/HydraGNN/examples/sbatch_train_perf_amd.sh) and the agent prompts:
+The first 2-node end-to-end run exposed five real bugs that are now all worked around in [`sbatch_train_perf_amd.sh`](../../../material_science/models/HydraGNN/examples/sbatch_train_perf_amd.sh) and the agent prompts:
 
 1. **`%(SLURM_JOB_ID)s` in omnistat config is broken** — `configparser` doesn't interpolate `os.environ`. Use `@JOB_DIR@` placeholder and `sed` at submit time.
 2. **`/tmp/omni_rmsjobinfo` permission collision with system-mode Omnistat** — override `job_detection_file` to a per-job path under `$AI4S_SHARED_DIR/...`.

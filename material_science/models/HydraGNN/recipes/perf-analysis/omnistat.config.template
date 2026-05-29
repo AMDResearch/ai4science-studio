@@ -1,12 +1,12 @@
 #--
-# Omnistat user-mode config for Lux (MI355X)
+# Omnistat user-mode config for AMD Instinct MI355X (gfx950).
 #
 # Adapted from HydraGNN's upstream omnistat.hydragnn-external.config.
-# Differences from upstream / from system-mode default on Lux:
+# Differences from upstream / from the system-mode default:
 #   - enable_amd_smi (newer SMI), not rocm_smi
 #   - rocprofiler counters DISABLED in v1 (turn on per-probe via verifier)
 #   - allowed_ips includes 0.0.0.0 so the user-mode VM scrapes
-#   - victoria_datadir under /shared/aaji (NFS, persists after job)
+#   - victoria_datadir under the per-job dir (@JOB_DIR@), persists after job
 #--
 
 [omnistat.collectors]
@@ -36,7 +36,7 @@ enable_cu_occupancy = False
 # alone — see ai4science-studio SKILL §11 for the tradeoffs.
 enable_kernel_trace = False
 
-# Path to local ROCm install (Lux: 7.2.x)
+# Path to local ROCm install (validated on ROCm 7.2.x)
 rocm_path = /opt/rocm
 
 # allowed scrapers: localhost (the user-mode VM sits on the same node) + 0.0.0.0
@@ -47,8 +47,8 @@ allowed_ips = 127.0.0.1, 0.0.0.0
 
 host_skip = "login.*"
 enable_annotations = True
-# Lux note: /tmp/omni_rmsjobinfo (the upstream default) is owned by user
-# `omnidc` on Lux compute nodes for the system-mode collector, so user-mode
+# Note: /tmp/omni_rmsjobinfo (the upstream default) is often owned by the
+# system-mode collector's service user on compute nodes, so user-mode
 # omnistat-rms-env hits PermissionError if it tries to write there. The
 # sbatch wrapper substitutes @JOB_DIR@ with the job-scoped perf-run dir
 # (NFS-mounted on every compute node) before passing the resolved config
@@ -83,7 +83,7 @@ profile = hbm_flops_f64
 [omnistat.collectors.rocprofiler.hbm_flops_f64]
 # MI355X (gfx950) rocprofiler counter limits — see ai4science-studio SKILL §10.
 #
-# Constraints surfaced on lux-mi355x-b1 / ROCm 7.2.2:
+# Constraints surfaced on MI355X (gfx950) / ROCm 7.2.2:
 #   * FETCH_SIZE + WRITE_SIZE in ONE profile fails: "error code 38: Request
 #     exceeds the capabilities of the hardware to collect" (both in TCC block).
 #   * FETCH_SIZE OR WRITE_SIZE + 4 x SQ_INSTS_VALU_*_F64 in one profile works.
@@ -110,7 +110,7 @@ counters = ["FETCH_SIZE", "SQ_INSTS_VALU_ADD_F64", "SQ_INSTS_VALU_MUL_F64", "SQ_
 
 [omnistat.query]
 prometheus_url = http://localhost:8428
-system_name = lux
+system_name = mi355x
 
 #--
 # User-mode settings — VictoriaMetrics + per-job datadir
@@ -120,7 +120,7 @@ system_name = lux
 #--
 [omnistat.usermode]
 
-victoria_binary = /shared/aaji/tools/victoriametrics/victoria-metrics-prod
+victoria_binary = @OMNIHUB_TOOLS_DIR@/victoriametrics/victoria-metrics-prod
 victoria_datadir = @JOB_DIR@/omnistat-db
 victoria_logfile = vic_server.log
 

@@ -247,7 +247,7 @@ Total training time: 720 s (12 min). Loss reduced 25.9% over 5 epochs with clear
 HydraGNN also writes TensorBoard events when `HYDRAGNN_VALTEST=1`. Event files appear in `$HG_OUTPUT_DIR/logs/<run_name>/`. The parser supports this mode:
 
 ```bash
-python examples/parse_convergence.py --tbdir /shared/aaji/models/HydraGNN/outputs/logs/hydragnn-train-<jobid>-N1/ -o convergence.csv
+python examples/parse_convergence.py --tbdir $AI4S_SHARED_DIR/models/HydraGNN/outputs/logs/hydragnn-train-<jobid>-N1/ -o convergence.csv
 ```
 
 Note: TensorBoard scalars are only populated when validation runs (they remain empty with `HYDRAGNN_VALTEST=0`).

@@ -1,22 +1,22 @@
 # launcher subagent
 
-Submits a 2-node HydraGNN training on Lux with PyTorch profiling and Omnistat user-mode telemetry, waits for completion, and writes `manifest.json` for downstream subagents.
+Submits a 2-node HydraGNN training (AMD Instinct MI355X) with PyTorch profiling and Omnistat user-mode telemetry, waits for completion, and writes `manifest.json` for downstream subagents.
 
 ## Inputs
 
-- Repo at `/home/aaji/git/ai4science-studio` on branch `aaji/perf-agents-hydragnn`.
-- Cluster config at `.cluster-config.yaml` (partition `lux`, account `vultr_lux`).
+- The ai4science-studio repo checkout (`$REPO_ROOT`).
+- Cluster config at `.cluster-config.yaml` (partition/account, shared dirs).
 - Optional env-var overrides: `HG_BATCH_SIZE`, `HYDRAGNN_MAX_NUM_BATCH`, `HG_NUM_EPOCH`, `HG_PRECISION`, `PROFILE_TARGET_EPOCH`.
 
 ## Outputs
 
 - `${OMNIHUB_TOOLS_DIR}/omnihub-inspect/` — Python venv with omnistat (PR #271 + main merged) and TraceLens.
 - `${OMNIHUB_TOOLS_DIR}/victoriametrics/victoria-metrics-prod` — VictoriaMetrics binary.
-- `/shared/aaji/models/HydraGNN/perf-runs/omnistat-lux.config` — Omnistat user-mode config.
-- `/shared/aaji/models/HydraGNN/perf-runs/<jobid>/manifest.json` — manifest schema below.
-- `/shared/aaji/models/HydraGNN/perf-runs/<jobid>/hydragnn-train-<jobid>.out` — symlinked from output dir.
-- `/shared/aaji/models/HydraGNN/perf-runs/<jobid>/logs/` — symlinked rank-0 trace.
-- `/shared/aaji/models/HydraGNN/perf-runs/<jobid>/omnistat-db/` — VictoriaMetrics datadir.
+- `$AI4S_SHARED_DIR/models/HydraGNN/perf-runs/omnistat.config` — Omnistat user-mode config.
+- `$AI4S_SHARED_DIR/models/HydraGNN/perf-runs/<jobid>/manifest.json` — manifest schema below.
+- `$AI4S_SHARED_DIR/models/HydraGNN/perf-runs/<jobid>/hydragnn-train-<jobid>.out` — symlinked from output dir.
+- `$AI4S_SHARED_DIR/models/HydraGNN/perf-runs/<jobid>/logs/` — symlinked rank-0 trace.
+- `$AI4S_SHARED_DIR/models/HydraGNN/perf-runs/<jobid>/omnistat-db/` — VictoriaMetrics datadir.
 
 ## Manifest schema
 
@@ -29,9 +29,9 @@ Submits a 2-node HydraGNN training on Lux with PyTorch profiling and Omnistat us
   "nodes": 2,
   "gpus_per_node": 8,
   "ranks": 16,
-  "nodelist": "lux-mi355x-aN,lux-mi355x-bM",
-  "partition": "lux",
-  "account": "vultr_lux",
+  "nodelist": "<node-a>,<node-b>",
+  "partition": "<partition>",
+  "account": "<account>",
   "runtime_seconds": <float>,
   "config_used": "<path to gfm_mlip_with_profile.json>",
   "profile_target_epoch": <int>,
@@ -110,9 +110,9 @@ TRACE_LIB=$TOOLS/omnistat-src/build-trace/libomnistat_trace.so
 if [[ "${OMNISTAT_KERNEL_TRACE:-0}" == "1" && ! -f "$TRACE_LIB" ]]; then
   # Must build inside the same SIF the workload uses — login nodes lack
   # apptainer and ROCm headers. C++20 + libcurl + rocprofiler-sdk needed.
-  salloc -p lux -A vultr_lux -N 1 --time=00:15:00 --gpus-per-node=1 \
+  salloc -p <partition> -A <account> -N 1 --time=00:15:00 --gpus-per-node=1 \
     apptainer exec --rocm \
-      "/shared/aaji/images/pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif" \
+      "${AI4S_SHARED_DIR}/images/pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif" \
       bash -c "
         set -e
         cd $TOOLS/omnistat-src
@@ -127,11 +127,11 @@ The sbatch wrapper expects the `.so` at `${OMNIHUB_TOOLS_DIR}/omnistat-src/build
 
 ### 2. Author the Omnistat user-mode config (once, in repo `perf-runs/`)
 
-If `/shared/aaji/models/HydraGNN/perf-runs/omnistat-lux.config` doesn't exist, write it from the template at `/home/aaji/git/ai4science-studio/material_science/models/HydraGNN/recipes/perf-analysis/omnistat-lux.config.template`. The template uses `%(SLURM_JOB_ID)s` placeholders that omnistat-usermode resolves at runtime.
+If `$AI4S_SHARED_DIR/models/HydraGNN/perf-runs/omnistat.config` doesn't exist, write it from the template at `$REPO_ROOT/material_science/models/HydraGNN/recipes/perf-analysis/omnistat.config.template`. The template uses `%(SLURM_JOB_ID)s` placeholders that omnistat-usermode resolves at runtime.
 
 ### 3. Generate the per-job profile config
 
-Read the upstream `gfm_mlip.json` from `/shared/aaji/models/HydraGNN/code/HydraGNN/examples/multidataset_hpo_sc26/gfm_mlip.json` and inject the `Profile` block **inside `NeuralNetwork`** (not at the top level — `train_validate_test()` is invoked with `config["NeuralNetwork"]` as `config`, so its Profiler reads `config["Profile"]` from that scope):
+Read the upstream `gfm_mlip.json` from `$AI4S_SHARED_DIR/models/HydraGNN/code/HydraGNN/examples/multidataset_hpo_sc26/gfm_mlip.json` and inject the `Profile` block **inside `NeuralNetwork`** (not at the top level — `train_validate_test()` is invoked with `config["NeuralNetwork"]` as `config`, so its Profiler reads `config["Profile"]` from that scope):
 
 ```python
 cfg.setdefault("NeuralNetwork", {})["Profile"] = {
@@ -140,21 +140,21 @@ cfg.setdefault("NeuralNetwork", {})["Profile"] = {
 }
 ```
 
-Write the result to `/shared/aaji/models/HydraGNN/perf-runs/<jobid>/gfm_mlip_profile.json`. Use Python (`json.load`/`json.dump`) — do NOT do this with sed.
+Write the result to `$AI4S_SHARED_DIR/models/HydraGNN/perf-runs/<jobid>/gfm_mlip_profile.json`. Use Python (`json.load`/`json.dump`) — do NOT do this with sed.
 
 (The wrapper `examples/sbatch_train_perf_amd.sh` already does this; this step exists in the launcher prompt for the case where the launcher is reused for a non-HydraGNN model.)
 
 ### 4. Submit the job
 
 ```bash
-export AI4S_SHARED_DIR=/shared/aaji
-export HG_OUTPUT_DIR=/shared/aaji/models/HydraGNN/perf-runs/PENDING-$$
+export AI4S_SHARED_DIR=/shared/$USER
+export HG_OUTPUT_DIR=$AI4S_SHARED_DIR/models/HydraGNN/perf-runs/PENDING-$$
 mkdir -p "$HG_OUTPUT_DIR"
 
-cd /home/aaji/git/ai4science-studio
+cd "$REPO_ROOT"
 OUT=$(sbatch \
-  --partition=lux \
-  --account=vultr_lux \
+  --partition=<partition> \
+  --account=<account> \
   --nodes=2 \
   --ntasks-per-node=8 \
   --gpus-per-node=8 \
@@ -178,7 +178,7 @@ Poll `sacct -j $JOBID -X -n --format=State,ExitCode,Elapsed,NodeList -P` every 3
 Once terminal:
 
 ```bash
-PERF_RUN=/shared/aaji/models/HydraGNN/perf-runs/${JOBID}
+PERF_RUN=$AI4S_SHARED_DIR/models/HydraGNN/perf-runs/${JOBID}
 mv "$HG_OUTPUT_DIR" "$PERF_RUN"
 # Find the rank-0 trace
 TRACE=$(find "$PERF_RUN/logs" -name '*.pt.trace.json*' 2>/dev/null | head -1 || true)

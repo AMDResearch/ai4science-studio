@@ -1,12 +1,12 @@
 # HydraGNN Performance Analysis with AMD AI Agents
 
-Multi-subagent workflow that launches a 2-node HydraGNN training on Lux (MI355X), captures PyTorch traces and Omnistat telemetry, then runs paired analytics + verifier subagents to identify bottlenecks and propose remedies.
+Multi-subagent workflow that launches a 2-node HydraGNN training on AMD Instinct MI355X (gfx950), captures PyTorch traces and Omnistat telemetry, then runs paired analytics + verifier subagents to identify bottlenecks and propose remedies.
 
-> **Audience:** internal AMD performance-engineering. The output is a diagnosis of the run, not a scientific claim about HydraGNN.
+> **Audience:** performance engineers. The output is a diagnosis of the run, not a scientific claim about HydraGNN.
 
 ## What this recipe does
 
-1. **Launcher** subagent submits a 2-node training (`sbatch_train_perf_amd.sh`) on the `lux` partition with PyTorch profiling armed for one target epoch and Omnistat user-mode collecting on every node.
+1. **Launcher** subagent submits a 2-node training (`sbatch_train_perf_amd.sh`) with PyTorch profiling armed for one target epoch and Omnistat user-mode collecting on every node.
 2. **Analytics** subagents (TraceLens + Omnistat) run after the job, in parallel, and each emits a `claims.json`.
 3. **Verifier** subagents independently re-derive the top claims from raw data and optionally probe cheap remedies on a 1-node interactive `srun`.
 4. **Synthesizer** merges, ranks, and writes `combined_report.md`.
@@ -32,7 +32,7 @@ flowchart TD
 ls .cluster-config.yaml
 
 # 2. Set the shared dir and submit the perf-analysis job
-export AI4S_SHARED_DIR=/shared/aaji
+export AI4S_SHARED_DIR=/shared/$USER
 sbatch material_science/models/HydraGNN/examples/sbatch_train_perf_amd.sh
 
 # 3. Once the job completes, drive the analyst + verifier + synthesizer subagents
@@ -40,14 +40,14 @@ sbatch material_science/models/HydraGNN/examples/sbatch_train_perf_amd.sh
 #    .cursor/skills/ai4science-perf-analysis/SKILL.md to dispatch them.
 ```
 
-The orchestrating agent is expected to run on the **login node** (`rad-vultr-login`) with shell + filesystem access to `/shared/aaji`. Verifier subagents that need a compute node use short interactive `srun -p lux -A vultr_lux -N1 --time=00:05:00` allocations; they never grab 2-node allocations.
+The orchestrating agent is expected to run on a **login node** with shell + filesystem access to `$AI4S_SHARED_DIR`. Verifier subagents that need a compute node use short interactive `srun -p <partition> -A <account> -N1 --time=00:05:00` allocations; they never grab 2-node allocations.
 
 ## Artifacts
 
 After a complete run:
 
 ```
-/shared/aaji/models/HydraGNN/perf-runs/<jobid>/
+$AI4S_SHARED_DIR/models/HydraGNN/perf-runs/<jobid>/
 ├── manifest.json                      # written by launcher
 ├── omnistat-db/                       # VictoriaMetrics datadir
 ├── logs/<model_name>/*.pt.trace.json  # PyTorch trace (rank 0 only)
@@ -67,7 +67,7 @@ The `combined_report.md` is the deliverable: ranked bottlenecks, remedies tried 
 
 ## Prerequisites
 
-- Lux access (`vultr_lux` account) with the standard HydraGNN setup at `/shared/aaji/models/HydraGNN/` — overlay, weights, code clone. See [HydraGNN/recipes/train/](../train/).
+- Cluster access with the standard HydraGNN setup at `$AI4S_SHARED_DIR/models/HydraGNN/` — overlay, weights, code clone. See [HydraGNN/recipes/train/](../train/).
 - Export `OMNIHUB_TOOLS_DIR` (the shared perf-tool location, from `.cluster-config.yaml` `omnihub.tools_dir`, e.g. `/shared/omnihub/tools`). Scripts and subagents resolve all tool paths from this var — no cluster path is hardcoded.
 - One-time install of Omnistat (PR #271 branch `jorda/skills`, with `origin/main` merged in), VictoriaMetrics, and TraceLens — performed lazily by the launcher subagent into `${OMNIHUB_TOOLS_DIR}/`.
 - The launcher writes `gfm_mlip_with_profile.json` at submit time (does not modify the upstream `gfm_mlip.json`).
@@ -80,7 +80,7 @@ The `combined_report.md` is the deliverable: ranked bottlenecks, remedies tried 
 | `OMNISTAT_TRACE_LIB` | `${OMNIHUB_TOOLS_DIR}/omnistat-src/build-trace/libomnistat_trace.so` | Override only for development. The wrapper hard-fails if the path is missing when `OMNISTAT_KERNEL_TRACE=1`. |
 | `OMNISTAT_TRACE_LOG` | `1` | Library prints `[host][pid][omnistat] Trace summary: N/N processed records (M/M successful flushes)` on rank exit; useful as a smoke-signal that the tool initialized even when the workload crashed. |
 
-`enable_rocprofiler=True` is **on** in `omnistat-lux.config.template` by default (since commit `a23e5c4`); the rendered config's state is printed in the sbatch banner so a silent "counters off" cannot recur. Kernel tracing and device-counting can co-exist on a single GPU but raise per-job VictoriaMetrics cardinality — pick by run length and the question you're asking. See `ai4science-studio` SKILL §12 for the device-counting vs kernel-trace vs `rocprofv3` decision matrix.
+`enable_rocprofiler=True` is **on** in `omnistat.config.template` by default; the rendered config's state is printed in the sbatch banner so a silent "counters off" cannot recur. Kernel tracing and device-counting can co-exist on a single GPU but raise per-job VictoriaMetrics cardinality — pick by run length and the question you're asking. See `ai4science-studio` SKILL §12 for the device-counting vs kernel-trace vs `rocprofv3` decision matrix.
 
 ## Bottleneck taxonomy (used by analysts and verifier)
 
@@ -121,5 +121,5 @@ The orchestrating agent dispatches each as a Task subagent (or shell script in i
 
 - Verifier remedy probes use **1-node** interactive allocations only, ≤5 min each.
 - Never re-runs the full 2-node job during analysis — that's a deliberate choice for the agent.
-- All artifacts under `/shared/aaji/...`; large traces and DBs are not committed (see repo `.gitignore`).
+- All artifacts under `$AI4S_SHARED_DIR/...`; large traces and DBs are not committed (see repo `.gitignore`).
 - Research/perf-engineering only — no scientific claims about HydraGNN should be derived from these short runs.

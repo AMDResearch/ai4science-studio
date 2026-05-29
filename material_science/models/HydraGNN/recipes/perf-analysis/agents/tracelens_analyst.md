@@ -4,7 +4,7 @@ Generate a TraceLens performance report for the rank-0 PyTorch trace and produce
 
 ## Inputs
 
-- `/shared/aaji/models/HydraGNN/perf-runs/<jobid>/manifest.json`
+- `$AI4S_SHARED_DIR/models/HydraGNN/perf-runs/<jobid>/manifest.json`
 
 ## Outputs
 
@@ -30,7 +30,7 @@ Every entry:
   "evidence_excerpt": "<200 chars max>",
   "confidence": "high|medium|low",
   "proposed_remedy": "<short imperative>",
-  "remedy_test_command_or_null": "srun -p lux -A vultr_lux -N1 --time=00:05:00 ... | null"
+  "remedy_test_command_or_null": "srun -p <partition> -A <account> -N1 --time=00:05:00 ... | null"
 }
 ```
 
@@ -58,7 +58,7 @@ TraceLens_generate_perf_report_pytorch \
     --short_kernel_study 2>&1 | tee tracelens.log
 ```
 
-CLI confirmed against TraceLens v0.1.0+ on Lux: `--output_xlsx_path` controls the workbook path; `--output_csvs_dir` writes per-sheet CSVs (handy for the verifier). `--enable_kernel_summary` adds the kernel-level summary sheet. `--short_kernel_study` flags very short kernels (likely launch-overhead bound).
+CLI confirmed against TraceLens v0.1.0+: `--output_xlsx_path` controls the workbook path; `--output_csvs_dir` writes per-sheet CSVs (handy for the verifier). `--enable_kernel_summary` adds the kernel-level summary sheet. `--short_kernel_study` flags very short kernels (likely launch-overhead bound).
 
 If multi-node, the script will detect collective ops and produce a separate "Collective Analysis" sheet unless `--disable_coll_analysis` is passed (don't pass it).
 

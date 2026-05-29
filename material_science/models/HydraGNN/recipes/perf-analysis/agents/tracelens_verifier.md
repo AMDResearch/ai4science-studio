@@ -69,15 +69,15 @@ Choose the highest-impact `verified` claim with a non-null `remedy_test_command_
 Example probe for the bf16 / fp64 ceiling claim — run via the existing HydraGNN sbatch script in interactive mode:
 
 ```bash
-srun -p lux -A vultr_lux -N1 --ntasks=8 --gpus-per-node=8 --cpus-per-task=16 \
+srun -p <partition> -A <account> -N1 --ntasks=8 --gpus-per-node=8 --cpus-per-task=16 \
     --time=00:05:00 --pty bash -c '
-export AI4S_SHARED_DIR=/shared/aaji
+export AI4S_SHARED_DIR=/shared/$USER
 export HG_PRECISION=bf16
 export HYDRAGNN_MAX_NUM_BATCH=10
 export HG_NUM_EPOCH=1
 export HG_OUTPUT_DIR=/tmp/perf-probe-$$
 mkdir -p $HG_OUTPUT_DIR
-bash /home/aaji/git/ai4science-studio/material_science/models/HydraGNN/examples/sbatch_train_amd.sh \
+bash "$REPO_ROOT/material_science/models/HydraGNN/examples/sbatch_train_amd.sh" \
     2>&1 | tee /tmp/probe-$SLURM_JOB_ID.out
 grep -oE "[0-9.]+s/it" /tmp/probe-$SLURM_JOB_ID.out | tail -5
 '

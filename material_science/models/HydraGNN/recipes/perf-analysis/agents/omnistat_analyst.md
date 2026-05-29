@@ -24,7 +24,7 @@ Drive `omnistat-inspect` (PR #271) through the analyze-job phases on the user-mo
 
 ### 1. Start VictoriaMetrics on the DB (login node)
 
-Following the [load-database SKILL](https://github.com/ROCm/omnistat/blob/jorda/skills/skills/load-database/SKILL.md), with one Lux-specific addition: pass `-fs.disableMmap` so VM can open a job-scoped DB inside the login-node cgroup (without it, even a 1.6 MB DB panics with "cannot mmap file with size 4096 bytes ... no such device").
+Following the [load-database SKILL](https://github.com/ROCm/omnistat/blob/jorda/skills/skills/load-database/SKILL.md), with one addition for memory-constrained login nodes: pass `-fs.disableMmap` so VM can open a job-scoped DB inside the login-node cgroup (without it, even a 1.6 MB DB panics with "cannot mmap file with size 4096 bytes ... no such device").
 
 ```bash
 DB=$(jq -r .omnistat_db_path <manifest>)
