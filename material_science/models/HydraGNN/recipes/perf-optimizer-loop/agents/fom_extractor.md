@@ -68,7 +68,7 @@ omnistat kernel-trace collector).
 
 ```bash
 set -euo pipefail
-. "/shared/omnihub/tools/omnihub-inspect/bin/activate"
+. "${OMNIHUB_TOOLS_DIR}/omnihub-inspect/bin/activate"
 PERF_RUN=$(jq -r .perf_run_dir <manifest>)
 JOBID=$(jq -r .jobid <manifest>)
 RUNTIME=$(jq -r .runtime_seconds <manifest>)
@@ -102,7 +102,7 @@ Start a local VictoriaMetrics if not already running:
 PORT=8428
 ss -lnt "sport = :$PORT" 2>/dev/null | grep -q LISTEN && PORT=8429
 if ! curl -sf "http://127.0.0.1:$PORT/api/v1/status/tsdb" > /dev/null 2>&1; then
-  nohup "/shared/omnihub/tools/victoriametrics/victoria-metrics-prod" \
+  nohup "${OMNIHUB_TOOLS_DIR}/victoriametrics/victoria-metrics-prod" \
       -storageDataPath="$PERF_RUN/omnistat-db" \
       -httpListenAddr=127.0.0.1:$PORT \
       -retentionPeriod=100y -fs.disableMmap \

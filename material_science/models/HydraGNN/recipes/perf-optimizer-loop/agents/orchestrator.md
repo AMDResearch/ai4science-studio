@@ -85,10 +85,11 @@ Read `loop-<uuid>/foms.csv` if it exists. If iter rows are present, set `current
 
 Run these checks in sequence; abort with `PREFLIGHT_FAIL reason=<short>` on the first failure:
 
+- Ensure `AI4S_SHARED_DIR` and `OMNIHUB_TOOLS_DIR` are exported (the latter from `.cluster-config.yaml` `omnihub.tools_dir`, e.g. `/shared/omnihub/tools`); abort if either is unset. All tool paths below derive from `$OMNIHUB_TOOLS_DIR` — never hardcode a cluster path.
 - `sinfo -p lux,rad -h` → if zero `IDLE` or `MIX` nodes, abort. Cluster may be in maintenance (see SKILL §14).
 - `df -h /shared | tail -1` → abort if `Use%` > 95.
-- `test -x /shared/omnihub/tools/omnihub-inspect/bin/omnistat-usermode` → abort if missing.
-- `test -x /shared/omnihub/tools/victoriametrics/victoria-metrics-prod` → abort if missing.
+- `test -x ${OMNIHUB_TOOLS_DIR}/omnihub-inspect/bin/omnistat-usermode` → abort if missing.
+- `test -x ${OMNIHUB_TOOLS_DIR}/victoriametrics/victoria-metrics-prod` → abort if missing.
 - `test -f $AI4S_SHARED_DIR/models/HydraGNN/overlays/hydragnn-overlay.img` → abort if missing.
 - `test -f $AI4S_SHARED_DIR/images/pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif` → abort if missing.
 - If invoked via Claude Code CLI on the login node: `[[ -n "$ANTHROPIC_API_KEY" ]]` and `curl -fsS https://api.anthropic.com/v1/models > /dev/null` (5 s timeout) → abort if either fails.

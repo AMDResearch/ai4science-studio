@@ -156,7 +156,7 @@ fig.tight_layout()
 fig.savefig(out_png_path, dpi=150, bbox_inches="tight")
 ```
 
-Use `matplotlib.use("Agg")` for headless rendering. Do NOT use seaborn (extra dep not in the omnistat venv). Use the omnistat venv at `/shared/omnihub/tools/omnihub-inspect/bin/python` which already has matplotlib via TraceLens deps.
+Use `matplotlib.use("Agg")` for headless rendering. Do NOT use seaborn (extra dep not in the omnistat venv). Use the omnistat venv at `${OMNIHUB_TOOLS_DIR}/omnihub-inspect/bin/python` which already has matplotlib via TraceLens deps.
 
 ## Style rules
 

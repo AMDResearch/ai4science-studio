@@ -675,18 +675,18 @@ Omnistat exposes **two** independent rocprofiler-sdk integrations, and there's a
 
 **Cross-runtime gotcha:** `enable_kernel_trace=True` without the tool library loaded does *nothing* — the omnistat collector just sits with an empty endpoint. The `OMNISTAT_KERNEL_TRACE=1` switch in `sbatch_train_perf_amd.sh` enforces this with a hard `exit 2` if `libomnistat_trace.so` isn't found at the configured path; do **not** loosen that check, otherwise you re-create the exact "silent zero counters" failure mode from §8.
 
-**Build location:** Both omnistat artifacts (the Python extension and the kernel-trace tool library) must be built on a **compute node** inside the same SIF the workload runs in — login nodes don't have apptainer or the ROCm headers, and a host-side build will pick up the wrong libcurl / glibc. Standard build:
+**Build location:** Both omnistat artifacts (the Python extension and the kernel-trace tool library) must be built on a **compute node** inside the same SIF the workload runs in — login nodes don't have apptainer or the ROCm headers, and a host-side build will pick up the wrong libcurl / glibc. `OMNIHUB_TOOLS_DIR` is the shared tools dir from `.cluster-config.yaml` `omnihub.tools_dir` (e.g. `/shared/omnihub/tools`); export it first. Standard build:
 
 ```bash
 salloc -p lux -A vultr_lux -N 1 --time=00:15:00 --gpus-per-node=1 \
   apptainer exec --rocm \
     /shared/aaji/images/pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif \
-    bash -c 'cd /shared/omnihub/tools/omnistat-src && \
+    bash -c "cd ${OMNIHUB_TOOLS_DIR}/omnistat-src && \
       cmake -S rocprofiler-sdk/ -B build-trace/ -DBUILD_KERNEL_TRACE_LIB=ON && \
-      cmake --build build-trace/ -j 8'
+      cmake --build build-trace/ -j 8"
 ```
 
-Verify with `ls -la /shared/omnihub/tools/omnistat-src/build-trace/libomnistat_trace.so` (~MB-class file, not the tiny 4 kB stub you get when CMake fails halfway).
+Verify with `ls -la ${OMNIHUB_TOOLS_DIR}/omnistat-src/build-trace/libomnistat_trace.so` (~MB-class file, not the tiny 4 kB stub you get when CMake fails halfway).
 
 **Lux SIF build prerequisites (one-time gotchas):** the `pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif` ships **without** `cmake` and **without** libcurl headers (only the `.so.4` runtime). Both omnistat artifacts need cmake; the kernel-trace library additionally needs `<curl/curl.h>`. Working build recipe inside the SIF:
 
@@ -735,12 +735,12 @@ When the cluster is up but you only need a one-shot interactive build inside the
 srun -p lux -A vultr_lux -N 1 --time=00:15:00 --gpus-per-node=1 --cpus-per-task=8 \
   --job-name=<descriptive> \
   apptainer exec --rocm \
-    --bind /shared/omnihub/tools:/shared/omnihub/tools \
+    --bind ${OMNIHUB_TOOLS_DIR}:${OMNIHUB_TOOLS_DIR} \
     "$HG_SIF" \
     bash -c '<your build commands>'
 ```
 
-Why: `salloc` doesn't auto-bind `/shared/omnihub/tools/` into the apptainer namespace. Direct `srun … apptainer exec --bind …` forces the bind explicitly and writes the build artifact to its persistent NFS path in one shot. Verified during the kernel-trace library build (job 7030).
+Why: `salloc` doesn't auto-bind `${OMNIHUB_TOOLS_DIR}/` into the apptainer namespace. Direct `srun … apptainer exec --bind …` forces the bind explicitly and writes the build artifact to its persistent NFS path in one shot. Verified during the kernel-trace library build (job 7030).
 
 ### 15. Dual-failure debug pattern — separate "tool wired correctly?" from "workload happy?"
 

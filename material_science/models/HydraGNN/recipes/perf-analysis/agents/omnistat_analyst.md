@@ -6,8 +6,8 @@ Drive `omnistat-inspect` (PR #271) through the analyze-job phases on the user-mo
 
 - `<perf_run_dir>/manifest.json`
 - The Omnistat DB at `manifest.omnistat_db_path`.
-- The `omnihub-inspect` venv at `/shared/omnihub/tools/omnihub-inspect/`.
-- The VictoriaMetrics binary at `/shared/omnihub/tools/victoriametrics/victoria-metrics-prod`.
+- The `omnihub-inspect` venv at `${OMNIHUB_TOOLS_DIR}/omnihub-inspect/`.
+- The VictoriaMetrics binary at `${OMNIHUB_TOOLS_DIR}/victoriametrics/victoria-metrics-prod`.
 
 ## Outputs
 
@@ -36,7 +36,7 @@ ss -lnt "sport = :$PORT" 2>/dev/null | grep -q LISTEN && PORT=8429
 
 VMLOG=$PERF_RUN/omnistat/vm.log
 mkdir -p "$PERF_RUN/omnistat/inspect_outputs"
-nohup /shared/omnihub/tools/victoriametrics/victoria-metrics-prod \
+nohup ${OMNIHUB_TOOLS_DIR}/victoriametrics/victoria-metrics-prod \
     -storageDataPath="$DB" \
     -httpListenAddr=127.0.0.1:$PORT \
     -retentionPeriod=100y \
@@ -62,7 +62,7 @@ done
 ### 2. Run analyze-job phases (per the SKILL)
 
 ```bash
-. /shared/omnihub/tools/omnihub-inspect/bin/activate
+. ${OMNIHUB_TOOLS_DIR}/omnihub-inspect/bin/activate
 SCRATCH=$PERF_RUN/omnistat/scratch
 mkdir -p "$SCRATCH"
 JOBID=$(jq -r .jobid <manifest>)

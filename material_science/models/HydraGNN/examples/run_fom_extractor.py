@@ -6,9 +6,12 @@ for login-node post-processing of a completed perf run.
 
 Usage:
     export AI4S_SHARED_DIR=/shared/aaji
+    export OMNIHUB_TOOLS_DIR=/shared/omnihub/tools  # from .cluster-config.yaml omnihub.tools_dir
     export REPO_ROOT=/home/aaji/git/ai4science-studio
     python run_fom_extractor.py --manifest /path/to/perf-runs/<jobid>/manifest.json \\
         [--vm-port 8432] [--tsdb-url http://127.0.0.1:8432]
+
+Override the VictoriaMetrics binary directly with VICTORIA_METRICS_BIN if needed.
 """
 
 from __future__ import annotations
@@ -137,7 +140,7 @@ def promql_scalar(tsdb_url: str, promql: str, t: int) -> float | None:
 def start_vm(db_path: str, port: int, log_path: Path) -> None:
     vm = os.environ.get(
         "VICTORIA_METRICS_BIN",
-        "/shared/omnihub/tools/victoriametrics/victoria-metrics-prod",
+        f"{os.environ['OMNIHUB_TOOLS_DIR']}/victoriametrics/victoria-metrics-prod",
     )
     subprocess.Popen(
         [
