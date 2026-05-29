@@ -73,4 +73,4 @@ Agents should read `processed-data/` first (token-efficient). See `.cursor/skill
 | `train-omnihub` | `omnihub-monitor` | Phase 1 pilot |
 | `perf-analysis-omnihub` | `omnihub-monitor omnistat pytorch-trace tracelens` | Phase 2; optional `omnistat-rocprofiler-pmc1` |
 
-Legacy HydraGNN perf (`sbatch_train_perf_amd.sh` + `omnistat-pr271`) remains available for deep agent workflows.
+Legacy HydraGNN perf (`sbatch_train_perf_amd.sh` + `omnihub-inspect` at `/shared/omnihub/tools/omnihub-inspect`) remains available for deep agent workflows.

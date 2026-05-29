@@ -14,7 +14,7 @@ sbatch -A vultr_lux job.slurm
 # then omnihub-process + omnihub-index
 ```
 
-This uses `/shared/omnihub/tools/omnistat` and OmniHub's `tracelens` tool. The legacy path below (`sbatch_train_perf_amd.sh` + `omnistat-pr271` + subagent claims) remains for deep `omnistat-inspect` / PromQL workflows.
+This uses `/shared/omnihub/tools/omnistat` and OmniHub's `tracelens` tool. The legacy path below (`sbatch_train_perf_amd.sh` + the `omnihub-inspect` venv at `/shared/omnihub/tools/omnihub-inspect` + subagent claims) remains for deep `omnistat-inspect` / PromQL workflows.
 
 ## What this recipe does
 

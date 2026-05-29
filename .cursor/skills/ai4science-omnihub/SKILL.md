@@ -13,7 +13,7 @@ Integrates this repo with a sibling [OmniHub](https://github.com/AMDResearch/omn
 2. Set `export OMNIHUB_DIR=/path/to/omnihub` and `export AI4S_SHARED_DIR=/shared/$USER` (or your site path).
 3. HydraGNN assets: SIF, overlay, datasets, code clone under `$AI4S_SHARED_DIR/models/HydraGNN/`.
 
-> **Omnistat note:** OmniHub's `/shared/omnihub/tools/omnistat` has no `omnistat-inspect`, so don't expect inspect JSON from OmniHub jobs — read `omnihub-process` output under `processed-data/` instead. For deep `omnistat-inspect`/PromQL workflows use the legacy `omnistat-pr271` path (see perf-analysis recipe).
+> **Omnistat note:** OmniHub's `/shared/omnihub/tools/omnistat` has no `omnistat-inspect`, so don't expect inspect JSON from OmniHub jobs — read `omnihub-process` output under `processed-data/` instead. For deep `omnistat-inspect`/PromQL workflows use the `omnihub-inspect` build at `/shared/omnihub/tools/omnihub-inspect` (see perf-analysis recipe).
 
 ## Workflow: HydraGNN train-omnihub
 
@@ -60,7 +60,7 @@ sbatch -A vultr_lux /tmp/hydragnn-perf.slurm
 3. `<jobdir>/processed-data/report-card.yaml`
 4. Raw traces under `<jobdir>/tools/` only if needed
 
-Legacy HydraGNN perf (`sbatch_train_perf_amd.sh` + `omnistat-pr271` + subagent claims) remains for deep PromQL/inspect workflows. See `material_science/models/HydraGNN/recipes/perf-analysis/README.md`.
+Legacy HydraGNN perf (`sbatch_train_perf_amd.sh` + `omnihub-inspect` + subagent claims) remains for deep PromQL/inspect workflows. See `material_science/models/HydraGNN/recipes/perf-analysis/README.md`.
 
 ## Key paths (Lux / vultr)
 
@@ -68,6 +68,8 @@ Legacy HydraGNN perf (`sbatch_train_perf_amd.sh` + `omnistat-pr271` + subagent c
 |----------|------|
 | OmniHub shared | `/shared/omnihub` |
 | Omnistat | `/shared/omnihub/tools/omnistat/` → use `--tools omnistat` |
+| Omnistat + PMC | `/shared/omnihub/tools/omnistat-rocprofiler/` → use `--tools omnistat-rocprofiler-pmc1` for hardware counters |
+| Omnistat inspect | `/shared/omnihub/tools/omnihub-inspect/` → has `omnistat-inspect` + TraceLens CLI (legacy deep-dive venv) |
 | Results | `/shared/$USER/results/omnihub/$SLURM_JOB_ID/` |
 | HydraGNN overlay | `$AI4S_SHARED_DIR/models/HydraGNN/overlays/hydragnn-overlay.img` |
 
