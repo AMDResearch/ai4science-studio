@@ -87,7 +87,7 @@ Run these checks in sequence; abort with `PREFLIGHT_FAIL reason=<short>` on the 
 
 - `sinfo -p lux,rad -h` → if zero `IDLE` or `MIX` nodes, abort. Cluster may be in maintenance (see SKILL §14).
 - `df -h /shared | tail -1` → abort if `Use%` > 95.
-- `test -x $AI4S_SHARED_DIR/tools/omnistat-pr271/bin/omnistat-usermode` → abort if missing.
+- `test -x /shared/omnihub/tools/omnihub-inspect/bin/omnistat-usermode` → abort if missing.
 - `test -x $AI4S_SHARED_DIR/tools/victoriametrics/victoria-metrics-prod` → abort if missing.
 - `test -f $AI4S_SHARED_DIR/models/HydraGNN/overlays/hydragnn-overlay.img` → abort if missing.
 - `test -f $AI4S_SHARED_DIR/images/pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif` → abort if missing.

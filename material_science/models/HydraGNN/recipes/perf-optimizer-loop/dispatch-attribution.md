@@ -59,7 +59,7 @@ Short-kernel study (`short_kernels_summary.csv`): thousands of `aten::fill_`, `a
 ```bash
 export AI4S_SHARED_DIR=/shared/aaji
 export REPO_ROOT=$HOME/git/ai4science-studio
-source $AI4S_SHARED_DIR/tools/omnistat-pr271/bin/activate
+source /shared/omnihub/tools/omnihub-inspect/bin/activate
 
 # VictoriaMetrics on the perf-run DB (login node)
 $AI4S_SHARED_DIR/tools/victoriametrics/victoria-metrics-prod \

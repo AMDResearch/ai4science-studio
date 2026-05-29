@@ -93,7 +93,7 @@ fi
 
 # 3. tools present
 for _bin in \
-    "${AI4S_SHARED_DIR}/tools/omnistat-pr271/bin/omnistat-usermode" \
+    "/shared/omnihub/tools/omnihub-inspect/bin/omnistat-usermode" \
     "${AI4S_SHARED_DIR}/tools/victoriametrics/victoria-metrics-prod"; do
   if [[ -z "$PREFLIGHT_FAIL_REASON" && ! -x "$_bin" ]]; then
     PREFLIGHT_FAIL_REASON="tool_missing"

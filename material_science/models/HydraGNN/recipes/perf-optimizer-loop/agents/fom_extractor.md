@@ -68,7 +68,7 @@ omnistat kernel-trace collector).
 
 ```bash
 set -euo pipefail
-. "${AI4S_SHARED_DIR}/tools/omnistat-pr271/bin/activate"
+. "/shared/omnihub/tools/omnihub-inspect/bin/activate"
 PERF_RUN=$(jq -r .perf_run_dir <manifest>)
 JOBID=$(jq -r .jobid <manifest>)
 RUNTIME=$(jq -r .runtime_seconds <manifest>)

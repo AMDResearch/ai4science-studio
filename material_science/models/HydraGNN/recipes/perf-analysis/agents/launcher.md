@@ -10,7 +10,7 @@ Submits a 2-node HydraGNN training on Lux with PyTorch profiling and Omnistat us
 
 ## Outputs
 
-- `/shared/aaji/tools/omnistat-pr271/` — Python venv with omnistat (PR #271 + main merged) and TraceLens.
+- `/shared/omnihub/tools/omnihub-inspect/` — Python venv with omnistat (PR #271 + main merged) and TraceLens.
 - `/shared/aaji/tools/victoriametrics/victoria-metrics-prod` — VictoriaMetrics binary.
 - `/shared/aaji/models/HydraGNN/perf-runs/omnistat-lux.config` — Omnistat user-mode config.
 - `/shared/aaji/models/HydraGNN/perf-runs/<jobid>/manifest.json` — manifest schema below.
@@ -76,7 +76,7 @@ fi
 OMNISTAT_COMMIT=$(git rev-parse HEAD)
 
 # 1b. Venv (py3.12 to match cluster python)
-VENV=$TOOLS/omnistat-pr271
+VENV=/shared/omnihub/tools/omnihub-inspect
 if [[ ! -d $VENV ]]; then
   python3 -m venv "$VENV"
 fi

@@ -6,7 +6,7 @@ Drive `omnistat-inspect` (PR #271) through the analyze-job phases on the user-mo
 
 - `<perf_run_dir>/manifest.json`
 - The Omnistat DB at `manifest.omnistat_db_path`.
-- The `omnistat-pr271` venv at `/shared/aaji/tools/omnistat-pr271/`.
+- The `omnihub-inspect` venv at `/shared/omnihub/tools/omnihub-inspect/`.
 - The VictoriaMetrics binary at `/shared/aaji/tools/victoriametrics/victoria-metrics-prod`.
 
 ## Outputs
@@ -62,7 +62,7 @@ done
 ### 2. Run analyze-job phases (per the SKILL)
 
 ```bash
-. /shared/aaji/tools/omnistat-pr271/bin/activate
+. /shared/omnihub/tools/omnihub-inspect/bin/activate
 SCRATCH=$PERF_RUN/omnistat/scratch
 mkdir -p "$SCRATCH"
 JOBID=$(jq -r .jobid <manifest>)

@@ -20,7 +20,7 @@
 #
 # Required:
 #   AI4S_SHARED_DIR — shared base path
-#   $AI4S_SHARED_DIR/tools/omnistat-pr271/    (created by the launcher subagent)
+#   /shared/omnihub/tools/omnihub-inspect/    (created by the launcher subagent)
 #   $AI4S_SHARED_DIR/tools/victoriametrics/   (created by the launcher subagent)
 #
 # Optional env-var overrides (with defaults):
@@ -70,7 +70,7 @@ HG_REPO_DIR="${HG_REPO_DIR:-${HG_BASE}/code/HydraGNN}"
 HYDRAGNN_MAX_NUM_BATCH="${HYDRAGNN_MAX_NUM_BATCH:-30}"
 PROFILE_TARGET_EPOCH="${PROFILE_TARGET_EPOCH:-1}"
 
-OMNISTAT_VENV="${OMNISTAT_VENV:-${AI4S_SHARED_DIR}/tools/omnistat-pr271}"
+OMNISTAT_VENV="${OMNISTAT_VENV:-/shared/omnihub/tools/omnihub-inspect}"
 # Read the omnistat config from the in-repo recipe (single source of truth).
 # Override with OMNISTAT_TEMPLATE=/path/to/file if you need a custom probe config.
 # A staged copy under ${HG_BASE}/perf-runs/ is intentionally NOT used as the
