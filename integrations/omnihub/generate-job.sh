@@ -70,10 +70,7 @@ fi
 "$SCRIPT_DIR/sync-to-omnihub.sh"
 
 HG_BASE="$AI4S_SHARED_DIR/models/HydraGNN"
-HG_OVERLAY="${HG_OVERLAY:-$HG_BASE/overlays/hydragnn-overlay-pre-mainbump.img}"
-if [[ ! -f "$HG_OVERLAY" ]]; then
-  HG_OVERLAY="$HG_BASE/overlays/hydragnn-overlay.img"
-fi
+HG_OVERLAY="${HG_OVERLAY:-$HG_BASE/overlays/hydragnn-overlay.img}"
 HG_SIF="${HG_SIF:-$AI4S_SHARED_DIR/images/pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif}"
 HG_REPO="${HG_REPO_DIR:-$HG_BASE/code/HydraGNN}"
 HG_DATA="${HG_DATA_DIR:-$HG_BASE/weights}"
