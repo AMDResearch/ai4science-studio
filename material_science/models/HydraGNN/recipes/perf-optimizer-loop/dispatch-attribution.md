@@ -62,7 +62,7 @@ export REPO_ROOT=$HOME/git/ai4science-studio
 source /shared/omnihub/tools/omnihub-inspect/bin/activate
 
 # VictoriaMetrics on the perf-run DB (login node)
-$AI4S_SHARED_DIR/tools/victoriametrics/victoria-metrics-prod \
+/shared/omnihub/tools/victoriametrics/victoria-metrics-prod \
   -storageDataPath=$AI4S_SHARED_DIR/models/HydraGNN/perf-runs/7187/omnistat-db \
   -httpListenAddr=127.0.0.1:8432 -retentionPeriod=100y -fs.disableMmap &
 

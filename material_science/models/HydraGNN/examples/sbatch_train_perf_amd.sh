@@ -21,7 +21,7 @@
 # Required:
 #   AI4S_SHARED_DIR — shared base path
 #   /shared/omnihub/tools/omnihub-inspect/    (created by the launcher subagent)
-#   $AI4S_SHARED_DIR/tools/victoriametrics/   (created by the launcher subagent)
+#   /shared/omnihub/tools/victoriametrics/   (created by the launcher subagent)
 #
 # Optional env-var overrides (with defaults):
 #   HG_NUM_EPOCH=2
@@ -86,7 +86,7 @@ OMNISTAT_USERMODE_INTERVAL="${OMNISTAT_USERMODE_INTERVAL:-1}"
 # See material_science/models/HydraGNN/recipes/perf-analysis/agents/launcher.md
 # for how to build libomnistat_trace.so on a compute node.
 OMNISTAT_KERNEL_TRACE="${OMNISTAT_KERNEL_TRACE:-0}"
-OMNISTAT_TRACE_LIB="${OMNISTAT_TRACE_LIB:-${AI4S_SHARED_DIR}/tools/omnistat-src/build-trace/libomnistat_trace.so}"
+OMNISTAT_TRACE_LIB="${OMNISTAT_TRACE_LIB:-/shared/omnihub/tools/omnistat-src/build-trace/libomnistat_trace.so}"
 # IMPORTANT: the kernel-trace collector registers /kernel_trace on the SAME
 # Flask app as the other omnistat endpoints, so the tool library must POST to
 # the [omnistat.collectors] `port` (8101 here), NOT the library's own default
@@ -174,7 +174,7 @@ if [[ "$OMNISTAT_KERNEL_TRACE" == "1" ]]; then
     echo "       Build it on a compute node:" >&2
     echo "         salloc -p <partition> -A <account> -N 1 --time=00:15:00 --gpus-per-node=1 \\" >&2
     echo "           apptainer exec --rocm \"\$HG_SIF\" bash -c '" >&2
-    echo "             cd \$AI4S_SHARED_DIR/tools/omnistat-src && \\" >&2
+    echo "             cd /shared/omnihub/tools/omnistat-src && \\" >&2
     echo "             cmake -S rocprofiler-sdk/ -B build-trace/ -DBUILD_KERNEL_TRACE_LIB=ON && \\" >&2
     echo "             cmake --build build-trace/ -j 8'" >&2
     exit 2

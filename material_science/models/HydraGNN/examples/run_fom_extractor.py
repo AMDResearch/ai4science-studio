@@ -137,7 +137,7 @@ def promql_scalar(tsdb_url: str, promql: str, t: int) -> float | None:
 def start_vm(db_path: str, port: int, log_path: Path) -> None:
     vm = os.environ.get(
         "VICTORIA_METRICS_BIN",
-        f"{os.environ['AI4S_SHARED_DIR']}/tools/victoriametrics/victoria-metrics-prod",
+        "/shared/omnihub/tools/victoriametrics/victoria-metrics-prod",
     )
     subprocess.Popen(
         [
