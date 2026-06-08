@@ -313,7 +313,7 @@ srun --mpi=pmix apptainer exec \
 
 **Why `HOSTNAME` instead of `MASTER_ADDR`:** Several model scripts do `os.environ["MASTER_ADDR"] = os.environ["HOSTNAME"]`. Inject rank-0's hostname as `HOSTNAME` so this pattern resolves correctly on all nodes. Using `localhost` only works single-node.
 
-**Multi-node scaling:** Change `--nodes=N --ntasks=N*<gpus_per_node>` in the SBATCH header; the `srun` command is unchanged.
+**Multi-node scaling:** Change `--nodes=N --ntasks=N*<gpus_per_node>` in the SBATCH header; the `srun` command is unchanged. For HydraGNN matched strong-scaling studies, use `material_science/models/HydraGNN/examples/run_scaling_study.sh` + `collate_scaling_study.py` (see material-science SKILL and `recipes/train/README.md` §6).
 
 ## GPU visibility: `--gpus-per-node` NOT `--gpus-per-task` (MI355X / RCCL)
 

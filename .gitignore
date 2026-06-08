@@ -55,6 +55,8 @@ vic_server.log
 # Convergence parser outputs (artifact, not source)
 **/examples/convergence*.png
 **/examples/convergence*.csv
+**/examples/scaling_study*
+**/examples/foms-*.json
 
 # Model outputs & generated data
 **/examples/outputs/

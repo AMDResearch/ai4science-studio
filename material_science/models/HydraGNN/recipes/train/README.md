@@ -147,11 +147,17 @@ Validated on MI355X (2026-05-19) with `HYDRAGNN_MAX_NUM_BATCH=50`, `HG_BATCH_SIZ
 
 ## 6. Performance & Scaling
 
-| Nodes | GPUs | Throughput (batch/s) | Time per batch | Notes |
-|-------|------|---------------------|----------------|-------|
-| 1     | 8    | ~0.42               | 2.4 s          | Validated (50-batch sanity test, 2026-05-19) |
-| 2     | 16   | ~0.33               | 3.0 s          | Validated (30-batch, ob1/tcp MPI, 2026-05-19) |
-| 4     | 32   | TBD                 | —              | Expected to work with same flags |
+Matched strong-scaling sweep on MI355X (2026-06-06): identical env on all node counts, steady-state train s/batch (mean of epochs 2–5), `HYDRAGNN_VALTEST=0`, RCCL high-priority enabled.
+
+| Nodes | GPUs | Train s/batch | samples/s | Strong-scaling eff. |
+|------:|-----:|--------------:|----------:|--------------------:|
+| 1     | 8    | 2.69 s        | 74        | 1.00                |
+| 2     | 16   | 2.73 s        | 73        | 0.98                |
+| 4     | 32   | 2.71 s        | 74        | 0.99                |
+| 8     | 64   | 2.85 s        | 70        | 0.94                |
+
+Submit a matched sweep: `./examples/run_scaling_study.sh`  
+Regenerate the table from SLURM logs: `python examples/collate_scaling_study.py --jobs <id1>,<id2>,... -o scaling_study`
 
 ### Multi-node network architecture
 
