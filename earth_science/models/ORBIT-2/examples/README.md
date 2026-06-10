@@ -15,6 +15,41 @@ with AMD/ROCm container launch, overlay builds, and synthetic smoke tests.
 | [`sbatch_infer_amd.sh`](sbatch_infer_amd.sh) | SLURM driver for inference on AMD Instinct (MI250X/MI300X/MI350X) |
 | [`build_overlay_amd.sh`](build_overlay_amd.sh) | One-time overlay build (pre-bakes pip deps, skips ~15 min per job) |
 | [`interm_8m_synthetic.yaml`](interm_8m_synthetic.yaml) | Template YAML for synthetic mode |
+| [`sbatch_train_amd.sh`](sbatch_train_amd.sh) | Multi-node training (Apptainer + MPI) |
+| [`sbatch_train_perf_amd.sh`](sbatch_train_perf_amd.sh) | 2-node instrumented perf-analysis run |
+| [`run_scaling_study.sh`](run_scaling_study.sh) | Submit matched 1/2/4/8-node scaling sweep |
+| [`collate_scaling_study.py`](collate_scaling_study.py) | Parse scaling logs → CSV/MD table |
+| [`parse_training_log.py`](parse_training_log.py) | Extract batch/epoch metrics from SLURM log |
+| [`interm_8m_lux.yaml`](interm_8m_lux.yaml) | Lux config template (10.0_arcmin same-dir) |
+| [`interm_8m_lux_era5.yaml`](interm_8m_lux_era5.yaml) | Lux config template (ERA5 1.0_deg same-dir sanity) |
+
+## Quick start — ERA5 1.0_deg sanity (new dataset)
+
+Verifies the staged ERA5 NPZ tree loads and training runs (same-dir mode; loss not meaningful).
+
+```bash
+export AI4S_SHARED_DIR=/path/to/shared
+export ORBIT2_DATA_ROOT=$AI4S_SHARED_DIR/models/ORBIT-2/data/superres/era5/1.0_deg
+export ORBIT2_CONFIG_TEMPLATE=interm_8m_lux_era5.yaml
+export ORBIT2_MAX_EPOCH=2 ORBIT2_MAX_BATCHES=5 ORBIT2_BATCH_SIZE=2 ORBIT2_DATA_TYPE=float32
+sbatch sbatch_train_amd.sh
+```
+
+For production ERA5→PRISM downscaling you will pair `era5/1.0_deg` (low) with `prism/2.5_arcmin` (high) once both splits and year shards align.
+
+## Quick start — training (10.0_arcmin PRISM, scaling)
+
+```bash
+export AI4S_SHARED_DIR=/path/to/shared
+export ORBIT2_DATA_ROOT=$AI4S_SHARED_DIR/models/ORBIT-2/data/superres/prism/10.0_arcmin
+export ORBIT2_MAX_EPOCH=2 ORBIT2_MAX_BATCHES=10 ORBIT2_DATA_TYPE=float32
+sbatch sbatch_train_amd.sh
+
+# Strong scaling sweep:
+export SBATCH_PARTITION=... SBATCH_ACCOUNT=...
+./run_scaling_study.sh
+python3 collate_scaling_study.py --log-dir . --jobs <id1>,<id2>,... -o scaling_study
+```
 
 ## Quick start — Docker
 

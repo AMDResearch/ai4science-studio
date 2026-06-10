@@ -33,8 +33,8 @@
 #
 # SBATCH directives:
 #SBATCH --job-name=node-health
-#SBATCH --partition=gpu
-#SBATCH --account=default
+#SBATCH --partition=YOUR_GPU_PARTITION
+#SBATCH --account=YOUR_ACCOUNT
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=128
@@ -69,8 +69,8 @@ echo "[$H] microbench start at $(date -u +%FT%TZ)" | tee "$HOST_OUT/_start.txt"
   cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor > "$HOST_OUT/cpu_governor.txt" 2>&1 || echo "no cpufreq" > "$HOST_OUT/cpu_governor.txt"
   grep -E '^Mem|HugePages|^DirectMap|^Swap' /proc/meminfo > "$HOST_OUT/meminfo.txt" 2>&1
   ip -br link                                        > "$HOST_OUT/ip_link.txt"      2>&1
-  mount | grep -E ' /home| /shared|tmpfs|/tmp'      > "$HOST_OUT/mounts.txt"       2>&1
-  df -h $HOME /shared /tmp 2>/dev/null               > "$HOST_OUT/df.txt"           2>&1
+  mount | grep -E " /home| ${AI4S_SHARED_DIR}|tmpfs|/tmp"  > "$HOST_OUT/mounts.txt"  2>&1
+  df -h "$HOME" "$AI4S_SHARED_DIR" /tmp 2>/dev/null  > "$HOST_OUT/df.txt"           2>&1
 }
 
 # ---------- Test 2: container mount probe ----------
@@ -163,7 +163,7 @@ HIP_PASS="skipped(no_gpu_allocation)"
 HIP_MEAN_US=""
 if command -v rocm-smi >/dev/null 2>&1 || [ -e "$HG_SIF" ]; then
   if [ -e "$HG_SIF" ]; then
-    apptainer exec --rocm --bind /opt/rocm-7.2.2:/opt/rocm-7.2.2 --bind /shared \
+    apptainer exec --rocm --bind /opt/rocm-7.2.2:/opt/rocm-7.2.2 --bind "$AI4S_SHARED_DIR" \
       --env LD_LIBRARY_PATH=/opt/rocm-7.2.2/lib:/usr/lib/x86_64-linux-gnu \
       "$HG_SIF" bash -c "
 PATH=/opt/rocm-7.2.2/bin:\$PATH rocminfo                                              > '$HOST_OUT/rocminfo.txt'           2>&1

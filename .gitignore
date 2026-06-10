@@ -56,6 +56,8 @@ vic_server.log
 # Convergence parser outputs (artifact, not source)
 **/examples/convergence*.png
 **/examples/convergence*.csv
+**/examples/scaling_study*
+**/examples/foms-*.json
 
 # Model outputs & generated data
 **/examples/outputs/
@@ -66,6 +68,7 @@ vic_server.log
 
 # Session-scoped agent handoff files (ephemeral, not for the repo)
 HANDOFF.md
+!earth_science/models/ORBIT-2/recipes/perf-analysis/HANDOFF.md
 .claude/settings.local.json
 nul
 

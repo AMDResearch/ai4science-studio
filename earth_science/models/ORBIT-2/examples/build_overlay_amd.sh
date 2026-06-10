@@ -226,6 +226,12 @@ echo "--- Verifying ---"
 PYTHONPATH="\$PKG" python3 -c "
 import xformers, mpi4py, pytorch_lightning, torch
 print('xformers         :', xformers.__version__)
+print('xformers.ops     :', hasattr(xformers, 'ops'))
+try:
+    import xformers.ops  # noqa: F401
+    print('xformers.ops     : import OK')
+except Exception as e:
+    print('xformers.ops     : NOT available (', type(e).__name__, ') — use ORBIT2_DATA_TYPE=float32 for training until CK path is present')
 print('mpi4py           :', mpi4py.__version__)
 print('pytorch_lightning:', pytorch_lightning.__version__)
 print('torch            :', torch.__version__)

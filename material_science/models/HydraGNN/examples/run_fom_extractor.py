@@ -5,9 +5,9 @@ Implements material_science/models/HydraGNN/recipes/perf-optimizer-loop/agents/f
 for login-node post-processing of a completed perf run.
 
 Usage:
-    export AI4S_SHARED_DIR=/shared/aaji
+    export AI4S_SHARED_DIR=/shared/$USER
     export OMNIHUB_TOOLS_DIR=/shared/omnihub/tools  # from .cluster-config.yaml omnihub.tools_dir
-    export REPO_ROOT=/home/aaji/git/ai4science-studio
+    export REPO_ROOT=/path/to/ai4science-studio
     python run_fom_extractor.py --manifest /path/to/perf-runs/<jobid>/manifest.json \\
         [--vm-port 8432] [--tsdb-url http://127.0.0.1:8432]
 
@@ -202,7 +202,6 @@ def main() -> int:
     parser.add_argument("--no-start-vm", action="store_true", help="Require --tsdb-url")
     args = parser.parse_args()
 
-    shared = os.environ.get("AI4S_SHARED_DIR", "/shared/aaji")
     repo = os.environ.get("REPO_ROOT", str(Path(__file__).resolve().parents[3]))
 
     with open(args.manifest) as f:
@@ -300,7 +299,7 @@ def main() -> int:
                         {
                             "window_start_iso": iso,
                             "window_start_ts": win_ts,
-                            "instance": "lux-mi355x-b1",
+                            "instance": "",
                             "gpu_id": 0,
                             "top_kernel_name": top_name,
                             "top_kernel_busy_frac": f"{top_frac:.4f}",

@@ -26,7 +26,7 @@ from pathlib import Path
 def parse_slurm_log(log_path: str) -> list[dict]:
     """Parse HydraGNN training metrics from SLURM stdout or run.log.
 
-    HydraGNN (pinned SHA 6c45f168) emits these patterns:
+    HydraGNN (pinned SHA 2fb0bd0) emits these patterns:
       - Epoch summary (requires HYDRAGNN_VALTEST=1):
             0: Epoch: 01, Train Loss: 0.12345678, Val Loss: 0.23456789, Test Loss: 0.34567890
       - Per-task losses:

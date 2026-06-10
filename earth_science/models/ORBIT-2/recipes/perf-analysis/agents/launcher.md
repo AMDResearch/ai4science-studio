@@ -1,22 +1,22 @@
 # launcher subagent
 
-Submits a 2-node HydraGNN training (AMD Instinct MI355X) with PyTorch profiling and Omnistat user-mode telemetry, waits for completion, and writes `manifest.json` for downstream subagents.
+Submits a 2-node ORBIT-2 training (AMD Instinct MI355X) with PyTorch profiling and Omnistat user-mode telemetry, waits for completion, and writes `manifest.json` for downstream subagents.
 
 ## Inputs
 
 - The ai4science-studio repo checkout (`$REPO_ROOT`).
 - Cluster config at `.cluster-config.yaml` (partition/account, shared dirs).
-- Optional env-var overrides: `HG_BATCH_SIZE`, `HYDRAGNN_MAX_NUM_BATCH`, `HG_NUM_EPOCH`, `HG_PRECISION`, `PROFILE_TARGET_EPOCH`.
+- Optional env-var overrides: `ORBIT2_BATCH_SIZE`, `HYDRAGNN_MAX_NUM_BATCH`, `ORBIT2_NUM_EPOCH`, `ORBIT2_PRECISION`, `PROFILE_TARGET_EPOCH`.
 
 ## Outputs
 
 - `${OMNIHUB_TOOLS_DIR}/omnihub-inspect/` — Python venv with omnistat (PR #271 + main merged) and TraceLens.
 - `${OMNIHUB_TOOLS_DIR}/victoriametrics/victoria-metrics-prod` — VictoriaMetrics binary.
-- `$AI4S_SHARED_DIR/models/HydraGNN/perf-runs/omnistat.config` — Omnistat user-mode config.
-- `$AI4S_SHARED_DIR/models/HydraGNN/perf-runs/<jobid>/manifest.json` — manifest schema below.
-- `$AI4S_SHARED_DIR/models/HydraGNN/perf-runs/<jobid>/hydragnn-train-<jobid>.out` — symlinked from output dir.
-- `$AI4S_SHARED_DIR/models/HydraGNN/perf-runs/<jobid>/logs/` — symlinked rank-0 trace.
-- `$AI4S_SHARED_DIR/models/HydraGNN/perf-runs/<jobid>/omnistat-db/` — VictoriaMetrics datadir.
+- `$AI4S_SHARED_DIR/models/ORBIT-2/perf-runs/omnistat.config` — Omnistat user-mode config.
+- `$AI4S_SHARED_DIR/models/ORBIT-2/perf-runs/<jobid>/manifest.json` — manifest schema below.
+- `$AI4S_SHARED_DIR/models/ORBIT-2/perf-runs/<jobid>/orbit2-train-<jobid>.out` — symlinked from output dir.
+- `$AI4S_SHARED_DIR/models/ORBIT-2/perf-runs/<jobid>/logs/` — symlinked rank-0 trace.
+- `$AI4S_SHARED_DIR/models/ORBIT-2/perf-runs/<jobid>/omnistat-db/` — VictoriaMetrics datadir.
 
 ## Manifest schema
 
@@ -33,7 +33,7 @@ Submits a 2-node HydraGNN training (AMD Instinct MI355X) with PyTorch profiling 
   "partition": "<partition>",
   "account": "<account>",
   "runtime_seconds": <float>,
-  "config_used": "<path to gfm_mlip_with_profile.json>",
+  "config_used": "<path to interm_8m_lux_with_profile.json>",
   "profile_target_epoch": <int>,
   "trace_paths": ["<path to .pt.trace.json>"],
   "omnistat_db_path": "<dir>",
@@ -42,7 +42,7 @@ Submits a 2-node HydraGNN training (AMD Instinct MI355X) with PyTorch profiling 
   "hg_precision": "fp64",
   "hg_batch_size": 200,
   "hg_num_epoch": 2,
-  "hydragnn_max_num_batch": 30,
+  "orbit2_max_num_batch": 30,
   "tools_versions": {
     "omnistat_commit": "<sha>",
     "tracelens_commit": "<sha>",
@@ -58,7 +58,7 @@ Submits a 2-node HydraGNN training (AMD Instinct MI355X) with PyTorch profiling 
 ```bash
 set -euo pipefail
 # Shared tool location — read from .cluster-config.yaml omnihub.tools_dir.
-TOOLS="${OMNIHUB_TOOLS_DIR:?set OMNIHUB_TOOLS_DIR from .cluster-config.yaml omnihub.tools_dir (e.g. /shared/omnihub/tools)}"
+TOOLS="${OMNIHUB_TOOLS_DIR:?set OMNIHUB_TOOLS_DIR to a persistent checkout (e.g. under \$AI4S_SHARED_DIR/tools)}"
 mkdir -p "$TOOLS"
 
 # 1a. Omnistat: jorda/skills branch with origin/main merged in
@@ -127,11 +127,11 @@ The sbatch wrapper expects the `.so` at `${OMNIHUB_TOOLS_DIR}/omnistat-src/build
 
 ### 2. Author the Omnistat user-mode config (once, in repo `perf-runs/`)
 
-If `$AI4S_SHARED_DIR/models/HydraGNN/perf-runs/omnistat.config` doesn't exist, write it from the template at `$REPO_ROOT/material_science/models/HydraGNN/recipes/perf-analysis/omnistat.config.template`. The template uses `%(SLURM_JOB_ID)s` placeholders that omnistat-usermode resolves at runtime.
+If `$AI4S_SHARED_DIR/models/ORBIT-2/perf-runs/omnistat.config` doesn't exist, write it from the template at `$REPO_ROOT/material_science/models/ORBIT-2/recipes/perf-analysis/omnistat.config.template`. The template uses `%(SLURM_JOB_ID)s` placeholders that omnistat-usermode resolves at runtime.
 
 ### 3. Generate the per-job profile config
 
-Read the upstream `gfm_mlip.json` from `$AI4S_SHARED_DIR/models/HydraGNN/code/HydraGNN/examples/multidataset_hpo_sc26/gfm_mlip.json` and inject the `Profile` block **inside `NeuralNetwork`** (not at the top level — `train_validate_test()` is invoked with `config["NeuralNetwork"]` as `config`, so its Profiler reads `config["Profile"]` from that scope):
+Read the upstream `interm_8m_lux.json` from `$AI4S_SHARED_DIR/models/ORBIT-2/code/ORBIT-2/examples/multidataset_hpo_sc26/interm_8m_lux.json` and inject the `Profile` block **inside `NeuralNetwork`** (not at the top level — `train_validate_test()` is invoked with `config["NeuralNetwork"]` as `config`, so its Profiler reads `config["Profile"]` from that scope):
 
 ```python
 cfg.setdefault("NeuralNetwork", {})["Profile"] = {
@@ -140,16 +140,16 @@ cfg.setdefault("NeuralNetwork", {})["Profile"] = {
 }
 ```
 
-Write the result to `$AI4S_SHARED_DIR/models/HydraGNN/perf-runs/<jobid>/gfm_mlip_profile.json`. Use Python (`json.load`/`json.dump`) — do NOT do this with sed.
+Write the result to `$AI4S_SHARED_DIR/models/ORBIT-2/perf-runs/<jobid>/interm_8m_lux_profile.json`. Use Python (`json.load`/`json.dump`) — do NOT do this with sed.
 
-(The wrapper `examples/sbatch_train_perf_amd.sh` already does this; this step exists in the launcher prompt for the case where the launcher is reused for a non-HydraGNN model.)
+(The wrapper `examples/sbatch_train_perf_amd.sh` already does this; this step exists in the launcher prompt for the case where the launcher is reused for a non-ORBIT-2 model.)
 
 ### 4. Submit the job
 
 ```bash
-export AI4S_SHARED_DIR=/shared/$USER
-export HG_OUTPUT_DIR=$AI4S_SHARED_DIR/models/HydraGNN/perf-runs/PENDING-$$
-mkdir -p "$HG_OUTPUT_DIR"
+export AI4S_SHARED_DIR=/path/to/shared
+export ORBIT2_OUTPUT_DIR=$AI4S_SHARED_DIR/models/ORBIT-2/perf-runs/PENDING-$$
+mkdir -p "$ORBIT2_OUTPUT_DIR"
 
 cd "$REPO_ROOT"
 OUT=$(sbatch \
@@ -160,14 +160,14 @@ OUT=$(sbatch \
   --gpus-per-node=8 \
   --cpus-per-task=16 \
   --time=00:30:00 \
-  --output="${HG_OUTPUT_DIR}/hydragnn-train-%j.out" \
-  --error="${HG_OUTPUT_DIR}/hydragnn-train-%j.out" \
-  material_science/models/HydraGNN/examples/sbatch_train_perf_amd.sh)
+  --output="${ORBIT2_OUTPUT_DIR}/orbit2-train-%j.out" \
+  --error="${ORBIT2_OUTPUT_DIR}/orbit2-train-%j.out" \
+  material_science/models/ORBIT-2/examples/sbatch_train_perf_amd.sh)
 JOBID=$(echo "$OUT" | awk '{print $NF}')
 echo "Submitted JOBID=$JOBID"
 ```
 
-The sbatch wrapper inherits these env vars and exports `HG_CONFIG_OVERRIDE`, `OMNISTAT_VENV`, `OMNISTAT_CONFIG`, `OMNISTAT_USERMODE_INTERVAL`, `PROFILE_RANK0_ONLY=1` to the rank script.
+The sbatch wrapper inherits these env vars and exports `ORBIT2_CONFIG_OVERRIDE`, `OMNISTAT_VENV`, `OMNISTAT_CONFIG`, `OMNISTAT_USERMODE_INTERVAL`, `PROFILE_RANK0_ONLY=1` to the rank script.
 
 ### 5. Wait for terminal state
 
@@ -178,8 +178,8 @@ Poll `sacct -j $JOBID -X -n --format=State,ExitCode,Elapsed,NodeList -P` every 3
 Once terminal:
 
 ```bash
-PERF_RUN=$AI4S_SHARED_DIR/models/HydraGNN/perf-runs/${JOBID}
-mv "$HG_OUTPUT_DIR" "$PERF_RUN"
+PERF_RUN=$AI4S_SHARED_DIR/models/ORBIT-2/perf-runs/${JOBID}
+mv "$ORBIT2_OUTPUT_DIR" "$PERF_RUN"
 # Find the rank-0 trace
 TRACE=$(find "$PERF_RUN/logs" -name '*.pt.trace.json*' 2>/dev/null | head -1 || true)
 # Find the omnistat DB (the sbatch wrapper writes it under the perf-run dir)

@@ -51,6 +51,10 @@ The `earth_science/` domain covers **climate**, **weather**, and broader **Earth
   ```
 - **Distributed launch:** `srun --mpi=pmix apptainer exec ... --env HOSTNAME="$MASTER_ADDR"` — see studio SKILL.md for full pattern. Confirmed working for 1-GPU and 8-GPU.
 - **Data blocker:** ORBIT-2 real training data lives on Frontier Lustre (`/lustre/orion/<YOUR_PROJECT>/...`) — not publicly accessible. Synthetic data covers the smoke-test path.
+- **Training on institutional clusters:** `sbatch_train_amd.sh` + `run_orbit2_train.py` wrap `intermediate_downscaling.py` with Apptainer overlay, `srun --mpi=pmix`, and `interm_8m_lux.yaml`. Staged Constellation/Globus 10.0_arcmin NPZ data can be used in **same-dir mode** (`low_res` = `high_res`, `superres_mag: 1`) for perf/scaling timing only.
+- **Training landmines (2026-06):** stub `gptl4py` in `run_orbit2_train.py`; overlay may lack `xformers.ops` → auto `FusedAttn.DEFAULT`; `max_epochs` must be ≥ 2; batch cap patches module before `main()` not via `runpy.run_path`.
+- **Perf/scaling:** `sbatch_train_perf_amd.sh`, `run_scaling_study.sh`, artifacts under `$AI4S_SHARED_DIR/models/ORBIT-2/perf-runs/` and `outputs/scaling-*`. See [recipes/perf-analysis/HANDOFF.md](../../../earth_science/models/ORBIT-2/recipes/perf-analysis/HANDOFF.md).
+- **Multi-node scheduling:** Before large submits, check partition state (`sinfo`, site dashboards). Prefer **idle, healthy** nodes; use `--nodelist` / `--exclude` only per your site's policy. Do not stack two exclusive full-node GPU jobs on the same host.
 
 ### ArchesWeather (geoarches)
 

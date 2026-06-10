@@ -1,8 +1,8 @@
 # Dispatch attribution — job 7187 (current best, 75 s/epoch)
 
-**Perf run:** `/shared/aaji/models/HydraGNN/perf-runs/7187/`  
+**Perf run:** `$AI4S_SHARED_DIR/models/HydraGNN/perf-runs/7187/`  
 **Lever:** `rccl_high_priority` (`TORCH_NCCL_HIGH_PRIORITY=1`, `GPU_MAX_HW_QUEUES=2`)  
-**Nodes:** `lux-mi355x-b1`, `lux-mi355x-b2` (2×8 GPUs)
+**Nodes:** 2 × MI355X (8 GPUs each)
 
 ## Artifacts produced (2026-05-27)
 
@@ -57,7 +57,7 @@ Short-kernel study (`short_kernels_summary.csv`): thousands of `aten::fill_`, `a
 ## Commands to reproduce
 
 ```bash
-export AI4S_SHARED_DIR=/shared/aaji
+export AI4S_SHARED_DIR=/shared/$USER
 export REPO_ROOT=$HOME/git/ai4science-studio
 source ${OMNIHUB_TOOLS_DIR}/omnihub-inspect/bin/activate
 
@@ -68,7 +68,7 @@ ${OMNIHUB_TOOLS_DIR}/victoriametrics/victoria-metrics-prod \
 
 cd $AI4S_SHARED_DIR/models/HydraGNN/perf-runs/7187/tracelens
 TraceLens_generate_perf_report_pytorch \
-  --profile_json_path ../logs/hydragnn-train-7187-N2/lux-mi355x-b1_532131.1779479818046951705.pt.trace.json \
+  --profile_json_path ../logs/hydragnn-train-7187-N2/<node>_<rank>.pt.trace.json \
   --output_xlsx_path report.xlsx --output_csvs_dir csvs/ \
   --enable_kernel_summary --short_kernel_study
 

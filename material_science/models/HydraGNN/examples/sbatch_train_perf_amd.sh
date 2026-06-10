@@ -8,8 +8,9 @@
 #   1. Wraps srun with omnistat-usermode --start/--stopexporters/--stopserver.
 #   2. Generates a per-job copy of gfm_mlip.json with a "Profile" block injected
 #      so HydraGNN's built-in torch.profiler captures rank-0 of node-0 only.
-#   3. Defaults to a cluster partition/account that can be overridden via
-#      SBATCH_PARTITION/SBATCH_ACCOUNT env vars for your cluster.
+#   3. Uses placeholder partition/account (#SBATCH --partition=YOUR_GPU_PARTITION,
+#      --account=YOUR_ACCOUNT); override via SBATCH_PARTITION/SBATCH_ACCOUNT
+#      env vars or by editing the directives for your cluster.
 #   4. Defaults are tuned for a quick perf run: --nodes=2, NUM_EPOCH=2,
 #      MAX_NUM_BATCH=30, time=00:30:00 — enough for the wait=5/warmup=3/active=3
 #      profiler schedule plus a clean epoch 0 for warm caches.
@@ -32,8 +33,8 @@
 #   OMNISTAT_USERMODE_INTERVAL=1   # seconds
 
 #SBATCH --job-name=hydragnn-perf
-#SBATCH --partition=gpu
-#SBATCH --account=default
+#SBATCH --partition=YOUR_GPU_PARTITION
+#SBATCH --account=YOUR_ACCOUNT
 #SBATCH --nodes=2
 #SBATCH --ntasks-per-node=8
 #SBATCH --gpus-per-node=8
@@ -79,7 +80,7 @@ OMNISTAT_VENV="${OMNISTAT_VENV:-${OMNIHUB_TOOLS_DIR}/omnihub-inspect}"
 # A staged copy under ${HG_BASE}/perf-runs/ is intentionally NOT used as the
 # default — it has drifted in the past from the in-repo template, silently
 # disabling rocprofiler counters. See ai4science-studio SKILL.md for context.
-OMNISTAT_TEMPLATE="${OMNISTAT_TEMPLATE:-${SCRIPT_DIR}/../recipes/perf-analysis/omnistat-lux.config.template}"
+OMNISTAT_TEMPLATE="${OMNISTAT_TEMPLATE:-${SCRIPT_DIR}/../recipes/perf-analysis/omnistat.config.template}"
 OMNISTAT_USERMODE_INTERVAL="${OMNISTAT_USERMODE_INTERVAL:-1}"
 
 # Kernel-dispatch tracing (per-kernel name + duration histogram from every
@@ -163,7 +164,9 @@ done
 # ---------------------------------------------------------------------------
 mkdir -p "$HG_OUTPUT_DIR"
 OMNISTAT_CONFIG="${HG_OUTPUT_DIR}/omnistat.config"
-sed -e "s|@JOB_DIR@|${HG_OUTPUT_DIR}|g" "$OMNISTAT_TEMPLATE" > "$OMNISTAT_CONFIG"
+sed -e "s|@JOB_DIR@|${HG_OUTPUT_DIR}|g" \
+    -e "s|@OMNIHUB_TOOLS_DIR@|${OMNIHUB_TOOLS_DIR}|g" \
+    "$OMNISTAT_TEMPLATE" > "$OMNISTAT_CONFIG"
 
 # Opt-in kernel tracing: flip enable_kernel_trace=True in the rendered config
 # and verify the rocprofiler-sdk tool library exists. Bail out loudly if
@@ -293,7 +296,7 @@ if [[ "$HG_SKIP_NODE_HEALTH_PROBE" != "1" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Start Omnistat user-mode (datadir from omnistat-lux.config: under HG_OUTPUT_DIR)
+# Start Omnistat user-mode (datadir from omnistat.config: under HG_OUTPUT_DIR)
 # ---------------------------------------------------------------------------
 echo "--- Starting Omnistat user-mode (interval=${OMNISTAT_USERMODE_INTERVAL}s) ---"
 export PATH="${OMNISTAT_VENV}/bin:${PATH}"

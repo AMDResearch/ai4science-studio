@@ -66,24 +66,22 @@ Choose the highest-impact `verified` claim with a non-null `remedy_test_command_
 - ≤5 minutes wall-time.
 - Must produce a comparable number (steps/sec or seconds/step) to the original 2-node baseline. If the remedy can only be tested at scale (e.g. RCCL inter-node tweak), set `remedy_probe.ran=false; notes="remedy requires multi-node; deferred to next iteration"`.
 
-Example probe for the bf16 / fp64 ceiling claim — run via the existing HydraGNN sbatch script in interactive mode:
+Example probe for the bf16 / fp64 ceiling claim — run via the existing ORBIT-2 sbatch script in interactive mode:
 
 ```bash
 srun -p <partition> -A <account> -N1 --ntasks=8 --gpus-per-node=8 --cpus-per-task=16 \
     --time=00:05:00 --pty bash -c '
-export AI4S_SHARED_DIR=/shared/$USER
-export HG_PRECISION=bf16
-export HYDRAGNN_MAX_NUM_BATCH=10
-export HG_NUM_EPOCH=1
-export HG_OUTPUT_DIR=/tmp/perf-probe-$$
-mkdir -p $HG_OUTPUT_DIR
-bash "$REPO_ROOT/material_science/models/HydraGNN/examples/sbatch_train_amd.sh" \
+export AI4S_SHARED_DIR=/path/to/shared
+export ORBIT2_OUTPUT_DIR=/tmp/perf-probe-$$
+mkdir -p "$ORBIT2_OUTPUT_DIR"
+# Prefer submitting via sbatch_train_amd.sh from the repo; ad-hoc srun probes are site-specific.
+bash "$REPO_ROOT/earth_science/models/ORBIT-2/examples/sbatch_train_amd.sh" \
     2>&1 | tee /tmp/probe-$SLURM_JOB_ID.out
 grep -oE "[0-9.]+s/it" /tmp/probe-$SLURM_JOB_ID.out | tail -5
 '
 ```
 
-Note: `sbatch_train_amd.sh` is designed for `sbatch`, not `srun --pty`. For probes prefer using its rank-script logic directly via a small ad-hoc wrapper rather than running the whole sbatch under srun. The verifier may inline a minimal Python invocation that bypasses sbatch and just runs the upstream `gfm_mlip_all_mpnn.py` for 10 batches inside the container with the alternate precision.
+Note: `sbatch_train_amd.sh` is designed for `sbatch`, not `srun --pty`. For probes prefer using its rank-script logic directly via a small ad-hoc wrapper rather than running the whole sbatch under srun. The verifier may inline a minimal Python invocation that bypasses sbatch and just runs the upstream `interm_8m_lux_all_mpnn.py` for 10 batches inside the container with the alternate precision.
 
 If the verifier judges that no cheap probe is feasible, set `remedy_probe.ran=false` with a clear note and proceed.
 
