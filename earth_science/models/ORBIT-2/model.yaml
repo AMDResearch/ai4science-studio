@@ -16,6 +16,16 @@ recipes:
     recipe_path: recipes/inference/
     script: examples/run_visualize.py
     slurm: examples/sbatch_infer_amd.sh
+  - task: perf-analysis
+    description: 2-node training perf analysis with Omnistat + PyTorch profiler
+    recipe_path: recipes/perf-analysis/
+    script: examples/run_orbit2_train.py
+    slurm: examples/sbatch_train_perf_amd.sh
+  - task: train
+    description: Multi-node intermediate downscaling on staged NPZ data (PRISM same-dir or ERA5 sanity templates)
+    recipe_path: recipes/train/
+    script: examples/run_orbit2_train.py
+    slurm: examples/sbatch_train_amd.sh
 
 env_vars:
   ORBIT2_ROOT:

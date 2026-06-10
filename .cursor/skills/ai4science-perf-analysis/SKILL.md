@@ -9,15 +9,29 @@ description: Runs the AMD AI agents bottleneck-analysis workflow on a HydraGNN (
 
 The user wants an automated bottleneck analysis of a multi-node training/inference run using AMD's open-source observability tooling (TraceLens, Omnistat). This is **distinct** from the `ai4science-run-models` skill — that one launches a model; this one diagnoses a model after it runs.
 
-Default target: HydraGNN on AMD MI355X. The same pattern can extend to ORBIT-2 / StormCast / GP-MoLFormer in iteration 2.
+Default target: HydraGNN on AMD MI355X. **ORBIT-2 training** uses the same perf-analysis pattern; see `earth_science/models/ORBIT-2/recipes/perf-analysis/`.
 
 ## Repository entry points
+
+### HydraGNN
 
 - Recipe: [material_science/models/HydraGNN/recipes/perf-analysis/](../../../material_science/models/HydraGNN/recipes/perf-analysis/)
 - Iterative-loop recipe: [material_science/models/HydraGNN/recipes/perf-optimizer-loop/](../../../material_science/models/HydraGNN/recipes/perf-optimizer-loop/) — **see [`HANDOFF.md`](../../../material_science/models/HydraGNN/recipes/perf-optimizer-loop/HANDOFF.md) for current state, what works, what's blocked, and next-work priorities**
 - Sbatch wrapper: [material_science/models/HydraGNN/examples/sbatch_train_perf_amd.sh](../../../material_science/models/HydraGNN/examples/sbatch_train_perf_amd.sh)
 - Reusable node-health probe: [material_science/models/HydraGNN/examples/microbench_node_health.sh](../../../material_science/models/HydraGNN/examples/microbench_node_health.sh)
 - Agent prompt files: `material_science/models/HydraGNN/recipes/perf-analysis/agents/*.md` and `material_science/models/HydraGNN/recipes/perf-optimizer-loop/agents/*.md`
+
+### ORBIT-2
+
+- Recipe: [earth_science/models/ORBIT-2/recipes/perf-analysis/](../../../earth_science/models/ORBIT-2/recipes/perf-analysis/) — see [`HANDOFF.md`](../../../earth_science/models/ORBIT-2/recipes/perf-analysis/HANDOFF.md)
+- Sbatch: [earth_science/models/ORBIT-2/examples/sbatch_train_perf_amd.sh](../../../earth_science/models/ORBIT-2/examples/sbatch_train_perf_amd.sh)
+- Plain training: [earth_science/models/ORBIT-2/examples/sbatch_train_amd.sh](../../../earth_science/models/ORBIT-2/examples/sbatch_train_amd.sh)
+- Scaling: [run_scaling_study.sh](../../../earth_science/models/ORBIT-2/examples/run_scaling_study.sh) + [collate_scaling_study.py](../../../earth_science/models/ORBIT-2/examples/collate_scaling_study.py)
+- FOM parser: [parse_training_log.py](../../../earth_science/models/ORBIT-2/examples/parse_training_log.py) — primary FOM **`steady_batch_time_s`** (epochs ≥ 2, exclude batch 0 per epoch); **`loss_sanity_pass`** requires strictly decreasing epoch losses
+- Artifacts: `$AI4S_SHARED_DIR/models/ORBIT-2/perf-runs/<jobid>/`
+- Workload: `intermediate_downscaling.py` via [run_orbit2_train.py](../../../earth_science/models/ORBIT-2/examples/run_orbit2_train.py) (gptl4py stub, FusedAttn fallback, batch cap)
+- Data: 10.0_arcmin PRISM same-dir (`interm_8m_lux.yaml`) or ERA5 1.0° same-dir (`interm_8m_lux_era5.yaml`, `ORBIT2_CONFIG_TEMPLATE`) — timing only until true downscaling targets are staged
+- Profiler: [orbit2_profiler_hook.py](../../../earth_science/models/ORBIT-2/examples/orbit2_profiler_hook.py) via `ORBIT2_RANK_PRE_TRAIN_HOOK` (no JSON Profile block)
 
 ## Orchestration loop (what the main agent does)
 

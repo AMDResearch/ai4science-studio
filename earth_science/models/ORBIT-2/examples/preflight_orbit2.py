@@ -44,11 +44,30 @@ def main() -> int:
         return 2
 
     examples = root / "examples"
-    for name in ("visualize.py", "utils.py"):
+    for name in ("visualize.py", "utils.py", "intermediate_downscaling.py"):
         p = examples / name
         if not p.is_file():
             print(f"error: missing {p}", file=sys.stderr)
             return 2
+
+    data_root = os.environ.get("ORBIT2_DATA_ROOT")
+    if data_root:
+        dp = Path(data_root).expanduser().resolve()
+        if not dp.is_dir():
+            print(f"error: ORBIT2_DATA_ROOT not found: {dp}", file=sys.stderr)
+            return 2
+        for sub in ("train", "val", "test"):
+            if not (dp / sub).is_dir():
+                print(f"error: missing data split: {dp / sub}", file=sys.stderr)
+                return 2
+
+    overlay = os.environ.get("ORBIT2_OVERLAY")
+    if overlay and not Path(overlay).expanduser().is_file():
+        print(f"warning: ORBIT2_OVERLAY not found: {overlay}", file=sys.stderr)
+
+    sif = os.environ.get("ORBIT2_SIF")
+    if sif and not Path(sif).expanduser().is_file():
+        print(f"warning: ORBIT2_SIF not found: {sif}", file=sys.stderr)
 
     src = root / "src"
     if not src.is_dir():
