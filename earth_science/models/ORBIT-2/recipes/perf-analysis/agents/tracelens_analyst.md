@@ -39,7 +39,7 @@ Every entry:
 ### 1. Sanity check
 
 ```bash
-. ${PERF_TOOLS_DIR}/perf-inspect/bin/activate
+. ${OMNIHUB_TOOLS_DIR}/omnihub-inspect/bin/activate
 PERF_RUN=$(jq -r .perf_run_dir <manifest>)
 TRACE=$(jq -r '.trace_paths[0] // empty' <manifest>)
 [[ -z "$TRACE" ]] && { echo "STATUS=partial; reason=no_trace_in_manifest"; exit 0; }

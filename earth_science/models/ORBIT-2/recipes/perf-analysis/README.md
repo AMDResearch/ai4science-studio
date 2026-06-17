@@ -10,7 +10,7 @@ Multi-subagent workflow for ORBIT-2 / Bayes-CAST training on AMD MI355X, with Om
 
 ```bash
 export AI4S_SHARED_DIR=/path/to/shared
-export PERF_TOOLS_DIR=/path/to/perf-tools
+export OMNIHUB_TOOLS_DIR=/shared/omnihub/tools
 # ORBIT2_ROOT defaults to .../code/bayes-cast when that directory exists
 export ORBIT2_DATA_ROOT=$AI4S_SHARED_DIR/models/ORBIT-2/data/superres/era5/1.0_deg
 # export ORBIT2_CONFIG_TEMPLATE=edm_8m_era5_1x8.yaml   # default

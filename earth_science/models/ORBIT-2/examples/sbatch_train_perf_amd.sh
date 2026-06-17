@@ -6,7 +6,7 @@
 #
 # Quick start (ERA5 same-dir):
 #   export AI4S_SHARED_DIR=/path/to/shared
-#   export PERF_TOOLS_DIR=/path/to/perf-tools
+#   export OMNIHUB_TOOLS_DIR=/shared/omnihub/tools
 #   export ORBIT2_DATA_ROOT=$AI4S_SHARED_DIR/models/ORBIT-2/data/superres/era5/1.0_deg
 #   export ORBIT2_CONFIG_TEMPLATE=edm_8m_era5_1x8.yaml
 #   export ORBIT2_ROOT=$AI4S_SHARED_DIR/models/ORBIT-2/code/bayes-cast   # EDM preset + launcher
@@ -72,8 +72,8 @@ ORBIT2_DISABLE_CKPT="${ORBIT2_DISABLE_CKPT:-1}"
 ORBIT2_TUNABLEOP_MODE="${ORBIT2_TUNABLEOP_MODE:-off}"
 ORBIT2_TUNABLEOP_DIR="${ORBIT2_TUNABLEOP_DIR:-${ORBIT2_BASE}/tunableop-cache}"
 
-: "${PERF_TOOLS_DIR:?PERF_TOOLS_DIR must be set}"
-OMNISTAT_VENV="${OMNISTAT_VENV:-${PERF_TOOLS_DIR}/perf-inspect}"
+: "${OMNIHUB_TOOLS_DIR:?OMNIHUB_TOOLS_DIR must be set}"
+OMNISTAT_VENV="${OMNISTAT_VENV:-${OMNIHUB_TOOLS_DIR}/omnihub-inspect}"
 OMNISTAT_TEMPLATE="${OMNISTAT_TEMPLATE:-${SCRIPT_DIR}/../recipes/perf-analysis/omnistat.config.template}"
 OMNISTAT_USERMODE_INTERVAL="${OMNISTAT_USERMODE_INTERVAL:-1}"
 
@@ -141,7 +141,7 @@ fi
 mkdir -p "$ORBIT2_OUTPUT_DIR"
 OMNISTAT_CONFIG="${ORBIT2_OUTPUT_DIR}/omnistat.config"
 sed -e "s|@JOB_DIR@|${ORBIT2_OUTPUT_DIR}|g" \
-    -e "s|@PERF_TOOLS_DIR@|${PERF_TOOLS_DIR}|g" \
+    -e "s|@OMNIHUB_TOOLS_DIR@|${OMNIHUB_TOOLS_DIR}|g" \
     "$OMNISTAT_TEMPLATE" > "$OMNISTAT_CONFIG"
 if [[ -n "${OMNISTAT_ROCPROF_PROFILE:-}" ]]; then
   sed -i.bak "s/^profile = .*/profile = ${OMNISTAT_ROCPROF_PROFILE}/" "$OMNISTAT_CONFIG" && rm -f "${OMNISTAT_CONFIG}.bak"

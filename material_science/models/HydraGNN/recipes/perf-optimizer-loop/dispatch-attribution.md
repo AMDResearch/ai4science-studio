@@ -59,10 +59,10 @@ Short-kernel study (`short_kernels_summary.csv`): thousands of `aten::fill_`, `a
 ```bash
 export AI4S_SHARED_DIR=/shared/$USER
 export REPO_ROOT=$HOME/git/ai4science-studio
-source ${PERF_TOOLS_DIR}/perf-inspect/bin/activate
+source ${OMNIHUB_TOOLS_DIR}/omnihub-inspect/bin/activate
 
 # VictoriaMetrics on the perf-run DB (login node)
-${PERF_TOOLS_DIR}/victoriametrics/victoria-metrics-prod \
+${OMNIHUB_TOOLS_DIR}/victoriametrics/victoria-metrics-prod \
   -storageDataPath=$AI4S_SHARED_DIR/models/HydraGNN/perf-runs/7187/omnistat-db \
   -httpListenAddr=127.0.0.1:8432 -retentionPeriod=100y -fs.disableMmap &
 

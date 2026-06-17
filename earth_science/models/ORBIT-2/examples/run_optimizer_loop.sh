@@ -4,7 +4,7 @@
 # Usage (tmux on login node):
 #   export ANTHROPIC_API_KEY=...   # optional; only for Claude Code CLI driver
 #   export AI4S_SHARED_DIR=...
-#   export PERF_TOOLS_DIR=...
+#   export OMNIHUB_TOOLS_DIR=...
 #   bash earth_science/models/ORBIT-2/examples/run_optimizer_loop.sh <loop-uuid> <n_iters> [--preflight-only]
 #
 # Graceful stop: touch $AI4S_SHARED_DIR/models/ORBIT-2/perf-runs/loop-<uuid>/STOP
@@ -33,7 +33,7 @@ RECIPE_DIR="${REPO_ROOT}/earth_science/models/ORBIT-2/recipes/perf-optimizer-loo
 ORCH_PROMPT="${ORBIT2_ORCH_PROMPT:-${RECIPE_DIR}/agents/orchestrator.md}"
 
 : "${AI4S_SHARED_DIR:?AI4S_SHARED_DIR must be set}"
-: "${PERF_TOOLS_DIR:?PERF_TOOLS_DIR must be set}"
+: "${OMNIHUB_TOOLS_DIR:?OMNIHUB_TOOLS_DIR must be set}"
 
 ORBIT2_BASE="${AI4S_SHARED_DIR}/models/ORBIT-2"
 PERF_RUNS_DIR="${ORBIT2_BASE}/perf-runs"
@@ -77,8 +77,8 @@ if [[ -z "$PREFLIGHT_FAIL_REASON" ]]; then
 fi
 
 for _bin in \
-    "${PERF_TOOLS_DIR}/perf-inspect/bin/omnistat-usermode" \
-    "${PERF_TOOLS_DIR}/victoriametrics/victoria-metrics-prod"; do
+    "${OMNIHUB_TOOLS_DIR}/omnihub-inspect/bin/omnistat-usermode" \
+    "${OMNIHUB_TOOLS_DIR}/victoriametrics/victoria-metrics-prod"; do
   if [[ -z "$PREFLIGHT_FAIL_REASON" && ! -x "$_bin" ]]; then
     PREFLIGHT_FAIL_REASON="tool_missing"
     PREFLIGHT_NOTES+=("missing: $_bin")

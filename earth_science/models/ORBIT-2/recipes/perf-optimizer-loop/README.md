@@ -10,14 +10,14 @@ Agent-driven optimization loop for **ORBIT-2** training with **throughput (`thro
 - **Container:** `pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif` + ORBIT-2 overlay (`build_overlay_amd.sh`).
 - **Data:** staged ERA5 NPZ tree; for HBM saturation follow [`STAGING_ERA5_FOR_HBM.md`](STAGING_ERA5_FOR_HBM.md).
 - **Code:** `ORBIT2_ROOT` → Bayes-CAST with `launch/train_edm.py` (see [HANDOFF.md](../perf-analysis/HANDOFF.md)).
-- **Tools:** `PERF_TOOLS_DIR` (omnistat-usermode + VictoriaMetrics), `AI4S_SHARED_DIR`.
+- **Tools:** `OMNIHUB_TOOLS_DIR` (omnistat-usermode + VictoriaMetrics), `AI4S_SHARED_DIR`.
 
 ## Environment variables (loop driver)
 
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `AI4S_SHARED_DIR` | Yes | Shared storage root |
-| `PERF_TOOLS_DIR` | Yes | Omnistat + VM binaries |
+| `OMNIHUB_TOOLS_DIR` | Yes | Omnistat + VM binaries |
 | `ORBIT2_ROOT` | Recommended | Bayes-CAST checkout |
 | `ORBIT2_DATA_ROOT` | Yes | ERA5 staging path |
 | `ORBIT2_BATCH_SIZE` | Yes (baseline) | Locked after VRAM sweep |
@@ -29,7 +29,7 @@ Agent-driven optimization loop for **ORBIT-2** training with **throughput (`thro
 
 ```bash
 export AI4S_SHARED_DIR=...
-export PERF_TOOLS_DIR=...
+export OMNIHUB_TOOLS_DIR=...
 bash earth_science/models/ORBIT-2/examples/validate_orbit2_optimizer_loop_recipe.sh
 
 tmux new -s orbit2-loop

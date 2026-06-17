@@ -299,7 +299,7 @@ Expect **`math`** and often **`default`** / **`efficient`** to complete on ROCm;
 - Overlay: `$AI4S_SHARED_DIR/models/ORBIT-2/overlays/orbit2-overlay.img`
 - Perf runs: `$AI4S_SHARED_DIR/models/ORBIT-2/perf-runs/<jobid>/`
 - Training logs (recommended): `$AI4S_SHARED_DIR/models/ORBIT-2/outputs/train/logs/`
-- Omnistat / TraceLens tools: set **`PERF_TOOLS_DIR`** to your site-local checkout (see root `.cursor/skills/ai4science-perf-analysis/SKILL.md` and `.cluster-config.yaml` key `perf_tools.dir` if your site maintains one).
+- Omnistat / TraceLens tools: set **`OMNIHUB_TOOLS_DIR`** to your site-local checkout (see root `.cursor/skills/ai4science-perf-analysis/SKILL.md` and `.cluster-config.yaml` key `omnihub.tools_dir` if your site maintains one).
 
 ## Operational source tree
 

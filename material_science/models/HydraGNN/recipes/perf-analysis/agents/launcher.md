@@ -10,8 +10,8 @@ Submits a 2-node HydraGNN training (AMD Instinct MI355X) with PyTorch profiling 
 
 ## Outputs
 
-- `${PERF_TOOLS_DIR}/perf-inspect/` — Python venv with omnistat (PR #271 + main merged) and TraceLens.
-- `${PERF_TOOLS_DIR}/victoriametrics/victoria-metrics-prod` — VictoriaMetrics binary.
+- `${OMNIHUB_TOOLS_DIR}/omnihub-inspect/` — Python venv with omnistat (PR #271 + main merged) and TraceLens.
+- `${OMNIHUB_TOOLS_DIR}/victoriametrics/victoria-metrics-prod` — VictoriaMetrics binary.
 - `$AI4S_SHARED_DIR/models/HydraGNN/perf-runs/omnistat.config` — Omnistat user-mode config.
 - `$AI4S_SHARED_DIR/models/HydraGNN/perf-runs/<jobid>/manifest.json` — manifest schema below.
 - `$AI4S_SHARED_DIR/models/HydraGNN/perf-runs/<jobid>/hydragnn-train-<jobid>.out` — symlinked from output dir.
@@ -57,8 +57,8 @@ Submits a 2-node HydraGNN training (AMD Instinct MI355X) with PyTorch profiling 
 
 ```bash
 set -euo pipefail
-# Shared tool location — read from .cluster-config.yaml perf_tools.dir.
-TOOLS="${PERF_TOOLS_DIR:?set PERF_TOOLS_DIR from .cluster-config.yaml perf_tools.dir (e.g. /path/to/perf-tools)}"
+# Shared tool location — read from .cluster-config.yaml omnihub.tools_dir.
+TOOLS="${OMNIHUB_TOOLS_DIR:?set OMNIHUB_TOOLS_DIR from .cluster-config.yaml omnihub.tools_dir (e.g. /shared/omnihub/tools)}"
 mkdir -p "$TOOLS"
 
 # 1a. Omnistat: jorda/skills branch with origin/main merged in
@@ -77,7 +77,7 @@ fi
 OMNISTAT_COMMIT=$(git rev-parse HEAD)
 
 # 1b. Venv (py3.12 to match cluster python)
-VENV=${PERF_TOOLS_DIR}/perf-inspect
+VENV=${OMNIHUB_TOOLS_DIR}/omnihub-inspect
 if [[ ! -d $VENV ]]; then
   python3 -m venv "$VENV"
 fi
@@ -123,7 +123,7 @@ if [[ "${OMNISTAT_KERNEL_TRACE:-0}" == "1" && ! -f "$TRACE_LIB" ]]; then
 fi
 ```
 
-The sbatch wrapper expects the `.so` at `${PERF_TOOLS_DIR}/omnistat-src/build-trace/libomnistat_trace.so` by default; override with `OMNISTAT_TRACE_LIB=/path/to/lib.so`. See `ai4science-studio` SKILL §12 for when to enable kernel tracing vs the default device-counting collector.
+The sbatch wrapper expects the `.so` at `${OMNIHUB_TOOLS_DIR}/omnistat-src/build-trace/libomnistat_trace.so` by default; override with `OMNISTAT_TRACE_LIB=/path/to/lib.so`. See `ai4science-studio` SKILL §12 for when to enable kernel tracing vs the default device-counting collector.
 
 ### 2. Author the Omnistat user-mode config (once, in repo `perf-runs/`)
 

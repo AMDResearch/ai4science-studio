@@ -7,7 +7,7 @@
 #
 # Usage (tmux on login node):
 #   export ANTHROPIC_API_KEY=...   export AI4S_SHARED_DIR=<shared-root>
-#   export PERF_TOOLS_DIR=<perf-tools-dir>   # perf_tools.dir in .cluster-config.yaml
+#   export OMNIHUB_TOOLS_DIR=<perf-tools-dir>   # omnihub.tools_dir in .cluster-config.yaml
 #   export EXCLUDE_NODES=...                  # optional: comma-separated nodes to skip
 #   bash earth_science/models/ORBIT-2/examples/run_gemm_analysis.sh <uuid> [--preflight-only]
 #
@@ -23,8 +23,8 @@ REPO_ROOT=$(cd "${SCRIPT_DIR}/../../../.." && pwd)
 ORCH_PROMPT="${REPO_ROOT}/earth_science/models/ORBIT-2/recipes/perf-analysis/agents/orchestrator_gemm_analysis.md"
 
 : "${AI4S_SHARED_DIR:?AI4S_SHARED_DIR must be set}"
-: "${PERF_TOOLS_DIR:?PERF_TOOLS_DIR must be set}"
-export AI4S_SHARED_DIR PERF_TOOLS_DIR
+: "${OMNIHUB_TOOLS_DIR:?OMNIHUB_TOOLS_DIR must be set}"
+export AI4S_SHARED_DIR OMNIHUB_TOOLS_DIR
 
 ORBIT2_BASE="${AI4S_SHARED_DIR}/models/ORBIT-2"
 PERF_RUNS_DIR="${ORBIT2_BASE}/perf-runs"
@@ -50,11 +50,11 @@ if command -v sinfo >/dev/null 2>&1; then
 else _notes+=("sinfo not in PATH"); fi
 _pct=$(df -P "$PERF_RUNS_DIR" 2>/dev/null | awk 'NR==2 {sub("%","",$5); print $5}')
 [[ -z "$_fail" && "${_pct:-0}" -ge 95 ]] && { _fail="disk_full"; _notes+=("perf-runs at ${_pct}%"); }
-VENV="${PERF_TOOLS_DIR}/perf-inspect"
+VENV="${OMNIHUB_TOOLS_DIR}/omnihub-inspect"
 for _f in "$ORCH_PROMPT" \
           "${SCRIPT_DIR}/sbatch_train_perf_amd.sh" \
           "${VENV}/bin/omnistat-usermode" \
-          "${PERF_TOOLS_DIR}/victoriametrics/victoria-metrics-prod" \
+          "${OMNIHUB_TOOLS_DIR}/victoriametrics/victoria-metrics-prod" \
           "${AI4S_SHARED_DIR}/images/pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif"; do
   [[ -z "$_fail" && ! -e "$_f" ]] && { _fail="missing_file"; _notes+=("missing: $_f"); }
 done
@@ -92,7 +92,7 @@ trap '_log "ANALYSIS_SIGNAL cleanup"; kill $_GUARD_PID 2>/dev/null || true' EXIT
 USER_PROMPT="Run the ORBIT-2 GEMM-time bottleneck analysis (TraceLens + Omnistat analyst/verifier) at 1 and 2 nodes. Follow ${ORCH_PROMPT}.
 REPO_ROOT=${REPO_ROOT}
 AI4S_SHARED_DIR=${AI4S_SHARED_DIR}
-PERF_TOOLS_DIR=${PERF_TOOLS_DIR}
+OMNIHUB_TOOLS_DIR=${OMNIHUB_TOOLS_DIR}
 ANALYSIS_DIR=${ANALYSIS_DIR}
 EXCLUDE_NODES=${EXCLUDE_NODES:-}
 Write GEMM_TIME_REPORT.md to ANALYSIS_DIR. Persist state for resume."

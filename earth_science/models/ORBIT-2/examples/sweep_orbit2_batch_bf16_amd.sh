@@ -3,7 +3,7 @@
 #
 # Usage (login node, repo root):
 #   export AI4S_SHARED_DIR=...
-#   export PERF_TOOLS_DIR=...
+#   export OMNIHUB_TOOLS_DIR=...
 #   export ORBIT2_ROOT=$AI4S_SHARED_DIR/models/ORBIT-2/code/bayes-cast
 #   export ORBIT2_DATA_ROOT=$AI4S_SHARED_DIR/models/ORBIT-2/data/superres/era5/1.0_deg
 #   # Optional: export ORBIT2_ERA5_SPATIAL_RES=111
@@ -27,7 +27,7 @@ if [[ $# -lt 1 ]]; then
 fi
 
 : "${AI4S_SHARED_DIR:?set AI4S_SHARED_DIR}"
-: "${PERF_TOOLS_DIR:?set PERF_TOOLS_DIR}"
+: "${OMNIHUB_TOOLS_DIR:?set OMNIHUB_TOOLS_DIR}"
 
 export ORBIT2_DATA_TYPE="${ORBIT2_DATA_TYPE:-bfloat16}"
 export ORBIT2_FUSED_ATTN="${ORBIT2_FUSED_ATTN:-DEFAULT}"

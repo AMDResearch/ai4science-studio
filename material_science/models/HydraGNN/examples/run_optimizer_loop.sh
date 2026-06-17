@@ -46,8 +46,8 @@ ORCH_PROMPT="${RECIPE_DIR}/agents/orchestrator.md"
 # Loop-dir convention matches recipes/perf-optimizer-loop/README.md
 : "${AI4S_SHARED_DIR:?AI4S_SHARED_DIR must be set (e.g. export AI4S_SHARED_DIR=/shared/\$USER)}"
 # Shared perf-tool location (omnistat venv, VictoriaMetrics). Cluster-specific:
-# set from .cluster-config.yaml perf_tools.dir (e.g. /path/to/perf-tools).
-: "${PERF_TOOLS_DIR:?PERF_TOOLS_DIR must be set (from .cluster-config.yaml perf_tools.dir, e.g. /path/to/perf-tools)}"
+# set from .cluster-config.yaml omnihub.tools_dir (e.g. /shared/omnihub/tools).
+: "${OMNIHUB_TOOLS_DIR:?OMNIHUB_TOOLS_DIR must be set (from .cluster-config.yaml omnihub.tools_dir, e.g. /shared/omnihub/tools)}"
 HG_BASE="${AI4S_SHARED_DIR}/models/HydraGNN"
 PERF_RUNS_DIR="${HG_BASE}/perf-runs"
 LOOP_DIR="${PERF_RUNS_DIR}/loop-${LOOP_UUID}"
@@ -96,8 +96,8 @@ fi
 
 # 3. tools present
 for _bin in \
-    "${PERF_TOOLS_DIR}/perf-inspect/bin/omnistat-usermode" \
-    "${PERF_TOOLS_DIR}/victoriametrics/victoria-metrics-prod"; do
+    "${OMNIHUB_TOOLS_DIR}/omnihub-inspect/bin/omnistat-usermode" \
+    "${OMNIHUB_TOOLS_DIR}/victoriametrics/victoria-metrics-prod"; do
   if [[ -z "$PREFLIGHT_FAIL_REASON" && ! -x "$_bin" ]]; then
     PREFLIGHT_FAIL_REASON="tool_missing"
     PREFLIGHT_NOTES+=("missing: $_bin (run the perf-analysis launcher subagent first to install)")

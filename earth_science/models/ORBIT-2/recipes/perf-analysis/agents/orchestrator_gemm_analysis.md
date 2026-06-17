@@ -12,7 +12,7 @@ GEMM time is actually spent on** (which shapes/kernels dominate, compute- vs mem
 and what changes from 1→2 nodes), to decide the next real lever.
 
 ## Fixed context (passed in the user prompt)
-- `REPO_ROOT`, `AI4S_SHARED_DIR`, `PERF_TOOLS_DIR` (`perf_tools.dir` in `.cluster-config.yaml`).
+- `REPO_ROOT`, `AI4S_SHARED_DIR`, `OMNIHUB_TOOLS_DIR` (`omnihub.tools_dir` in `.cluster-config.yaml`).
 - SLURM: partition and account from `.cluster-config.yaml` (`slurm.partition`, `slurm.account`).
   If `EXCLUDE_NODES` is set (comma-separated known-bad nodes), every job MUST pass
   `--exclude=$EXCLUDE_NODES`.
@@ -53,7 +53,7 @@ bf16, SDPA DEFAULT, `ORBIT2_BATCH_SIZE=4096`, `ORBIT2_MAX_EPOCH=6`,
    `sbatch --parsable --partition=<partition> --account=<account> --nodes=<SCALE>
     [--exclude=$EXCLUDE_NODES]
     --job-name=o2-gemm-<SCALE>n
-    --export=ALL,AI4S_SHARED_DIR=...,PERF_TOOLS_DIR=...,ORBIT2_DATA_ROOT=...,ORBIT2_ROOT=...,
+    --export=ALL,AI4S_SHARED_DIR=...,OMNIHUB_TOOLS_DIR=...,ORBIT2_DATA_ROOT=...,ORBIT2_ROOT=...,
       ORBIT2_CONFIG_TEMPLATE=edm_8m_era5_1x8.yaml,ORBIT2_ERA5_SPATIAL_RES=111,ORBIT2_BATCH_SIZE=4096,
       ORBIT2_MAX_EPOCH=6,TORCH_NCCL_HIGH_PRIORITY=1,GPU_MAX_HW_QUEUES=2,
       PROFILE_TARGET_EPOCH=2,PROFILE_RANK0_ONLY=1 <sbatch>`.
