@@ -226,7 +226,7 @@ levers:
     risk: "blocked"
     revert_method: "drop_env"
     citation: "https://rocm.docs.amd.com/en/latest/how-to/tuning-guides/mi300x/workload.html#tunableop"
-    notes: "BLOCKED on ROCm 7.2.2 / PyTorch 2.10 / MI355X — warmup phase itself triggers GPU memory access faults. If the warmup phase did NOT complete (no CSVs), pick a different lever. Re-test only after a documented ROCm/hipBLASLt fix."
+    notes: "BLOCKED for HydraGNN (warmup phase triggers GPU memory access faults). NOTE (2026-06-13): this is WORKLOAD-specific, NOT a platform/hipBLASLt-prereq block. ORBIT-2 re-probed the identical MI355X/ROCm7.2.2/PyTorch2.10 stack with an isolated 1-GPU GEMM autotune (incl. large-M bf16 mm/F.linear) and TunableOp tuned CLEANLY with 0 faults (see ai4science-studio/SKILL.md #17, ai4science-perf-analysis/SKILL.md #28). The HydraGNN fault is likely tied to MACE double-backward shapes + 16-GPU distributed tuning. Keep blocked for HydraGNN until re-probed for THIS model; do not generalize to other models."
 
   - id: num_workers_12
     description: "DataLoader: HYDRAGNN_NUM_WORKERS 8 -> 12 (persistent_workers already on). HIGH RUN-TO-RUN VARIANCE: helped in one loop (-12.4%) and regressed in another (+10.7%) — both on the same node pair, so this is run-to-run variance, not a systematic win. Treat as unreliable until replicated within ±5% on the same nodes."
