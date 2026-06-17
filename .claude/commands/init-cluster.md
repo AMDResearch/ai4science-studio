@@ -67,6 +67,12 @@ echo "HTTPS_PROXY=${HTTPS_PROXY:-<unset>}"
 
 # 13. Existing SIF files
 find "$HOME" /scratch /projects /opt -maxdepth 4 -name "*.sif" 2>/dev/null | head -20
+
+# 14. Performance tooling (perf-analysis / perf-optimizer-loop recipes — optional)
+# Look for an existing shared perf-tools dir (omnistat + TraceLens venv "perf-inspect/").
+for d in /shared/*/tools /shared/perf-tools "$HOME/perf-tools"; do
+    [[ -d "$d/perf-inspect" || -d "$d/omnistat-src" ]] && echo "perf_tools: $d"
+done
 ```
 
 ## Step 2 — Present findings and ask user to confirm or choose
@@ -119,7 +125,12 @@ Explain the expected layout under that root:
 Show result of connectivity test. Ask to confirm.
 If no internet, ask for proxy settings.
 
-**Q9. Config file location**
+**Q9. Performance tooling** (optional — only for `perf-analysis` / `perf-optimizer-loop` recipes)
+If a perf-tools dir was discovered (step 14), show it and ask to confirm; otherwise ask for the path
+or leave blank. This is exported to perf scripts as `PERF_TOOLS_DIR`; expected layout under it:
+`perf-inspect/` (omnistat + TraceLens venv), `omnistat-src/`, `victoriametrics/victoria-metrics-prod`.
+
+**Q10. Config file location**
 - `.cluster-config.yaml` in this repo (recommended — per-checkout)
 - `~/.config/ai4science-studio/cluster.yaml` (user-level, shared across clones)
 
@@ -156,10 +167,15 @@ gpu:
 network:
   internet_access: <true|false>
   proxy: "<proxy URL or empty>"
+  mgmt_iface: "<interface for RCCL OOB, e.g. enp193s0f1np1>"  # discover: ip -o link show up
+  ib_hca: "<IB HCA devices, e.g. ionic_0,ionic_1,...>"        # discover: ibstat | grep CA
+  rccl_anp_plugin: ""    # path to librccl-anp.so on host (default: /opt/rocm/lib/librccl-anp.so)
+  libionic_path: ""      # path to libionic.so.1 (default: /usr/lib/x86_64-linux-gnu/libionic.so.1)
 
-rccl:
-  socket_ifname: "<interface for RCCL OOB, e.g. enp193s0f1np1>"  # discover: ip link show up
-  ib_hca: "<IB HCA devices, e.g. ionic_0,ionic_1,...>"           # discover: ibstat | grep CA
+# Performance tooling — only if using perf-analysis / perf-optimizer-loop recipes (Q9).
+# Exported to scripts as PERF_TOOLS_DIR. Leave dir blank if not used.
+perf_tools:
+  dir: "<perf-tools dir or empty>"   # layout: perf-inspect/, omnistat-src/, victoriametrics/
 
 discovered_sifs:
   # SIF files found during init (informational — confirm they are under sif_cache)
