@@ -75,3 +75,6 @@ nul
 # IDE
 .idea/
 .vscode/
+
+# Stray SLURM stdout from perf runs (real logs live under perf-runs/<jobid>/)
+orbit2-train-*.out

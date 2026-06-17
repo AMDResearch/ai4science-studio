@@ -60,7 +60,10 @@ step_detection_file = @JOB_DIR@/omni_rmsjobinfo_step
 [omnistat.collectors.host]
 enable_proc_io_stats = True
 
-# Rocprofiler — HBM bandwidth + FP64 VALU/MFMA counters in one block.
+# Rocprofiler — HBM read traffic + BF16 MFMA (matches ORBIT-2 bf16 EDM training).
+# FP64 profile `hbm_flops_f64` remains available if you set:
+#   OMNISTAT_ROCPROF_PROFILE=hbm_flops_f64
+# in the environment before rendering this file (sbatch can sed-replace profile name).
 # Counter group selection follows the user-validated pattern (one profile,
 # one sub-section, all counters listed together; rocprofiler-sdk
 # time-multiplexes hardware counter sets internally as needed).
@@ -78,9 +81,20 @@ enable_proc_io_stats = True
 #                       ) / wall_seconds / 1e9
 #   HBM_GB/s = (FETCH_SIZE + WRITE_SIZE) / wall_seconds / 1e9
 [omnistat.collectors.rocprofiler]
-profile = hbm_flops_f64
+# Default profile for ORBIT-2 bf16: BF16 MFMA MOPS + FETCH_SIZE (2 counters, gfx950-safe).
+# Citation: AMD MI300/MI200 counter tables — `SQ_INSTS_VALU_MFMA_MOPS_BF16` is in units of 512 FLOPs:
+#   https://rocm.docs.amd.com/en/develop/conceptual/gpu-arch/mi300-mi200-performance-counters.html
+profile = hbm_flops_bf16
+
+[omnistat.collectors.rocprofiler.hbm_flops_bf16]
+# MI355X (gfx950) — keep one rocprofiler profile under constant sampling (SKILL §11).
+# TFLOP/s (BF16 MFMA only): rate(SQ_INSTS_VALU_MFMA_MOPS_BF16) * 512 / 1e12
+# HBM read GB/s: rate(FETCH_SIZE) * 1024 / 1e9  (FETCH_SIZE units per omnistat/HydraGNN lesson; verify on your omnistat build)
+sampling_mode = constant
+counters = ["FETCH_SIZE", "SQ_INSTS_VALU_MFMA_MOPS_BF16"]
 
 [omnistat.collectors.rocprofiler.hbm_flops_f64]
+# Legacy fp64-rich profile (HydraGNN-style). Optional via OMNISTAT_ROCPROF_PROFILE=hbm_flops_f64.
 # MI355X (gfx950) rocprofiler counter limits — see ai4science-studio SKILL §10.
 #
 # Constraints surfaced on MI355X (gfx950) / ROCm 7.2.2:
@@ -120,7 +134,7 @@ system_name = mi355x
 #--
 [omnistat.usermode]
 
-victoria_binary = @OMNIHUB_TOOLS_DIR@/victoriametrics/victoria-metrics-prod
+victoria_binary = @PERF_TOOLS_DIR@/victoriametrics/victoria-metrics-prod
 victoria_datadir = @JOB_DIR@/omnistat-db
 victoria_logfile = vic_server.log
 

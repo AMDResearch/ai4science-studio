@@ -46,8 +46,8 @@ ORCH_PROMPT="${RECIPE_DIR}/agents/orchestrator.md"
 # Loop-dir convention matches recipes/perf-optimizer-loop/README.md
 : "${AI4S_SHARED_DIR:?AI4S_SHARED_DIR must be set (e.g. export AI4S_SHARED_DIR=/shared/\$USER)}"
 # Shared perf-tool location (omnistat venv, VictoriaMetrics). Cluster-specific:
-# set from .cluster-config.yaml omnihub.tools_dir (e.g. /shared/omnihub/tools).
-: "${OMNIHUB_TOOLS_DIR:?OMNIHUB_TOOLS_DIR must be set (from .cluster-config.yaml omnihub.tools_dir, e.g. /shared/omnihub/tools)}"
+# set from .cluster-config.yaml perf_tools.dir (e.g. /path/to/perf-tools).
+: "${PERF_TOOLS_DIR:?PERF_TOOLS_DIR must be set (from .cluster-config.yaml perf_tools.dir, e.g. /path/to/perf-tools)}"
 HG_BASE="${AI4S_SHARED_DIR}/models/HydraGNN"
 PERF_RUNS_DIR="${HG_BASE}/perf-runs"
 LOOP_DIR="${PERF_RUNS_DIR}/loop-${LOOP_UUID}"
@@ -96,8 +96,8 @@ fi
 
 # 3. tools present
 for _bin in \
-    "${OMNIHUB_TOOLS_DIR}/omnihub-inspect/bin/omnistat-usermode" \
-    "${OMNIHUB_TOOLS_DIR}/victoriametrics/victoria-metrics-prod"; do
+    "${PERF_TOOLS_DIR}/perf-inspect/bin/omnistat-usermode" \
+    "${PERF_TOOLS_DIR}/victoriametrics/victoria-metrics-prod"; do
   if [[ -z "$PREFLIGHT_FAIL_REASON" && ! -x "$_bin" ]]; then
     PREFLIGHT_FAIL_REASON="tool_missing"
     PREFLIGHT_NOTES+=("missing: $_bin (run the perf-analysis launcher subagent first to install)")
@@ -194,13 +194,19 @@ disk so you can resume from where you left off if I have to restart you.
 On any LOOP_COMPLETE, LOOP_ABORT, or LOOP_PAUSE, exit with a single line:
   STATUS=<ok|partial|fail>; reason=<short>"
 
+# Model for the orchestrator. The `opus` alias still points to claude-opus-4-7 on
+# CLI 2.1.x, so default to the explicit 4.8 slug; override with HYDRAGNN_CLAUDE_MODEL.
+HYDRAGNN_CLAUDE_MODEL="${HYDRAGNN_CLAUDE_MODEL:-claude-opus-4-8}"
+_log_status "ORCH_MODEL model=${HYDRAGNN_CLAUDE_MODEL}"
+
 _MAX_ATTEMPTS=3
 _attempt=1
 while [[ $_attempt -le $_MAX_ATTEMPTS ]]; do
-  _log_status "ORCH_INVOKE attempt=${_attempt} max=${_MAX_ATTEMPTS}"
+  _log_status "ORCH_INVOKE attempt=${_attempt} max=${_MAX_ATTEMPTS} model=${HYDRAGNN_CLAUDE_MODEL}"
   set +e
   claude \
       --print \
+      --model "$HYDRAGNN_CLAUDE_MODEL" \
       --dangerously-skip-permissions \
       --max-turns 250 \
       --append-system-prompt "$(cat "$ORCH_PROMPT")" \

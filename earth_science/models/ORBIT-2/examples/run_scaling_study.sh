@@ -20,13 +20,14 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 export TORCH_NCCL_HIGH_PRIORITY=1
 export GPU_MAX_HW_QUEUES=2
-export ORBIT2_DATA_TYPE=float32
+export ORBIT2_DATA_TYPE="${ORBIT2_DATA_TYPE:-bfloat16}"
 # max_epochs=6 → trains epochs 0–4; collate uses steady epochs 2–4 for FOM
 export ORBIT2_MAX_EPOCH=6
 export ORBIT2_MAX_BATCHES=20
 export ORBIT2_BATCH_SIZE=4
 export ORBIT2_DATA_ROOT="${ORBIT2_DATA_ROOT:-${AI4S_SHARED_DIR}/models/ORBIT-2/data/superres/prism/10.0_arcmin}"
 export ORBIT2_CONFIG_TEMPLATE="${ORBIT2_CONFIG_TEMPLATE:-interm_8m_lux.yaml}"
+# sbatch_train_amd.sh: 1-node×8-GPU jobs default to fsdp=8 simple_ddp=1; N>1 uses fsdp=N simple_ddp=8 from render defaults.
 export ORBIT2_SCALING_TAG="${ORBIT2_SCALING_TAG:-prism}"
 export ORBIT2_OUTPUT_DIR="${ORBIT2_OUTPUT_DIR:-${AI4S_SHARED_DIR}/models/ORBIT-2/outputs/scaling-${ORBIT2_SCALING_TAG}}"
 
@@ -54,7 +55,7 @@ submit() {
     --job-name="orbit2-scale-${n}N" \
     --output="${LOG_DIR}/orbit2-train-%j.out" \
     --error="${LOG_DIR}/orbit2-train-%j.out" \
-    --export=ALL,TORCH_NCCL_HIGH_PRIORITY,GPU_MAX_HW_QUEUES,ORBIT2_DATA_TYPE,ORBIT2_MAX_EPOCH,ORBIT2_MAX_BATCHES,ORBIT2_BATCH_SIZE,ORBIT2_DATA_ROOT,ORBIT2_CONFIG_TEMPLATE,ORBIT2_SCALING_TAG,ORBIT2_OUTPUT_DIR,AI4S_SHARED_DIR \
+    --export=ALL,TORCH_NCCL_HIGH_PRIORITY,GPU_MAX_HW_QUEUES,ORBIT2_DATA_TYPE,ORBIT2_MAX_EPOCH,ORBIT2_MAX_BATCHES,ORBIT2_BATCH_SIZE,ORBIT2_DATA_ROOT,ORBIT2_CONFIG_TEMPLATE,ORBIT2_SCALING_TAG,ORBIT2_OUTPUT_DIR,AI4S_SHARED_DIR,ORBIT2_DISABLE_CKPT=1 \
     "$SCRIPT_DIR/sbatch_train_amd.sh"
 }
 

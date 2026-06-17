@@ -1,7 +1,15 @@
 #!/usr/bin/env python3
-"""Render a per-job ORBIT-2 training YAML from interm_8m_lux.yaml.
+"""Render a per-job ORBIT-2 training YAML from a Studio template.
 
-Substitutes parallelism (fsdp × simple_ddp = nodes × 8), data root, and trainer caps.
+Templates include Lux same-dir (**``interm_8m_lux*.yaml``**) and Bayes-CAST EDM
+(**``edm_8m_era5_1x8.yaml``**), which also substitutes **``__ERA5_1_SPATIAL_RES__``**
+from env **``ORBIT2_ERA5_SPATIAL_RES``** (default ``111`` for 1.0° ERA5 staging).
+
+Substitutes parallelism (fsdp × simple_ddp = nodes × gpus_per_node by default), data root,
+and trainer caps. ``__NUM_WORKERS__`` comes from env **``ORBIT2_NUM_WORKERS``** (default ``2``).
+
+Env overrides (when ``--fsdp`` / ``--simple-ddp`` are omitted): ``ORBIT2_FSDP``,
+``ORBIT2_SIMPLE_DDP``. ``ORBIT2_DATA_TYPE`` defaults to ``bfloat16`` when unset.
 
 Usage:
     python3 render_orbit2_config.py --nodes 2 --output /tmp/orbit2_config.yaml
@@ -68,8 +76,18 @@ def main() -> int:
         print(f"error: data root not found: {data_path}", file=sys.stderr)
         return 2
 
-    fsdp = args.fsdp if args.fsdp is not None else args.nodes
-    simple_ddp = args.simple_ddp if args.simple_ddp is not None else args.gpus_per_node
+    # CLI overrides env; env overrides geometric default (nodes × gpus_per_node).
+    fsdp = args.fsdp
+    if fsdp is None and os.environ.get("ORBIT2_FSDP"):
+        fsdp = int(os.environ["ORBIT2_FSDP"])
+    if fsdp is None:
+        fsdp = args.nodes
+
+    simple_ddp = args.simple_ddp
+    if simple_ddp is None and os.environ.get("ORBIT2_SIMPLE_DDP"):
+        simple_ddp = int(os.environ["ORBIT2_SIMPLE_DDP"])
+    if simple_ddp is None:
+        simple_ddp = args.gpus_per_node
     total = fsdp * simple_ddp
     expected = args.nodes * args.gpus_per_node
     if total != expected:
@@ -94,10 +112,14 @@ def main() -> int:
     if batch_size is None:
         batch_size = int(os.environ.get("ORBIT2_BATCH_SIZE", "8"))
 
-    data_type = os.environ.get("ORBIT2_DATA_TYPE", "float32")
+    data_type = os.environ.get("ORBIT2_DATA_TYPE", "bfloat16")
     if data_type not in ("float32", "bfloat16"):
         print("error: ORBIT2_DATA_TYPE must be float32 or bfloat16", file=sys.stderr)
         return 2
+
+    # Bayes-CAST `edm_8m_era5_1x8.yaml`: spatial token count for ERA5_1 (111 ≈ 1.0° Lux staging)
+    era5_1_spatial = int(os.environ.get("ORBIT2_ERA5_SPATIAL_RES", "111"))
+    num_workers = int(os.environ.get("ORBIT2_NUM_WORKERS", "2"))
 
     text = template.read_text(encoding="utf-8")
     replacements = {
@@ -107,6 +129,8 @@ def main() -> int:
         "__MAX_EPOCHS__": str(max_epochs),
         "__BATCH_SIZE__": str(batch_size),
         "__DATA_TYPE__": data_type,
+        "__ERA5_1_SPATIAL_RES__": str(era5_1_spatial),
+        "__NUM_WORKERS__": str(num_workers),
     }
     for key, val in replacements.items():
         text = text.replace(key, val)

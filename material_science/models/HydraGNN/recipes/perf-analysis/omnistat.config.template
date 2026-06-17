@@ -120,7 +120,7 @@ system_name = mi355x
 #--
 [omnistat.usermode]
 
-victoria_binary = @OMNIHUB_TOOLS_DIR@/victoriametrics/victoria-metrics-prod
+victoria_binary = @PERF_TOOLS_DIR@/victoriametrics/victoria-metrics-prod
 victoria_datadir = @JOB_DIR@/omnistat-db
 victoria_logfile = vic_server.log
 

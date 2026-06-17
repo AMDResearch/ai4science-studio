@@ -43,6 +43,8 @@ Use a **shared project or scratch filesystem** visible from both login and compu
 2. Activate or use a **Globus endpoint** your site provides (or a personal endpoint on a machine that can reach the cluster filesystem), then run a **Globus transfer** into a directory on your cluster's Lustre, GPFS, or equivalent.
 3. Point your ORBIT-2 YAML at those directories once the transfer completes.
 
+For **GPU saturation / sysopt** on Bayes-CAST EDM (breaking small-staging batch caps), see also [../perf-optimizer-loop/STAGING_ERA5_FOR_HBM.md](../perf-optimizer-loop/STAGING_ERA5_FOR_HBM.md) (same Constellation/Globus provenance, ops-focused).
+
 **Checkpoints** for inference or fine-tuning are on Hugging Face ([`jychoi-hpc/ORBIT-2`](https://huggingface.co/jychoi-hpc/ORBIT-2)); use the Hub for weights and configs, not as a substitute for the full curated **training** NPZ-style dataset tree unless your workflow explicitly uses only Hub artifacts.
 
 ### When you cannot pull from the public catalog but have OLCF or a collaborator who does

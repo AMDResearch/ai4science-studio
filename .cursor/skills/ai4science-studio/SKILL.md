@@ -261,6 +261,8 @@ find "$HOME" /scratch /projects /opt -maxdepth 4 -name "*.sif" 2>/dev/null | hea
 
 SIF files are squashfs (read-only). All `pip install` inside `apptainer exec` must use `--target <dir>`. Set `PYTHONPATH=<dir>:...`.
 
+The bundled **`/opt/venv`** may also reject **`pip install --user`** (“User site-packages are not visible in this virtualenv”) — use **`--target`** + `PYTHONPATH` for small extras (e.g. `tabulate` / `tqdm` for ORBIT-2 [`upstream_pytorch_sdpa_benchmark.py`](../../../earth_science/models/ORBIT-2/examples/upstream_pytorch_sdpa_benchmark.py); see [HANDOFF.md](../../../earth_science/models/ORBIT-2/recipes/perf-analysis/HANDOFF.md) §PyTorch SDPA benchmark).
+
 **Torch strip is safe** in overlay/pip-packages — the SIF's venv torch is untouched and remains the primary copy.
 
 ## No-overlay install-to-tmp pattern
@@ -675,18 +677,18 @@ Omnistat exposes **two** independent rocprofiler-sdk integrations, and there's a
 
 **Cross-runtime gotcha:** `enable_kernel_trace=True` without the tool library loaded does *nothing* — the omnistat collector just sits with an empty endpoint. The `OMNISTAT_KERNEL_TRACE=1` switch in `sbatch_train_perf_amd.sh` enforces this with a hard `exit 2` if `libomnistat_trace.so` isn't found at the configured path; do **not** loosen that check, otherwise you re-create the exact "silent zero counters" failure mode from §8.
 
-**Build location:** Both omnistat artifacts (the Python extension and the kernel-trace tool library) must be built on a **compute node** inside the same SIF the workload runs in — login nodes don't have apptainer or the ROCm headers, and a host-side build will pick up the wrong libcurl / glibc. `OMNIHUB_TOOLS_DIR` is the shared tools dir from `.cluster-config.yaml` `omnihub.tools_dir` (e.g. `/shared/omnihub/tools`); export it first. Standard build:
+**Build location:** Both omnistat artifacts (the Python extension and the kernel-trace tool library) must be built on a **compute node** inside the same SIF the workload runs in — login nodes don't have apptainer or the ROCm headers, and a host-side build will pick up the wrong libcurl / glibc. `PERF_TOOLS_DIR` is the shared tools dir from `.cluster-config.yaml` `perf_tools.dir` (e.g. `/path/to/perf-tools`); export it first. Standard build:
 
 ```bash
 salloc -p <partition> -A <account> -N 1 --time=00:15:00 --gpus-per-node=1 \
   apptainer exec --rocm \
     "${AI4S_SHARED_DIR}/images/pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif" \
-    bash -c "cd ${OMNIHUB_TOOLS_DIR}/omnistat-src && \
+    bash -c "cd ${PERF_TOOLS_DIR}/omnistat-src && \
       cmake -S rocprofiler-sdk/ -B build-trace/ -DBUILD_KERNEL_TRACE_LIB=ON && \
       cmake --build build-trace/ -j 8"
 ```
 
-Verify with `ls -la ${OMNIHUB_TOOLS_DIR}/omnistat-src/build-trace/libomnistat_trace.so` (~MB-class file, not the tiny 4 kB stub you get when CMake fails halfway).
+Verify with `ls -la ${PERF_TOOLS_DIR}/omnistat-src/build-trace/libomnistat_trace.so` (~MB-class file, not the tiny 4 kB stub you get when CMake fails halfway).
 
 **SIF build prerequisites (one-time gotchas):** the `pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif` ships **without** `cmake` and **without** libcurl headers (only the `.so.4` runtime). Both omnistat artifacts need cmake; the kernel-trace library additionally needs `<curl/curl.h>`. Working build recipe inside the SIF:
 
@@ -735,12 +737,12 @@ When the cluster is up but you only need a one-shot interactive build inside the
 srun -p <partition> -A <account> -N 1 --time=00:15:00 --gpus-per-node=1 --cpus-per-task=8 \
   --job-name=<descriptive> \
   apptainer exec --rocm \
-    --bind ${OMNIHUB_TOOLS_DIR}:${OMNIHUB_TOOLS_DIR} \
+    --bind ${PERF_TOOLS_DIR}:${PERF_TOOLS_DIR} \
     "$HG_SIF" \
     bash -c '<your build commands>'
 ```
 
-Why: `salloc` doesn't auto-bind `${OMNIHUB_TOOLS_DIR}/` into the apptainer namespace. Direct `srun … apptainer exec --bind …` forces the bind explicitly and writes the build artifact to its persistent NFS path in one shot. Verified during the kernel-trace library build (job 7030).
+Why: `salloc` doesn't auto-bind `${PERF_TOOLS_DIR}/` into the apptainer namespace. Direct `srun … apptainer exec --bind …` forces the bind explicitly and writes the build artifact to its persistent NFS path in one shot. Verified during the kernel-trace library build (job 7030).
 
 ### 15. Dual-failure debug pattern — separate "tool wired correctly?" from "workload happy?"
 
@@ -752,3 +754,25 @@ When a probe job fails, ask **two** questions before retrying with a bigger run:
 **Concrete example from this session (kernel-trace probe job 7033):** all 8 ranks crashed in `int(os.environ["HYDRAGNN_NUM_WORKERS"])` (`ValueError: invalid literal for int() with base 10: ''`). The kernel-trace library *also* printed `[hostname][pid][omnistat] Trace summary: 0/0 processed records (0/0 successful flushes)` per rank — meaning the rocprofiler-sdk tool loaded, registered its callback, and only saw zero dispatches because the workload crashed first. Fixing the env-passthrough bug (§13) and re-running gave 22.5k records/rank — the kernel-trace wiring was correct all along.
 
 **Action:** when you see "0 records / 0 events / 0 metrics" after a failed probe, *don't* re-build the instrumentation. Read the workload error, fix that, and re-run before changing anything tool-side. This saved one full rebuild cycle here.
+
+### 16. ORBIT-2 / Bayes-CAST: `launch_diffusion.sh`, 1-node FSDP layout, perf template parity
+
+- **`sbatch_train_perf_amd.sh`** defaults **`edm_8m_era5_1x8.yaml`** (Bayes-CAST EDM; rendered **`fsdp=8`/`simple_ddp=1`**) + ERA5 1.0° **`ORBIT2_DATA_ROOT`**; **`ORBIT2_ROOT`** prefers **`…/code/bayes-cast`** when present; detects **`launch/launch_diffusion.sh`**. **`sbatch_train_amd.sh`**: same launcher discovery + ORBIT2_ROOT preference; train still defaults PRISM **`interm_8m_lux.yaml`** unless overridden. `render_orbit2_config.py` adds **`ORBIT2_ERA5_SPATIAL_RES`** (default **111**) for the EDM template. Perf default `#SBATCH --nodes=1`; use `sbatch --nodes=N` for multi-node.
+- **1 node × 8 GPUs:** unless **`ORBIT2_FSDP`** and **`ORBIT2_SIMPLE_DDP`** are both set, sbatch passes **`--fsdp 8 --simple-ddp 1`** (YAML: eight-way FSDP, one DDP group). Multi-node jobs omit extra flags so render keeps **`fsdp=nodes`**, **`simple_ddp=8`**.
+- **`launch/train_edm.py` (Bayes-CAST EDM):** when **`$ORBIT2_ROOT/launch/train_edm.py`** exists, Studio **does not** run upstream **`launch/launch_diffusion.sh`**. That file is often an OLCF/Crusher job wrapper: it **ignores argv**, hardcodes a YAML, and **nests `srun`**, which breaks Studio’s outer **`srun … apptainer exec`** flow. Ranks **`cd /orbit2/launch`**, run **`orbit2_rank_hook_runner.py`** (no-op if no hook), then **`exec python3 train_edm.py /config/config.yaml`**. Minimal Bayes checkouts may have **no `examples/`** — never **`cd /orbit2/examples`** on that path.
+- **Lux / public ORBIT-2:** if **`launch_diffusion.sh`** exists and **`train_edm.py`** does not, ranks **`exec bash …/launch_diffusion.sh /config/config.yaml`** after the hook runner (from **`examples/`** when present). Otherwise **`run_orbit2_train.py`**. Optional **`ORBIT2_LAUNCH_SCRIPT`** must be under **`ORBIT2_ROOT`**.
+- **Perf + Bayes EDM + rank hooks:** when **`LAUNCH_EDM_DIRECT=1`**, the default pre-train hook is **empty** (Lux **`orbit2_profiler_hook.py`** imports `intermediate_downscaling`). Set **`export ORBIT2_RANK_PRE_TRAIN_HOOK=/abs/path/hook.py` before `sbatch`** so `sbatch_train_perf_amd.sh` bakes the path into the generated rank script; **`orbit2_rank_hook_runner.py`** runs it before **`train_edm.py`**. TraceLens still arms from **`ORBIT2_PROFILE_DIR`** / **`PROFILE_TARGET_EPOCH`** in the rank script.
+- **Bayes `train_edm.py` + ERA5:** some upstream snapshots omit **`std_delta`** for **`data_key=="ERA5_1"`** (IMERG/HRRR only) → **`UnboundLocalError`** at first **`training_step`**. Patch **`training_step`** with an **`ERA5_1`** branch using per-output std from staged **`normalize_std.npz`** (see ORBIT-2 [HANDOFF.md](../../../earth_science/models/ORBIT-2/recipes/perf-analysis/HANDOFF.md) §landmines).
+- **Agent debug logs on clusters:** NDJSON instrumentation often defaults to the **Cursor workspace** path (e.g. **`.cursor/debug-<session>.log`**). Compute nodes usually **cannot write there**. Set **`DEBUG_AGENT_LOG`** to a **shared/bind-mounted writable file**, run the job, then **copy** that file into the workspace path (or paste tail into chat) so the next agent turn has runtime evidence. ORBIT-2 CK + **`bfloat16`** SIGSEGV investigation and checklist: same HANDOFF §“Debug session handoff”.
+- **xFormers CK SIGSEGV vs Bayes-CAST:** [`upstream_pytorch_sdpa_benchmark.py`](../../../earth_science/models/ORBIT-2/examples/upstream_pytorch_sdpa_benchmark.py) supports **`--orbit-include-xformers-ck`**, which runs **`MemoryEfficientAttentionCkOp`** in a **fresh subprocess per case** so a child **SIGSEGV** is summarized without killing the parent (PyTorch SDPA micro sweep still prints first). Use to prove crashes are **generic MEA+CK on bf16 shapes**, not ORBIT-specific wiring.
+- **VRAM-first saturation:** see ORBIT-2 [BASELINE_LOCKIN.md](../../../earth_science/models/ORBIT-2/recipes/perf-analysis/BASELINE_LOCKIN.md) — sweep **`ORBIT2_BATCH_SIZE`** on fixed ERA5 + 1×8 **`fsdp=8`/`simple_ddp=1`** before widening **`embed_dim`/`depth`**. Use **`examples/orbit2_estimate_batch_from_memory.py`** for a two-point *guess*, then **binary-search** short jobs; **`ORBIT2_DATA_TYPE`** defaults to **`bfloat16`** in `sbatch_train_*` (override **`float32`** if CK/SDPA misbehaves). If VRAM plateaus low, **stage more ERA5** per [STAGING_ERA5_FOR_HBM.md](../../../earth_science/models/ORBIT-2/recipes/perf-optimizer-loop/STAGING_ERA5_FOR_HBM.md).
+- **Iterative sysopt loop:** [perf-optimizer-loop README](../../../earth_science/models/ORBIT-2/recipes/perf-optimizer-loop/README.md) — **`throughput_samples_per_s`** primary FOM via **`run_fom_extractor.py`** + **`manifest.global_batch_size`**; Omnistat default rocprofiler profile **`hbm_flops_bf16`** (`SQ_INSTS_VALU_MFMA_MOPS_BF16` + `FETCH_SIZE`); **`OMNISTAT_ROCPROF_PROFILE=hbm_flops_f64`** restores fp64 HydraGNN-style counters.
+- **Perf `manifest.json`** records **`git_sha`**, branch, **`git_remote_origin`**, **`rendered_config`**, **`parallelism`**, **`global_batch_size`**, **`runtime_seconds`**, **`orbit2_batch_size`**, **`total_ranks`**, **`max_epochs`**, **`data_type`**, and **`workload`** for cross-day FOM comparisons.
+
+### 17. A `blocked` lever verdict is WORKLOAD-specific — re-probe before copying it to another model
+
+A `status: blocked` lever in one model's `lever_catalog.yaml` is evidence about **that workload on that day**, not a platform fact. Copying it to a sibling model without re-testing can permanently hide a working, high-value feature.
+
+**Case study (TunableOp, 2026-06-13):** HydraGNN MLIP marked `tunable_op_*` as `blocked` because all 16 GPUs hit `Memory access fault by GPU node-N` during hipBLASLt autotuning (perf-analysis SKILL #8/#15) — a real, validated failure for that workload (MACE double-backward shapes, full 16-GPU distributed tuning). The verdict was carried into ORBIT-2's catalog as a precaution. A cheap isolated probe (single GPU, ~2 min, `earth_science/models/ORBIT-2/perf-runs/tunableop-probe/`, jobs 10595/10596) **disproved it for ORBIT-2**: `PYTORCH_TUNABLEOP_TUNING=1` over 17 GEMMs — including the large-M bf16 `mm`/`F.linear`(TN+bias) class the sbatch comment claims faults — tuned cleanly with **0 memory faults** and wrote a valid `tunableop_results.csv`. All gfx950 Tensile logic libs are present in the container (`/opt/rocm/lib/{hipblaslt,rocblas}/library`, 439+156 gfx950 files) — **no missing prerequisites**. ORBIT-2's lever is now `experimental` (perf-analysis SKILL #28).
+
+**Rule for any model:** before trusting an inherited `blocked` verdict for a compute/BLAS-side lever (`tunable_op_*`, `torch_compile_*`, precision), run the smallest possible isolated probe on this exact stack first. Reserve `blocked` for failures *you* reproduced on *this* model. Probe template: 1-GPU `srun … apptainer exec … bash -c "source /opt/venv/bin/activate && python3 probe.py"` with the feature's env vars set. Note: `torch.cuda.tunable.write_file()` does not exist in PyTorch 2.10 — the cache auto-writes on process exit; use `set_filename()` + `get_results()`.

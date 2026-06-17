@@ -1,0 +1,160 @@
+# ORBIT-2 perf-optimizer-loop — lever catalog (Bayes-CAST EDM, MI355X-class, ROCm 7.2.x)
+#
+# Schema mirrors HydraGNN `material_science/models/HydraGNN/recipes/perf-optimizer-loop/lever_catalog.yaml`.
+# Each lever: one atomic change; citation = public KB or local evidence path.
+
+levers:
+
+  - id: baseline
+    description: "Iter-0 only. Saturated bf16 batch + SDPA + fsdp/simple_ddp from BASELINE_LOCKIN + staging doc."
+    catalog_order: 0
+    kind: env_only
+    env_vars:
+      ORBIT2_DATA_TYPE: "bfloat16"
+      ORBIT2_FUSED_ATTN: "DEFAULT"
+      ORBIT2_BATCH_SIZE: "4096"
+      ORBIT2_NUM_WORKERS: "1"
+      ORBIT2_DATA_ROOT: "${AI4S_SHARED_DIR}/models/ORBIT-2/data/superres/era5/1.0_deg"
+      ORBIT2_ERA5_SPATIAL_RES: "111"
+      TORCH_NCCL_HIGH_PRIORITY: "1"
+      GPU_MAX_HW_QUEUES: "2"
+    diagnostic_only: false
+    expected_payoff: "n/a (baseline)"
+    risk: "low"
+    revert_method: "drop_env"
+    citation: "earth_science/models/ORBIT-2/recipes/perf-analysis/BASELINE_LOCKIN.md"
+    notes: "bf16 UNBLOCKED 2026-06-11: required a compute-side fix in src/.../components/attention.py forcing CrossAttention SDPA to EFFICIENT_ATTENTION+MATH (ROCm Flash has a 65535 batch-grid cap that var_agg's inflated batch dim B=batch*648 exceeds at batch>=128). See perf-analysis/HANDOFF.md 'RESOLVED'. BASELINE RE-LOCKED 2026-06-12 for 3x-staged ERA5 (stage_era5_3x_symlink.sh -> 60 train shards): batch 4096 -> job 9415 = 3152 samples/s @ 82.0% HBM (236GB/288). 3x staging broke the old 1704-sample cap; on 3x data batch 4096 is BOTH the HBM-saturating point AND the throughput winner (1024=3102, 2048=3027, 4096=3152). REQUIRES the 3x symlinks present in ORBIT2_DATA_ROOT/train (idempotent: re-run stage_era5_3x_symlink.sh). See BASELINE_LOCKIN.md."
+
+  - id: torch_compile_edm
+    description: "torch.compile the FSDP-wrapped EDM model (in-process, after activation checkpointing). Try mode=default then max-autotune."
+    catalog_order: 1
+    kind: env_only
+    env_vars:
+      ORBIT2_TORCH_COMPILE: "1"
+      ORBIT2_COMPILE_MODE: "default"
+    diagnostic_only: false
+    expected_payoff: "medium"
+    risk: "medium"
+    revert_method: "drop_env"
+    citation: "https://rocm.docs.amd.com/en/latest/how-to/tuning-guides/mi300x/workload.html"
+    notes: "Implemented as env-gated patch in launch/train_edm.py (~line 1240, gated by ORBIT2_TORCH_COMPILE). NOT a rank-hook: orbit2_rank_hook_runner.py runs in a separate pre-launch process and cannot compile the in-process model. Unlike HydraGNN MACE (double-backward blocked), EDM has no double-backward so compile is a real candidate — validate on first iter; on dynamo errors set status: blocked. Escalate mode to max-autotune only after default succeeds. RESULT (loop-bf16-loop-001 iter-1, job 9262, mode=default): compiles cleanly but NEUTRAL (-0.3%, within noise) — REVERTED. EDM is already GEMM-heavy so Inductor finds little to fuse. Try mode=max-autotune only if revisiting; otherwise low priority for this workload."
+
+  - id: sdpa_efficient_vs_math
+    description: "Compare PyTorch SDPA backends via env consumed by Bayes-CAST / ORBIT (if supported) or microbench upstream_pytorch_sdpa_benchmark.py off critical path."
+    catalog_order: 2
+    kind: env_only
+    env_vars:
+      ORBIT2_SDP_BACKEND: "efficient"
+    diagnostic_only: false
+    expected_payoff: "low-medium"
+    risk: "low"
+    revert_method: "drop_env"
+    citation: "https://github.com/pytorch/pytorch/blob/main/benchmarks/transformer/sdpa.py"
+    notes: "Studio benchmark: earth_science/models/ORBIT-2/examples/upstream_pytorch_sdpa_benchmark.py — align naming with SDPBackend.EFFICIENT_ATTENTION vs MATH."
+
+  - id: num_workers_8
+    description: "trainer.num_workers 2 -> 4 via render token __NUM_WORKERS__ (ORBIT2_NUM_WORKERS). NOTE: keep <=4."
+    catalog_order: 3
+    kind: env_only
+    env_vars:
+      ORBIT2_NUM_WORKERS: "4"
+    diagnostic_only: false
+    expected_payoff: "none (ORBIT-2 is compute-bound — confirmed by clean test)"
+    risk: "low"
+    status: "rejected-noise"
+    revert_method: "drop_env"
+    citation: "https://rocm.docs.amd.com/en/develop/how-to/rocm-for-ai/training/benchmark-docker/previous-versions/pytorch-training-v25.9.html"
+    notes: "Requires edm_8m_era5_1x8.yaml (or template with __NUM_WORKERS__); render_orbit2_config.py substitutes from ORBIT2_NUM_WORKERS. RESULT (loop-bf16-loop-001 iter-2, job 9263, value=8): REGRESSED -5.6% — 8 workers x 8 ranks = 64 procs OVERSUBSCRIBE the 56 schedulable CPUs (cpus-per-task=7). CLEAN CONTROLLED TEST (5x staging=100 shards so per_worker=3 refills batch 4096; jobs 10504 nw=1 vs 10505 nw=4): real-per-step throughput +2.7% (2987->3068 s/s) = NOISE; nominal-batch metric falsely showed +80% due to per-worker partial 1016-sample trailing batches (steady_realized_batch_dims=[1016,4096], partial_step_fraction=0.57). num_workers is NOT a throughput lever; keep <=4 for I/O overlap only. Compute-bound (lesson #22/#26); never compare runs with differing steady_realized_batch_dims."
+
+  - id: channels_last
+    description: "channels_last memory_format on conv-like tensors if model supports (env knob ORBIT2_CHANNELS_LAST in edm.py)."
+    catalog_order: 4
+    kind: env_only
+    status: "rejected"
+    env_vars:
+      ORBIT2_CHANNELS_LAST: "1"
+    diagnostic_only: false
+    expected_payoff: "none"
+    risk: "medium"
+    revert_method: "drop_env"
+    citation: "https://rocm.docs.amd.com/en/latest/how-to/tuning-guides/mi300x/workload.html"
+    notes: "REJECTED (disproven on ROCm 7.2.2): MIOpen has no tuned NHWC implicit-GEMM solver for these low-channel conv shapes, so channels_last falls back to brute-force naive_conv_*_nhwc (~88-91% of GPU time) — 7-10x SLOWER. The im2col->hipBLASLt GEMM path (NCHW default) is the fast one. Knob kept default-off only so the dead end stays reproducible. See perf-analysis/HANDOFF.md."
+
+  - id: activation_checkpointing_toggle
+    description: "Toggle activation checkpointing if exposed in YAML (trade VRAM for compute)."
+    catalog_order: 5
+    kind: env_only
+    env_vars:
+      ORBIT2_ACTIVATION_CHECKPOINTING: "1"
+    diagnostic_only: false
+    expected_payoff: "medium"
+    risk: "medium"
+    revert_method: "drop_env"
+    citation: "https://rocm.docs.amd.com/en/docs-7.0.1/how-to/rocm-for-ai/system-setup/multi-node-setup.html"
+    notes: "Requires upstream config key; if absent, skip lever in picker or add render token."
+
+  - id: fsdp_prefetch_tuning
+    description: "FSDP forward_prefetch / limit_all_gathers if exposed in Bayes-CAST config or hook."
+    catalog_order: 6
+    kind: env_only
+    env_vars:
+      ORBIT2_FSDP_FORWARD_PREFETCH: "1"
+    diagnostic_only: false
+    expected_payoff: "low-medium"
+    risk: "low"
+    revert_method: "drop_env"
+    citation: "https://rocm.docs.amd.com/en/docs-7.0.1/how-to/rocm-for-ai/system-setup/multi-node-setup.html"
+
+  - id: tunable_op_warmup_then_use
+    description: "EXPERIMENTAL for ORBIT-2 on MI355X+ROCm7.2.2+PyTorch2.10. The HydraGNN 'blocked' verdict does NOT reproduce here: isolated GEMM tuning (incl. large-M bf16 mm/F.linear, the var_agg shape class) tunes cleanly with no mem fault (probe 2026-06-13, jobs 10595/10596). 2-phase: warmup job with _TUNING=1 to write tunableop_results_<N>.csv, then production with _ENABLED=1 only."
+    catalog_order: 7
+    kind: env_only
+    status: "rejected"
+    env_vars:
+      PYTORCH_TUNABLEOP_ENABLED: "1"
+      PYTORCH_TUNABLEOP_TUNING: "0"   # production/consume; set "1" only in the dedicated warmup job
+    diagnostic_only: false
+    expected_payoff: "none (no uplift)"
+    risk: "medium"
+    revert_method: "drop_env"
+    citation: "https://rocm.docs.amd.com/en/latest/how-to/tuning-guides/mi300x/workload.html#tunableop"
+    notes: "REJECTED (no practical uplift): tuning runs without mem fault (unlike HydraGNN MACE), but the GEMM bottleneck is the im2col-lowered low-channel conv GEMM that TunableOp can't touch — it tunes the already-optimal nn.Linear GEMMs (see GEMM analysis in perf-analysis/HANDOFF.md), so no speedup. Also impractical: live-tuning the giant patch-token GEMMs (M/K~5.3M) is ~3-12+ min PER op (multi-hour full tune). Wired via ORBIT2_TUNABLEOP_MODE=off|tune|use + ORBIT2_TUNABLEOP_DIR in sbatch_train_perf_amd.sh (default off)."
+
+  - id: nccl_minchannels
+    description: "NCCL_MIN_NCHANNELS=112 — use only at larger node counts; regressor at N=2 for HydraGNN."
+    catalog_order: 8
+    kind: env_only
+    env_vars:
+      NCCL_MIN_NCHANNELS: "112"
+    diagnostic_only: false
+    expected_payoff: "unknown"
+    risk: "medium"
+    revert_method: "drop_env"
+    citation: "https://rocm.docs.amd.com/en/docs-7.0.1/how-to/rocm-for-ai/system-setup/multi-node-setup.html"
+    notes: "Gate: total_nodes >= 4 recommended; skip at 1–2 nodes unless omnistat shows NIC saturation."
+
+  - id: precision_fp32_discriminator
+    description: "One-off fp32 vs bf16 to classify compute vs dispatch bound (same batch)."
+    catalog_order: 9
+    kind: env_only
+    env_vars:
+      ORBIT2_DATA_TYPE: "float32"
+    diagnostic_only: true
+    expected_payoff: "diagnostic"
+    risk: "low"
+    revert_method: "drop_env"
+    citation: ".cursor/skills/ai4science-perf-analysis/SKILL.md (fp32-vs-fp64 discriminator pattern)"
+    notes: "Compare throughput at same ORBIT2_BATCH_SIZE; if bf16 >= ~1.4x fp32, COMPUTE-bound; if ~equal, dispatch/overhead-bound. RESULT (loop-bf16-loop-001 iter-3, job 9264 vs baseline 9261, batch 1024): bf16=4089 / fp32=1718 = 2.38x -> COMPUTE-BOUND. This shapes lever strategy: kernel/data levers have low ceiling; real wins = bigger effective batch (stage more ERA5) or unblocked GEMM tuning."
+
+  - id: kernel_trace_diag_only
+    description: "OMNISTAT_KERNEL_TRACE=1 for one iter — high VM cardinality."
+    catalog_order: 10
+    kind: diagnostic
+    env_vars:
+      OMNISTAT_KERNEL_TRACE: "1"
+    diagnostic_only: true
+    expected_payoff: "n/a"
+    risk: "medium"
+    revert_method: "drop_env"
+    citation: ".cursor/skills/ai4science-studio/SKILL.md"
+    notes: "Max 1 per loop; same gate as HydraGNN lever_picker (kernel_correlation insufficient)."

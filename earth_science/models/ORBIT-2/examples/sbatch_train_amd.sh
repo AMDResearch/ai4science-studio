@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # ORBIT-2 multi-node training on AMD Instinct via SLURM (Apptainer + MPI).
 #
-# Wraps upstream intermediate_downscaling.py with Studio launchers and caps.
+# Wraps upstream training with Studio launchers and caps (gptl4py stub, batch cap,
+# optional rank-0 profiler hook). Prefer Bayes-CAST `launch_diffusion.sh` when present;
+# otherwise `run_orbit2_train.py` + `intermediate_downscaling.py`.
 # Uses real 10.0_arcmin PRISM data in same-dir mode (see interm_8m_lux.yaml).
 #
 # Quick start (1 node, 8 GPUs):
@@ -15,13 +17,17 @@
 #   ORBIT2_DATA_ROOT     Data root (PRISM 10.0_arcmin or era5/1.0_deg for sanity)
 #   ORBIT2_CONFIG_TEMPLATE  YAML template basename (default: interm_8m_lux.yaml;
 #                        use interm_8m_lux_era5.yaml for new ERA5 1.0_deg data)
-#   ORBIT2_ROOT          ORBIT-2 clone (default: $AI4S_SHARED_DIR/models/ORBIT-2/code/ORBIT-2)
+#   ORBIT2_ROOT          When unset: **bayes-cast** clone if `.../code/bayes-cast` exists, else public ORBIT-2
 #   ORBIT2_SIF           Apptainer SIF path
 #   ORBIT2_OVERLAY       Pre-built ext3 overlay (required — avoids ~15 min pip/job)
 #   ORBIT2_MAX_EPOCH     Cap trainer.max_epochs (default: 3; must be >= 2 —
 #                        upstream loop is while (epoch_start+1) < max_epochs)
 #   ORBIT2_MAX_BATCHES   Cap batches per epoch (default: 20; 0 = unlimited)
 #   ORBIT2_BATCH_SIZE    Per-rank batch size (default: 8)
+#   ORBIT2_FSDP / ORBIT2_SIMPLE_DDP  Parallelism for render (optional). When both unset
+#                        and nodes=1 with 8 GPUs/job, defaults to fsdp=8, simple_ddp=1.
+#   ORBIT2_LAUNCH_SCRIPT  Absolute path to launch script under ORBIT2_ROOT (optional).
+#                        If unset, uses launch_diffusion.sh at repo root or examples/ when present.
 #   ORBIT2_OUTPUT_DIR    Job output dir (default: .../outputs/train/<jobid>)
 #   TORCH_NCCL_HIGH_PRIORITY / GPU_MAX_HW_QUEUES — RCCL tuning (default: 1 / 2)
 #   ORBIT2_SKIP_NODE_HEALTH_PROBE=1 — skip mount probe (not recommended)
@@ -47,7 +53,15 @@ else
 fi
 
 ORBIT2_BASE="${AI4S_SHARED_DIR:?AI4S_SHARED_DIR must be set}/models/ORBIT-2"
-ORBIT2_ROOT="${ORBIT2_ROOT:-${ORBIT2_BASE}/code/ORBIT-2}"
+if [[ -z "${ORBIT2_ROOT:-}" ]]; then
+  if [[ -d "${ORBIT2_BASE}/code/bayes-cast" ]]; then
+    ORBIT2_ROOT="${ORBIT2_BASE}/code/bayes-cast"
+  else
+    ORBIT2_ROOT="${ORBIT2_BASE}/code/ORBIT-2"
+  fi
+else
+  ORBIT2_ROOT="${ORBIT2_ROOT}"
+fi
 ORBIT2_SIF="${ORBIT2_SIF:-${AI4S_SHARED_DIR}/images/pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif}"
 ORBIT2_OVERLAY="${ORBIT2_OVERLAY:-${ORBIT2_BASE}/overlays/orbit2-overlay.img}"
 ORBIT2_DATA_ROOT="${ORBIT2_DATA_ROOT:-${ORBIT2_BASE}/data/superres/prism/10.0_arcmin}"
@@ -56,13 +70,6 @@ ORBIT2_MAX_BATCHES="${ORBIT2_MAX_BATCHES:-20}"
 ORBIT2_BATCH_SIZE="${ORBIT2_BATCH_SIZE:-8}"
 ORBIT2_OUTPUT_DIR="${ORBIT2_OUTPUT_DIR:-${ORBIT2_BASE}/outputs/train/${SLURM_JOB_ID:-$$}}"
 
-TORCH_NCCL_HIGH_PRIORITY="${TORCH_NCCL_HIGH_PRIORITY:-1}"
-GPU_MAX_HW_QUEUES="${GPU_MAX_HW_QUEUES:-2}"
-
-NODES="${SLURM_JOB_NUM_NODES:-1}"
-GPUS_PER_NODE=8
-TOTAL_RANKS=$((NODES * GPUS_PER_NODE))
-
 for var in ORBIT2_SIF ORBIT2_OVERLAY ORBIT2_DATA_ROOT; do
   if [[ ! -e "${!var}" ]]; then
     echo "ERROR: $var not found: ${!var}" >&2
@@ -70,8 +77,48 @@ for var in ORBIT2_SIF ORBIT2_OVERLAY ORBIT2_DATA_ROOT; do
   fi
 done
 
-if [[ ! -f "${ORBIT2_ROOT}/examples/intermediate_downscaling.py" ]]; then
-  echo "ERROR: ORBIT-2 clone missing intermediate_downscaling.py: ${ORBIT2_ROOT}" >&2
+TORCH_NCCL_HIGH_PRIORITY="${TORCH_NCCL_HIGH_PRIORITY:-1}"
+GPU_MAX_HW_QUEUES="${GPU_MAX_HW_QUEUES:-2}"
+
+NODES="${SLURM_JOB_NUM_NODES:-1}"
+GPUS_PER_NODE=8
+TOTAL_RANKS=$((NODES * GPUS_PER_NODE))
+
+# Parallelism: explicit env, else 1×8 GPU baseline fsdp=8 simple_ddp=1, else fsdp=nodes × simple_ddp=gpus
+if [[ -n "${ORBIT2_FSDP:-}" && -n "${ORBIT2_SIMPLE_DDP:-}" ]]; then
+  RENDER_PARALLEL=(--fsdp "$ORBIT2_FSDP" --simple-ddp "$ORBIT2_SIMPLE_DDP")
+elif [[ "$NODES" -eq 1 && "$GPUS_PER_NODE" -eq 8 ]]; then
+  RENDER_PARALLEL=(--fsdp 8 --simple-ddp 1)
+else
+  RENDER_PARALLEL=()
+fi
+
+# Bayes-CAST ships launch/launch_diffusion.sh as an OLCF/Crusher sbatch+conda script: it
+# ignores argv, hardcodes a config, and nests srun — unusable inside Studio Apptainer+srun.
+# When launch/train_edm.py exists, call it directly with the rendered /config/config.yaml.
+LAUNCH_IC=""
+LAUNCH_EDM_DIRECT=0
+if [[ -n "${ORBIT2_LAUNCH_SCRIPT:-}" && -f "${ORBIT2_LAUNCH_SCRIPT}" ]]; then
+  case "$ORBIT2_LAUNCH_SCRIPT" in
+    "$ORBIT2_ROOT"/*) _rel="${ORBIT2_LAUNCH_SCRIPT#"$ORBIT2_ROOT"/}"; LAUNCH_IC="/orbit2/$_rel" ;;
+    *) echo "ERROR: ORBIT2_LAUNCH_SCRIPT must be under ORBIT2_ROOT: $ORBIT2_LAUNCH_SCRIPT" >&2; exit 2 ;;
+  esac
+elif [[ -f "${ORBIT2_ROOT}/launch/train_edm.py" ]]; then
+  LAUNCH_EDM_DIRECT=1
+elif [[ -f "${ORBIT2_ROOT}/launch_diffusion.sh" ]]; then
+  LAUNCH_IC="/orbit2/launch_diffusion.sh"
+elif [[ -f "${ORBIT2_ROOT}/launch/launch_diffusion.sh" ]]; then
+  LAUNCH_IC="/orbit2/launch/launch_diffusion.sh"
+elif [[ -f "${ORBIT2_ROOT}/examples/launch_diffusion.sh" ]]; then
+  LAUNCH_IC="/orbit2/examples/launch_diffusion.sh"
+fi
+
+_has_upstream=0
+[[ "$LAUNCH_EDM_DIRECT" -eq 1 ]] && _has_upstream=1
+[[ -n "$LAUNCH_IC" ]] && _has_upstream=1
+[[ -f "${ORBIT2_ROOT}/examples/intermediate_downscaling.py" ]] && _has_upstream=1
+if [[ "$_has_upstream" -eq 0 ]]; then
+  echo "ERROR: ORBIT2_ROOT has no trainable entry (launch/train_edm.py, launch_diffusion.sh, or examples/intermediate_downscaling.py): ${ORBIT2_ROOT}" >&2
   exit 2
 fi
 
@@ -92,6 +139,7 @@ python3 "$SCRIPT_DIR/render_orbit2_config.py" \
   --data-root "$ORBIT2_DATA_ROOT" \
   --max-epochs "$ORBIT2_MAX_EPOCH" \
   --batch-size "$ORBIT2_BATCH_SIZE" \
+  "${RENDER_PARALLEL[@]}" \
   -o "$JOB_CONFIG"
 
 echo "=== ORBIT-2 Training (Apptainer + MPI) ==="
@@ -104,10 +152,23 @@ echo "  Data root    : $ORBIT2_DATA_ROOT"
 echo "  Max epochs   : $ORBIT2_MAX_EPOCH"
 echo "  Max batches  : $ORBIT2_MAX_BATCHES"
 echo "  Batch size   : $ORBIT2_BATCH_SIZE"
+echo "  Config       : $JOB_CONFIG"
 echo "  RCCL priority: TORCH_NCCL_HIGH_PRIORITY=$TORCH_NCCL_HIGH_PRIORITY"
 echo "  HW queues    : GPU_MAX_HW_QUEUES=$GPU_MAX_HW_QUEUES"
 echo "  Output dir   : $ORBIT2_OUTPUT_DIR"
-echo "  Config       : $JOB_CONFIG"
+echo "  ORBIT2_ROOT  : $ORBIT2_ROOT"
+if ((${#RENDER_PARALLEL[@]})); then
+  echo "  Parallelism  : ${RENDER_PARALLEL[*]}"
+else
+  echo "  Parallelism  : (render default fsdp=$NODES simple_ddp=$GPUS_PER_NODE)"
+fi
+if [[ "$LAUNCH_EDM_DIRECT" -eq 1 ]]; then
+  echo "  Train entry  : python3 /orbit2/launch/train_edm.py (Bayes EDM; Studio bypasses launch_diffusion.sh)"
+elif [[ -n "$LAUNCH_IC" ]]; then
+  echo "  Train entry  : ${LAUNCH_IC}"
+else
+  echo "  Train entry  : run_orbit2_train.py (studio)"
+fi
 echo "  Node(s)      : ${SLURM_NODELIST:-$(hostname)}"
 echo "  Date         : $(date)"
 echo ""
@@ -143,6 +204,13 @@ if [[ "$ORBIT2_SKIP_NODE_HEALTH_PROBE" != "1" ]]; then
   echo "  All $SLURM_JOB_NUM_NODES nodes healthy."
 fi
 
+LAUNCH_DIR=""
+if [[ "$LAUNCH_EDM_DIRECT" -eq 1 ]]; then
+  LAUNCH_DIR="/orbit2/launch"
+elif [[ -n "$LAUNCH_IC" ]]; then
+  LAUNCH_DIR=$(dirname "$LAUNCH_IC")
+fi
+
 MASTER_ADDR=$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -1)
 MASTER_PORT="${ORBIT2_MASTER_PORT:-29500}"
 
@@ -157,18 +225,44 @@ export OMP_NUM_THREADS="\${SLURM_CPUS_PER_TASK:-7}"
 export MIOPEN_DISABLE_CACHE=1
 export MIOPEN_USER_DB_PATH="\${TMPDIR:-/tmp}/orbit2-miopen-\${SLURM_JOB_ID:-\$\$}-\${SLURM_PROCID:-0}"
 mkdir -p "\$MIOPEN_USER_DB_PATH"
+# ORNL Frontier-validated MIOpen conv flags (bayes-cast launch/launch_diffusion.sh). ORNL DISABLES
+# Winograd and unbounds the multi-pass Winograd workspace; tested many times on Frontier (gfx90a /
+# ROCm 7.1.1). Defaults below replicate ORNL exactly; override at submit to A/B on Lux (gfx950 /
+# ROCm 7.2.2), e.g. ORBIT2_MIOPEN_CONV_WINOGRAD=1 to re-enable Winograd.
+export MIOPEN_DEBUG_AMD_WINOGRAD_MPASS_WORKSPACE_MAX="${ORBIT2_MIOPEN_WINOGRAD_MPASS_WS_MAX:--1}"
+export MIOPEN_DEBUG_AMD_MP_BD_WINOGRAD_WORKSPACE_MAX="${ORBIT2_MIOPEN_MP_BD_WINOGRAD_WS_MAX:--1}"
+export MIOPEN_DEBUG_CONV_WINOGRAD="${ORBIT2_MIOPEN_CONV_WINOGRAD:-0}"
 export PYTHONNOUSERSITE=1
 export HSA_NO_SCRATCH_RECLAIM=1
+# ORNL Frontier-validated (launch_diffusion.sh): fine-grain PCIe coherence. Generic ROCm, portable.
+export HSA_FORCE_FINE_GRAIN_PCIE="${HSA_FORCE_FINE_GRAIN_PCIE:-1}"
 export ORBIT_USE_DDSTORE=0
 export TORCH_NCCL_HIGH_PRIORITY="${TORCH_NCCL_HIGH_PRIORITY}"
 export GPU_MAX_HW_QUEUES="${GPU_MAX_HW_QUEUES}"
 export ORBIT2_ROOT="/orbit2"
 export ORBIT2_MAX_BATCHES="${ORBIT2_MAX_BATCHES}"
-export ORBIT2_DATA_TYPE="${ORBIT2_DATA_TYPE:-float32}"
+export ORBIT2_OUTPUT_DIR="${ORBIT2_OUTPUT_DIR}"
+# Pass through checkpoint toggle. Default 0 here (general training script keeps checkpoints);
+# throughput/scaling callers set ORBIT2_DISABLE_CKPT=1 to skip all checkpoint writes.
+export ORBIT2_DISABLE_CKPT="${ORBIT2_DISABLE_CKPT:-0}"
+# Writable inside the container (job dir is bind-mounted) for CK debug NDJSON.
+export DEBUG_AGENT_LOG="\${DEBUG_AGENT_LOG:-${ORBIT2_OUTPUT_DIR}/agent-ck.ndjson}"
+export ORBIT2_DATA_TYPE="${ORBIT2_DATA_TYPE:-bfloat16}"
 export ORBIT2_FUSED_ATTN="${ORBIT2_FUSED_ATTN:-DEFAULT}"
 export ORBIT2_RANK_PRE_TRAIN_HOOK="\${ORBIT2_RANK_PRE_TRAIN_HOOK:-}"
-cd /orbit2/examples
-exec python3 /examples/run_orbit2_train.py /config/config.yaml
+if [[ "${LAUNCH_EDM_DIRECT}" -eq 1 ]]; then
+  cd /orbit2/launch
+  python3 /examples/orbit2_rank_hook_runner.py
+  exec python3 train_edm.py /config/config.yaml
+elif [[ -n "${LAUNCH_IC}" ]]; then
+  cd /orbit2/examples
+  python3 /examples/orbit2_rank_hook_runner.py
+  cd "${LAUNCH_DIR}"
+  exec bash "${LAUNCH_IC}" /config/config.yaml
+else
+  cd /orbit2/examples
+  exec python3 /examples/run_orbit2_train.py /config/config.yaml
+fi
 RANKEOF
 chmod +x "$RANK_SCRIPT"
 

@@ -50,7 +50,7 @@ omnihub:
   rocm_version: "7.2.2"
   # Shared perf/telemetry tools. Cluster-specific — set per site, do not hardcode
   # these into recipes/scripts. Default: <shared_dir>/tools.
-  # The legacy HydraGNN perf recipes read this value via the OMNIHUB_TOOLS_DIR
+  # The HydraGNN/ORBIT-2 perf recipes read this value via the OMNIHUB_TOOLS_DIR
   # env var (export OMNIHUB_TOOLS_DIR=<tools_dir> before running them).
   tools_dir: ""            # default: /shared/omnihub/tools
   #   <tools_dir>/omnistat              GPU telemetry, no PMC          (--tools omnistat)

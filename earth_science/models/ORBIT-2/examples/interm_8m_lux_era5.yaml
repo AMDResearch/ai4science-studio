@@ -10,7 +10,9 @@
 #   __SIMPLE_DDP__  — simple_ddp parallelism (typically 8)
 #   __MAX_EPOCHS__  — ORBIT2_MAX_EPOCH override
 #   __BATCH_SIZE__  — ORBIT2_BATCH_SIZE override
-#   __DATA_TYPE__   — ORBIT2_DATA_TYPE (float32 avoids xformers.ops CK path)
+#   __DATA_TYPE__   — ORBIT2_DATA_TYPE (matches upstream training dtype: public ORBIT-2
+#                     `configs/interm_8m.yaml` uses bfloat16; Bayes-CAST-style trees often
+#                     ship `edm_8m_era5.yaml` with the same. Studio sbatch defaults bfloat16.)
 
 #-----------   TRAINER -------------
 trainer:

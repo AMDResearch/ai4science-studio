@@ -10,7 +10,8 @@
 #   __SIMPLE_DDP__  — simple_ddp parallelism (typically 8)
 #   __MAX_EPOCHS__  — ORBIT2_MAX_EPOCH override
 #   __BATCH_SIZE__  — ORBIT2_BATCH_SIZE override
-#   __DATA_TYPE__   — ORBIT2_DATA_TYPE (float32 avoids xformers.ops CK path)
+#   __DATA_TYPE__   — ORBIT2_DATA_TYPE (same intent as upstream `configs/interm_8m.yaml` /
+#                     Bayes-CAST `edm_8m_era5.yaml`: **bfloat16**; override float32 only for debug)
 
 #-----------   TRAINER -------------
 trainer:
