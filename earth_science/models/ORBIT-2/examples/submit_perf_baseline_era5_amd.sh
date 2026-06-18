@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Submit ORBIT-2 perf baseline: ERA5 1.0° same-dir + interm_8m_era5.yaml (matches
+# Submit ORBIT-2 perf baseline: ERA5 1.0° + `edm_8m_era5_1x8.yaml` (matches
 # sbatch_train_perf_amd.sh defaults). Requires staged NPZ under ORBIT2_DATA_ROOT.
 #
 # Usage (from anywhere):

@@ -99,9 +99,9 @@ Cap at 6 claims. Order by `magnitude.value` (when comparable). Each claim must i
 | Hypothesis | Remedy |
 |---|---|
 | "RCCL allreduce dominates 35% of step time" | "Try `RCCL_LL128_FORCE_ENABLE=0` or larger bucket size via `find_unused_parameters=False`" |
-| "fp64 GEMM at 12 TFLOP/s, well below MI355X 39 TFLOP/s peak" | "Test `ORBIT2_PRECISION=bf16` for 5 batches on 1 node" |
-| "DataLoader events occupy 18% of step time" | "Increase `HYDRAGNN_NUM_WORKERS` from 0 to 4" |
-| "fp64 SQ FMA approaches MI355X spec ceiling" | "null — system limit; only path is bf16/fp32" |
+| "BF16 GEMM runs far below MI355X peak" | "Run one short discriminator job with `ORBIT2_DATA_TYPE=float32` (same batch) and compare `steady_batch_time_s`" |
+| "DataLoader events occupy 18% of step time" | "Increase `ORBIT2_NUM_WORKERS` (template token `__NUM_WORKERS__`) and re-run a short job" |
+| "BF16 MFMA approaches MI355X spec ceiling" | "null — system limit; only path is larger batch / wider model" |
 
 A null remedy is acceptable for "limit reached" findings.
 

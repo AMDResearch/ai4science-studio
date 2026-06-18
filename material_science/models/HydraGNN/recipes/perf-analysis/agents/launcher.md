@@ -127,7 +127,7 @@ The sbatch wrapper expects the `.so` at `${PERF_TOOLS_DIR}/omnistat-src/build-tr
 
 ### 2. Author the Omnistat user-mode config (once, in repo `perf-runs/`)
 
-If `$AI4S_SHARED_DIR/models/HydraGNN/perf-runs/omnistat.config` doesn't exist, write it from the template at `$REPO_ROOT/material_science/models/HydraGNN/recipes/perf-analysis/omnistat.config.template`. The template uses `%(SLURM_JOB_ID)s` placeholders that omnistat-usermode resolves at runtime.
+If `$AI4S_SHARED_DIR/models/HydraGNN/perf-runs/omnistat.config` doesn't exist, write it from the template at `$REPO_ROOT/material_science/models/HydraGNN/recipes/perf-analysis/omnistat.config.template`. The template uses `@JOB_DIR@` / `@OMNIHUB_TOOLS_DIR@` placeholders, which the sbatch wrapper substitutes (via `sed`) into a per-job config under the perf-run directory.
 
 ### 3. Generate the per-job profile config
 
