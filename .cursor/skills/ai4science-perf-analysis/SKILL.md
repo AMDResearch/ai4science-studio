@@ -16,14 +16,14 @@ Default target: HydraGNN on AMD MI355X. **ORBIT-2 training** uses the same perf-
 ### HydraGNN
 
 - Recipe: [material_science/models/HydraGNN/recipes/perf-analysis/](../../../material_science/models/HydraGNN/recipes/perf-analysis/)
-- Iterative-loop recipe: [material_science/models/HydraGNN/recipes/perf-optimizer-loop/](../../../material_science/models/HydraGNN/recipes/perf-optimizer-loop/) — **see [`HANDOFF.md`](../../../material_science/models/HydraGNN/recipes/perf-optimizer-loop/HANDOFF.md) for current state, what works, what's blocked, and next-work priorities**
+- Iterative-loop recipe: [material_science/models/HydraGNN/recipes/perf-optimizer-loop/](../../../material_science/models/HydraGNN/recipes/perf-optimizer-loop/) — **see [`dispatch-attribution.md`](../../../material_science/models/HydraGNN/recipes/perf-optimizer-loop/dispatch-attribution.md) (current-best attribution) and [`lever_catalog.yaml`](../../../material_science/models/HydraGNN/recipes/perf-optimizer-loop/lever_catalog.yaml) (levers tried / blocked with evidence)**
 - Sbatch wrapper: [material_science/models/HydraGNN/examples/sbatch_train_perf_amd.sh](../../../material_science/models/HydraGNN/examples/sbatch_train_perf_amd.sh)
 - Reusable node-health probe: [material_science/models/HydraGNN/examples/microbench_node_health.sh](../../../material_science/models/HydraGNN/examples/microbench_node_health.sh)
 - Agent prompt files: `material_science/models/HydraGNN/recipes/perf-analysis/agents/*.md` and `material_science/models/HydraGNN/recipes/perf-optimizer-loop/agents/*.md`
 
 ### ORBIT-2
 
-- Recipe: [earth_science/models/ORBIT-2/recipes/perf-analysis/](../../../earth_science/models/ORBIT-2/recipes/perf-analysis/) — see [`HANDOFF.md`](../../../earth_science/models/ORBIT-2/recipes/perf-analysis/HANDOFF.md)
+- Recipe: [earth_science/models/ORBIT-2/recipes/perf-analysis/](../../../earth_science/models/ORBIT-2/recipes/perf-analysis/) — see [`README.md`](../../../earth_science/models/ORBIT-2/recipes/perf-analysis/README.md) (FOM contract, defaults, landmines) and [`gemm-attribution.md`](../../../earth_science/models/ORBIT-2/recipes/perf-optimizer-loop/gemm-attribution.md) (GEMM-time finding + levers)
 - **Iterative sysopt loop:** [earth_science/models/ORBIT-2/recipes/perf-optimizer-loop/](../../../earth_science/models/ORBIT-2/recipes/perf-optimizer-loop/) — primary accept/revert FOM **`throughput_samples_per_s`** (`run_fom_extractor.py` + `manifest.global_batch_size`)
 - Sbatch: [earth_science/models/ORBIT-2/examples/sbatch_train_perf_amd.sh](../../../earth_science/models/ORBIT-2/examples/sbatch_train_perf_amd.sh)
 - Plain training: [earth_science/models/ORBIT-2/examples/sbatch_train_amd.sh](../../../earth_science/models/ORBIT-2/examples/sbatch_train_amd.sh)

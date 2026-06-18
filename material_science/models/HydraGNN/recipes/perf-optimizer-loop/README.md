@@ -4,7 +4,7 @@ Multi-iteration optimizer that runs HydraGNN on 2 nodes × 8 × MI355X (gfx950),
 
 > Audience: AMD performance engineering. Output is a diagnosis + tunings, not a HydraGNN scientific claim.
 
-> **Picking up this work? Read [`HANDOFF.md`](HANDOFF.md) first.** It has the current state (best epoch time, blocked levers, next-work priority list, landmines to avoid, and pointers to all the runtime artefacts outside the repo).
+> **Picking up this work?** Start with [`dispatch-attribution.md`](dispatch-attribution.md) (current-best attribution, ~75 s/epoch) and [`lever_catalog.yaml`](lever_catalog.yaml) (every lever tried, accepted/blocked with evidence). Cross-cutting lessons live in [`.cursor/skills/ai4science-perf-analysis/SKILL.md`](../../../../.cursor/skills/ai4science-perf-analysis/SKILL.md).
 
 ## What this recipe adds on top of `perf-analysis/`
 

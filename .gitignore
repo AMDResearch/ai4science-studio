@@ -67,7 +67,6 @@ vic_server.log
 
 # Session-scoped agent handoff files (ephemeral, not for the repo)
 HANDOFF.md
-!earth_science/models/ORBIT-2/recipes/perf-analysis/HANDOFF.md
 .claude/settings.local.json
 nul
 

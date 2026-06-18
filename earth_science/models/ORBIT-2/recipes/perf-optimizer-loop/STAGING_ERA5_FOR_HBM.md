@@ -26,8 +26,8 @@ Point `ORBIT2_DATA_ROOT` at that directory. `render_orbit2_config.py` injects `_
 
 ## Bayes-CAST hotfix checklist
 
-- **`train_edm.py` + `ERA5_1`:** ensure `std_delta` (or equivalent normalization branch) exists for `data_key == "ERA5_1"` so training does not hit `UnboundLocalError` (see [HANDOFF.md](../perf-analysis/HANDOFF.md) landmine #7).
-- **Attention path:** keep **`ORBIT2_FUSED_ATTN=DEFAULT`** (PyTorch SDPA) on ROCm 7.2.x + current xFormers wheels; CK MEA is **not** safe on this stack (HANDOFF xFormers probe).
+- **`train_edm.py` + `ERA5_1`:** ensure `std_delta` (or equivalent normalization branch) exists for `data_key == "ERA5_1"` so training does not hit `UnboundLocalError` (see the studio SKILL `std_delta`/`ERA5_1` note).
+- **Attention path:** keep **`ORBIT2_FUSED_ATTN=DEFAULT`** (PyTorch SDPA) on ROCm 7.2.x + current xFormers wheels; CK MEA is **not** safe on this stack (see the earth-science SKILL xFormers MEA note).
 
 ## After staging
 

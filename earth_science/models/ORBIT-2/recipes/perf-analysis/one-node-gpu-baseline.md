@@ -39,7 +39,7 @@ sbatch earth_science/models/ORBIT-2/examples/sbatch_train_perf_amd.sh
 
 One-liner from repo root (same defaults): `earth_science/models/ORBIT-2/examples/submit_perf_baseline_era5_amd.sh`
 
-Default parallelism is **`fsdp=8`, `simple_ddp=1`** for 1×8 (see [HANDOFF.md](HANDOFF.md)). Profiler + Omnistat start automatically.
+Default parallelism is **`fsdp=8`, `simple_ddp=1`** for 1×8 (see [README.md](README.md) §Defaults & landmines). Profiler + Omnistat start automatically.
 
 After the job finishes:
 

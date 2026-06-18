@@ -39,9 +39,26 @@ $AI4S_SHARED_DIR/models/ORBIT-2/perf-runs/<jobid>/
 └── combined_report.md         # synthesizer output
 ```
 
-## Primary FOM
+## FOM contract (steady-state + loss sanity)
 
-**`steady_batch_time_s`** — see [HANDOFF.md](HANDOFF.md) and `examples/parse_training_log.py` (epoch ≥ 2, skip warmup batches). Legacy **`batch_time_s`** label in older notes maps to the same parser options.
+**Primary FOM:** `steady_batch_time_s` — mean per-batch wall time from **epoch ≥ 2**, excluding **batch index < 1** within each epoch (skips compile/warmup batch 0). Epochs 0–1 are warmup. Legacy **`batch_time_s`** in older notes maps to the same parser options.
+
+**Loss sanity:** epoch-completed losses must **strictly decrease** epoch-over-epoch (`loss_sanity_pass`). Same-dir data makes absolute loss non-physical; use as a crash/hang detector only.
+
+**Scaling runs:** use `ORBIT2_MAX_EPOCH=6` (trains epochs 0–4) so the steady window spans epochs 2–4. Parse with:
+
+```bash
+python3 examples/parse_training_log.py --log ... --steady-epoch-start 2 --warmup-batches-per-epoch 1
+python3 examples/collate_scaling_study.py --log-dir .../logs --jobs ... --steady-epoch-start 2 --require-loss-sanity
+```
+
+## Defaults & landmines
+
+- **Parallelism (1 node × 8 GPU):** `fsdp=8`, `simple_ddp=1` unless `ORBIT2_FSDP` / `ORBIT2_SIMPLE_DDP` are set; multi-node renders `fsdp=nodes`, `simple_ddp=8`.
+- **Launcher discovery:** when `$ORBIT2_ROOT/launch/train_edm.py` exists (Bayes-CAST), ranks run `train_edm.py /config/config.yaml` from `/orbit2/launch`; do **not** exec upstream `launch_diffusion.sh` (OLCF/Crusher job wrapper — nested `srun`, ignores argv). For public ORBIT-2, `launch_diffusion.sh` + argv applies when `train_edm.py` is absent.
+- **Same-dir data:** set `superres_mag: 1` in `interm_8m_prism.yaml` / `interm_8m_era5.yaml`, else tensor-shape mismatch.
+- **`max_epochs` must be ≥ 2** (upstream loop is `while (epoch_start + 1) < max_epochs`).
+- For the **GEMM-time bottleneck**, MIOpen-flag A/B, and the tabled conv-padding / dead-end `channels_last` levers, see [`../perf-optimizer-loop/gemm-attribution.md`](../perf-optimizer-loop/gemm-attribution.md). Cross-cutting lessons (bf16 Flash 65535 cap, xFormers CK, std_delta/ERA5_1, debug-log handling) live in the earth-science and perf-analysis SKILLs.
 
 ## Agent prompts
 
@@ -49,5 +66,3 @@ $AI4S_SHARED_DIR/models/ORBIT-2/perf-runs/<jobid>/
 - [agents/tracelens_analyst.md](agents/tracelens_analyst.md)
 - [agents/omnistat_analyst.md](agents/omnistat_analyst.md)
 - [agents/synthesizer.md](agents/synthesizer.md)
-
-See [HANDOFF.md](HANDOFF.md) for validated landmines, Bayes-CAST / `launch_diffusion.sh`, and parallelism defaults.
