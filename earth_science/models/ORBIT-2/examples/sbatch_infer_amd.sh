@@ -99,7 +99,7 @@ export HSA_NO_SCRATCH_RECLAIM=1
 export MIOPEN_USER_DB_PATH="${TMPDIR:-/tmp}/orbit2-miopen-${SLURM_JOB_ID:-$$}"
 mkdir -p "$MIOPEN_USER_DB_PATH"
 # ORNL Frontier-validated MIOpen conv flags (bayes-cast launch/launch_diffusion.sh): disable Winograd,
-# unbound multi-pass Winograd workspace. Override to A/B on Lux (e.g. ORBIT2_MIOPEN_CONV_WINOGRAD=1).
+# unbound multi-pass Winograd workspace. Override to A/B on MI355X (e.g. ORBIT2_MIOPEN_CONV_WINOGRAD=1).
 export MIOPEN_DISABLE_CACHE="${MIOPEN_DISABLE_CACHE:-1}"
 export MIOPEN_DEBUG_AMD_WINOGRAD_MPASS_WORKSPACE_MAX="${ORBIT2_MIOPEN_WINOGRAD_MPASS_WS_MAX:--1}"
 export MIOPEN_DEBUG_AMD_MP_BD_WINOGRAD_WORKSPACE_MAX="${ORBIT2_MIOPEN_MP_BD_WINOGRAD_WS_MAX:--1}"

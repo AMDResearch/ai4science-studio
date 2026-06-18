@@ -25,14 +25,6 @@ recipes:
     recipe_path: recipes/train/
     script: examples/run_train.sh
     sbatch_script: examples/sbatch_train_amd.sh
-  - task: train-omnihub
-    description: Multi-node GFM training via OmniHub job generator (sync + generate-job.sh)
-    recipe_path: integrations/omnihub/applications/hydragnn-train/
-    script: integrations/omnihub/README.md
-  - task: perf-analysis-omnihub
-    description: 2-node perf run via OmniHub (omnistat + pytorch-trace + tracelens); read processed-data/ for agents
-    recipe_path: integrations/omnihub/applications/hydragnn-train/
-    script: integrations/omnihub/README.md
   - task: perf-analysis
     description: 2-node bottleneck analysis with TraceLens + Omnistat (user-mode) via paired analyst/verifier subagents
     recipe_path: recipes/perf-analysis/

@@ -96,7 +96,7 @@ Layout:
 
 ## Next steps
 
-1. <most informative A/B run, e.g. fp64 vs bf16 at 1 node>
+1. <most informative A/B run, e.g. bfloat16 vs float32 at 1 node>
 2. <next observability gap to fill, e.g. enable rocprofiler hbm counters>
 3. <next iteration: multi-rank trace fusion / rank-N comparison / longer run>
 
@@ -109,7 +109,7 @@ Layout:
 - `manifest.json`
 
 ---
-Generated <ISO timestamp> by `material_science/models/ORBIT-2/recipes/perf-analysis/`.
+Generated <ISO timestamp> by `earth_science/models/ORBIT-2/recipes/perf-analysis/`.
 ```
 
 ### 6. Final stdout

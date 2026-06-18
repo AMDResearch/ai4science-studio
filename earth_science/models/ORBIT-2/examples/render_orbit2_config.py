@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Render a per-job ORBIT-2 training YAML from a Studio template.
 
-Templates include Lux same-dir (**``interm_8m_lux*.yaml``**) and Bayes-CAST EDM
+Templates include same-dir (**``interm_8m_prism.yaml``** / **``interm_8m_era5.yaml``**) and Bayes-CAST EDM
 (**``edm_8m_era5_1x8.yaml``**), which also substitutes **``__ERA5_1_SPATIAL_RES__``**
 from env **``ORBIT2_ERA5_SPATIAL_RES``** (default ``111`` for 1.0° ERA5 staging).
 
@@ -26,12 +26,12 @@ from pathlib import Path
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Render ORBIT-2 Lux training config.")
+    parser = argparse.ArgumentParser(description="Render ORBIT-2 training config.")
     parser.add_argument(
         "--template",
         type=Path,
         default=None,
-        help="Template YAML (default: interm_8m_lux.yaml next to this script)",
+        help="Template YAML (default: interm_8m_prism.yaml next to this script)",
     )
     parser.add_argument("--nodes", type=int, required=True, help="SLURM node count")
     parser.add_argument(
@@ -61,7 +61,7 @@ def main() -> int:
     import os
 
     script_dir = Path(__file__).resolve().parent
-    template = args.template or (script_dir / "interm_8m_lux.yaml")
+    template = args.template or (script_dir / "interm_8m_prism.yaml")
     if not template.is_file():
         print(f"error: template not found: {template}", file=sys.stderr)
         return 2
@@ -117,7 +117,7 @@ def main() -> int:
         print("error: ORBIT2_DATA_TYPE must be float32 or bfloat16", file=sys.stderr)
         return 2
 
-    # Bayes-CAST `edm_8m_era5_1x8.yaml`: spatial token count for ERA5_1 (111 ≈ 1.0° Lux staging)
+    # Bayes-CAST `edm_8m_era5_1x8.yaml`: spatial token count for ERA5_1 (111 ≈ 1.0° ERA5 staging)
     era5_1_spatial = int(os.environ.get("ORBIT2_ERA5_SPATIAL_RES", "111"))
     num_workers = int(os.environ.get("ORBIT2_NUM_WORKERS", "2"))
 

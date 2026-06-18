@@ -4,7 +4,7 @@
 # Adapted from HydraGNN's upstream omnistat.hydragnn-external.config.
 # Differences from upstream / from the system-mode default:
 #   - enable_amd_smi (newer SMI), not rocm_smi
-#   - rocprofiler counters DISABLED in v1 (turn on per-probe via verifier)
+#   - rocprofiler counters ENABLED by default (bf16 MFMA + HBM read); override per-probe if needed
 #   - allowed_ips includes 0.0.0.0 so the user-mode VM scrapes
 #   - victoria_datadir under the per-job dir (@JOB_DIR@), persists after job
 #--

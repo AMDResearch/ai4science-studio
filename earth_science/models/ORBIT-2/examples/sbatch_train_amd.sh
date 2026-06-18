@@ -4,7 +4,7 @@
 # Wraps upstream training with Studio launchers and caps (gptl4py stub, batch cap,
 # optional rank-0 profiler hook). Prefer Bayes-CAST `launch_diffusion.sh` when present;
 # otherwise `run_orbit2_train.py` + `intermediate_downscaling.py`.
-# Uses real 10.0_arcmin PRISM data in same-dir mode (see interm_8m_lux.yaml).
+# Uses real 10.0_arcmin PRISM data in same-dir mode (see interm_8m_prism.yaml).
 #
 # Quick start (1 node, 8 GPUs):
 #   export AI4S_SHARED_DIR=/path/to/shared
@@ -15,8 +15,8 @@
 # Key environment variables:
 #   AI4S_SHARED_DIR      Shared storage root (required)
 #   ORBIT2_DATA_ROOT     Data root (PRISM 10.0_arcmin or era5/1.0_deg for sanity)
-#   ORBIT2_CONFIG_TEMPLATE  YAML template basename (default: interm_8m_lux.yaml;
-#                        use interm_8m_lux_era5.yaml for new ERA5 1.0_deg data)
+#   ORBIT2_CONFIG_TEMPLATE  YAML template basename (default: interm_8m_prism.yaml;
+#                        use interm_8m_era5.yaml for new ERA5 1.0_deg data)
 #   ORBIT2_ROOT          When unset: **bayes-cast** clone if `.../code/bayes-cast` exists, else public ORBIT-2
 #   ORBIT2_SIF           Apptainer SIF path
 #   ORBIT2_OVERLAY       Pre-built ext3 overlay (required — avoids ~15 min pip/job)
@@ -124,7 +124,7 @@ fi
 
 mkdir -p "$ORBIT2_OUTPUT_DIR"
 
-ORBIT2_CONFIG_TEMPLATE="${ORBIT2_CONFIG_TEMPLATE:-interm_8m_lux.yaml}"
+ORBIT2_CONFIG_TEMPLATE="${ORBIT2_CONFIG_TEMPLATE:-interm_8m_prism.yaml}"
 CONFIG_TEMPLATE="${SCRIPT_DIR}/${ORBIT2_CONFIG_TEMPLATE}"
 if [[ ! -f "$CONFIG_TEMPLATE" ]]; then
   echo "ERROR: ORBIT2_CONFIG_TEMPLATE not found: $CONFIG_TEMPLATE" >&2
@@ -227,7 +227,7 @@ export MIOPEN_USER_DB_PATH="\${TMPDIR:-/tmp}/orbit2-miopen-\${SLURM_JOB_ID:-\$\$
 mkdir -p "\$MIOPEN_USER_DB_PATH"
 # ORNL Frontier-validated MIOpen conv flags (bayes-cast launch/launch_diffusion.sh). ORNL DISABLES
 # Winograd and unbounds the multi-pass Winograd workspace; tested many times on Frontier (gfx90a /
-# ROCm 7.1.1). Defaults below replicate ORNL exactly; override at submit to A/B on Lux (gfx950 /
+# ROCm 7.1.1). Defaults below replicate ORNL exactly; override at submit to A/B on MI355X (gfx950 /
 # ROCm 7.2.2), e.g. ORBIT2_MIOPEN_CONV_WINOGRAD=1 to re-enable Winograd.
 export MIOPEN_DEBUG_AMD_WINOGRAD_MPASS_WORKSPACE_MAX="${ORBIT2_MIOPEN_WINOGRAD_MPASS_WS_MAX:--1}"
 export MIOPEN_DEBUG_AMD_MP_BD_WINOGRAD_WORKSPACE_MAX="${ORBIT2_MIOPEN_MP_BD_WINOGRAD_WS_MAX:--1}"
@@ -253,7 +253,9 @@ export ORBIT2_RANK_PRE_TRAIN_HOOK="\${ORBIT2_RANK_PRE_TRAIN_HOOK:-}"
 if [[ "${LAUNCH_EDM_DIRECT}" -eq 1 ]]; then
   cd /orbit2/launch
   python3 /examples/orbit2_rank_hook_runner.py
-  exec python3 train_edm.py /config/config.yaml
+  # run_orbit2_train_edm.py wraps train_edm.main() to honour ORBIT2_MAX_BATCHES
+  # (train_edm.py runs its batch loop inline, so there is no function to patch).
+  exec python3 /examples/run_orbit2_train_edm.py /config/config.yaml
 elif [[ -n "${LAUNCH_IC}" ]]; then
   cd /orbit2/examples
   python3 /examples/orbit2_rank_hook_runner.py

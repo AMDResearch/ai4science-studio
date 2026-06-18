@@ -6,7 +6,7 @@ Independently re-derive the top 2-3 claims from `tracelens/claims.json` against 
 
 - `<perf_run_dir>/manifest.json`
 - `<perf_run_dir>/tracelens/claims.json`
-- The raw trace at `manifest.trace_paths[0]`.
+- The raw trace: the single `*.pt.trace.json` under `manifest.trace_dir` (find with `find "$(jq -r .trace_dir <manifest>)" -name '*.pt.trace.json' 2>/dev/null | sort | head -1`).
 
 ## Outputs
 
@@ -66,7 +66,7 @@ Choose the highest-impact `verified` claim with a non-null `remedy_test_command_
 - ≤5 minutes wall-time.
 - Must produce a comparable number (steps/sec or seconds/step) to the original 2-node baseline. If the remedy can only be tested at scale (e.g. RCCL inter-node tweak), set `remedy_probe.ran=false; notes="remedy requires multi-node; deferred to next iteration"`.
 
-Example probe for the bf16 / fp64 ceiling claim — run via the existing ORBIT-2 sbatch script in interactive mode:
+Example probe for the bf16 vs float32 discriminator claim — run via the existing ORBIT-2 sbatch script in interactive mode:
 
 ```bash
 srun -p <partition> -A <account> -N1 --ntasks=8 --gpus-per-node=8 --cpus-per-task=16 \
@@ -81,7 +81,7 @@ grep -oE "[0-9.]+s/it" /tmp/probe-$SLURM_JOB_ID.out | tail -5
 '
 ```
 
-Note: `sbatch_train_amd.sh` is designed for `sbatch`, not `srun --pty`. For probes prefer using its rank-script logic directly via a small ad-hoc wrapper rather than running the whole sbatch under srun. The verifier may inline a minimal Python invocation that bypasses sbatch and just runs the upstream `interm_8m_lux_all_mpnn.py` for 10 batches inside the container with the alternate precision.
+Note: `sbatch_train_amd.sh` is designed for `sbatch`, not `srun --pty`. For probes prefer using its rank-script logic directly via a small ad-hoc wrapper rather than running the whole sbatch under srun. The verifier may inline a minimal Python invocation that bypasses sbatch and just runs `intermediate_downscaling.py` (or `examples/run_orbit2_train.py`) for ~10 batches inside the container with the alternate dtype.
 
 If the verifier judges that no cheap probe is feasible, set `remedy_probe.ran=false` with a clear note and proceed.
 

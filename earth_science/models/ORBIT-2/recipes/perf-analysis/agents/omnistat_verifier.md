@@ -40,9 +40,11 @@ Also: `start_time`/`end_time` from `job_info.json` are **UTC**. Convert with `ca
 | "Power throttling events" | sum increase of throttle counters over the job span, joined as above |
 
 ```bash
-PORT=$(jq -r '.[0].port' <vm_info>)  # or pull from analyst stdout
+PORT=$(grep -oE '127\.0\.0\.1:[0-9]+' "$PERF_RUN/omnistat/vm.log" 2>/dev/null | head -1 | cut -d: -f2)  # or take the port from the analyst's STATUS line
+[[ -z "$PORT" ]] && { echo "STATUS=fail; reason=cannot_determine_vm_port"; exit 1; }
+# Must join via rmsjob_info — a bare {jobid="..."} on rocm_* returns 0 series (see note above).
 curl -sG "http://127.0.0.1:$PORT/api/v1/query_range" \
-    --data-urlencode "query=avg_over_time(rocm_utilization_percentage{jobid=\"$JOBID\"}[1m])" \
+    --data-urlencode "query=avg(rocm_utilization_percentage * on (instance) group_left() (max by (instance) (rmsjob_info{jobid=\"$JOBID\"})))" \
     --data-urlencode "start=$START" \
     --data-urlencode "end=$END" \
     --data-urlencode "step=$STEP" \
@@ -55,7 +57,7 @@ The verifier should re-derive the actual number from the PromQL result and compa
 
 Same constraints as the tracelens verifier — at most one 1-node `srun -p <partition> -A <account> -N1 --time=00:05:00`. Telemetry-side probes are typically configuration changes (e.g. enable rocprofiler `hbm` counter set in the omnistat config and re-run for 1 minute on 1 node to see if HBM bandwidth is actually saturating).
 
-If a probe needs the omnistat config to change, write a temp config file based on `omnistat.config` with the rocprofiler section uncommented, point `OMNISTAT_CONFIG` at it, and submit via the existing sbatch script as a tiny job with `ORBIT2_NUM_EPOCH=1 HYDRAGNN_MAX_NUM_BATCH=10 --nodes=1`. Time-budget that branch generously (10 min) since it does include the omnistat collector startup.
+If a probe needs the omnistat config to change, write a temp config file based on `omnistat.config` with the rocprofiler section uncommented, point `OMNISTAT_CONFIG` at it, and submit via the existing sbatch script as a tiny job with `ORBIT2_MAX_EPOCH=1 ORBIT2_MAX_BATCHES=10 --nodes=1`. Time-budget that branch generously (10 min) since it does include the omnistat collector startup.
 
 If multi-node is required (e.g. ANP plugin retest), set `remedy_probe.ran=false; notes="multi-node probe deferred"`.
 

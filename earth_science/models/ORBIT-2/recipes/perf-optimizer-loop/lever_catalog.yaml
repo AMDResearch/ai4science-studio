@@ -23,7 +23,7 @@ levers:
     risk: "low"
     revert_method: "drop_env"
     citation: "earth_science/models/ORBIT-2/recipes/perf-analysis/BASELINE_LOCKIN.md"
-    notes: "bf16 UNBLOCKED 2026-06-11: required a compute-side fix in src/.../components/attention.py forcing CrossAttention SDPA to EFFICIENT_ATTENTION+MATH (ROCm Flash has a 65535 batch-grid cap that var_agg's inflated batch dim B=batch*648 exceeds at batch>=128). See perf-analysis/HANDOFF.md 'RESOLVED'. BASELINE RE-LOCKED 2026-06-12 for 3x-staged ERA5 (stage_era5_3x_symlink.sh -> 60 train shards): batch 4096 -> job 9415 = 3152 samples/s @ 82.0% HBM (236GB/288). 3x staging broke the old 1704-sample cap; on 3x data batch 4096 is BOTH the HBM-saturating point AND the throughput winner (1024=3102, 2048=3027, 4096=3152). REQUIRES the 3x symlinks present in ORBIT2_DATA_ROOT/train (idempotent: re-run stage_era5_3x_symlink.sh). See BASELINE_LOCKIN.md."
+    notes: "bf16 UNBLOCKED 2026-06-11: required a compute-side fix in src/.../components/attention.py forcing CrossAttention SDPA to EFFICIENT_ATTENTION+MATH (ROCm Flash has a 65535 batch-grid cap that var_agg's inflated batch dim B=batch*648 exceeds at batch>=128). See BASELINE_LOCKIN.md and the earth-science SKILL (bf16 Flash 65535 cap). BASELINE RE-LOCKED 2026-06-12 for 3x-staged ERA5 (stage_era5_3x_symlink.sh -> 60 train shards): batch 4096 -> job 9415 = 3152 samples/s @ 82.0% HBM (236GB/288). 3x staging broke the old 1704-sample cap; on 3x data batch 4096 is BOTH the HBM-saturating point AND the throughput winner (1024=3102, 2048=3027, 4096=3152). REQUIRES the 3x symlinks present in ORBIT2_DATA_ROOT/train (idempotent: re-run stage_era5_3x_symlink.sh). See BASELINE_LOCKIN.md."
 
   - id: torch_compile_edm
     description: "torch.compile the FSDP-wrapped EDM model (in-process, after activation checkpointing). Try mode=default then max-autotune."
@@ -78,7 +78,7 @@ levers:
     risk: "medium"
     revert_method: "drop_env"
     citation: "https://rocm.docs.amd.com/en/latest/how-to/tuning-guides/mi300x/workload.html"
-    notes: "REJECTED (disproven on ROCm 7.2.2): MIOpen has no tuned NHWC implicit-GEMM solver for these low-channel conv shapes, so channels_last falls back to brute-force naive_conv_*_nhwc (~88-91% of GPU time) — 7-10x SLOWER. The im2col->hipBLASLt GEMM path (NCHW default) is the fast one. Knob kept default-off only so the dead end stays reproducible. See perf-analysis/HANDOFF.md."
+    notes: "REJECTED (disproven on ROCm 7.2.2): MIOpen has no tuned NHWC implicit-GEMM solver for these low-channel conv shapes, so channels_last falls back to brute-force naive_conv_*_nhwc (~88-91% of GPU time) — 7-10x SLOWER. The im2col->hipBLASLt GEMM path (NCHW default) is the fast one. Knob kept default-off only so the dead end stays reproducible. See gemm-attribution.md (channels_last dead end)."
 
   - id: activation_checkpointing_toggle
     description: "Toggle activation checkpointing if exposed in YAML (trade VRAM for compute)."
@@ -118,7 +118,7 @@ levers:
     risk: "medium"
     revert_method: "drop_env"
     citation: "https://rocm.docs.amd.com/en/latest/how-to/tuning-guides/mi300x/workload.html#tunableop"
-    notes: "REJECTED (no practical uplift): tuning runs without mem fault (unlike HydraGNN MACE), but the GEMM bottleneck is the im2col-lowered low-channel conv GEMM that TunableOp can't touch — it tunes the already-optimal nn.Linear GEMMs (see GEMM analysis in perf-analysis/HANDOFF.md), so no speedup. Also impractical: live-tuning the giant patch-token GEMMs (M/K~5.3M) is ~3-12+ min PER op (multi-hour full tune). Wired via ORBIT2_TUNABLEOP_MODE=off|tune|use + ORBIT2_TUNABLEOP_DIR in sbatch_train_perf_amd.sh (default off)."
+    notes: "REJECTED (no practical uplift): tuning runs without mem fault (unlike HydraGNN MACE), but the GEMM bottleneck is the im2col-lowered low-channel conv GEMM that TunableOp can't touch — it tunes the already-optimal nn.Linear GEMMs (see gemm-attribution.md), so no speedup. Also impractical: live-tuning the giant patch-token GEMMs (M/K~5.3M) is ~3-12+ min PER op (multi-hour full tune). Wired via ORBIT2_TUNABLEOP_MODE=off|tune|use + ORBIT2_TUNABLEOP_DIR in sbatch_train_perf_amd.sh (default off)."
 
   - id: nccl_minchannels
     description: "NCCL_MIN_NCHANNELS=112 — use only at larger node counts; regressor at N=2 for HydraGNN."
@@ -146,9 +146,23 @@ levers:
     citation: ".cursor/skills/ai4science-perf-analysis/SKILL.md (fp32-vs-fp64 discriminator pattern)"
     notes: "Compare throughput at same ORBIT2_BATCH_SIZE; if bf16 >= ~1.4x fp32, COMPUTE-bound; if ~equal, dispatch/overhead-bound. RESULT (loop-bf16-loop-001 iter-3, job 9264 vs baseline 9261, batch 1024): bf16=4089 / fp32=1718 = 2.38x -> COMPUTE-BOUND. This shapes lever strategy: kernel/data levers have low ceiling; real wins = bigger effective batch (stage more ERA5) or unblocked GEMM tuning."
 
+  - id: conv_pad_internal_width
+    description: "Widen path2/refine conv INTERNAL width to a tile-friendly N (3-channel I/O unchanged) via ORBIT2_CONV_PAD=N in edm.py, to kill the starved MT16x16x32 conv-bwd GEMM."
+    catalog_order: 10
+    kind: env_only
+    status: "tabled"
+    env_vars:
+      ORBIT2_CONV_PAD: "16"
+    diagnostic_only: false
+    expected_payoff: "high (timing-only -25%)"
+    risk: "high"
+    revert_method: "drop_env"
+    citation: "gemm-attribution.md"
+    notes: "TABLED (NOT ADOPTED, default 0/off). Single-node A/B (bf16/4096/ERA5, N=16): steady 8.646 -> 6.498 s (-24.8%), top MT16x16x32 GEMM gone. BUT this CHANGES MODEL CAPACITY (wider internal convs) and only 'loss sanity' (finite/decreasing) was checked, NOT convergence/quality. Do NOT enable for real training until a matched convergence study (same data/schedule; final val loss/skill + steps-to-target, pad=0 vs pad=16) passes. Open timing question if revisited: N=32. See gemm-attribution.md."
+
   - id: kernel_trace_diag_only
     description: "OMNISTAT_KERNEL_TRACE=1 for one iter — high VM cardinality."
-    catalog_order: 10
+    catalog_order: 11
     kind: diagnostic
     env_vars:
       OMNISTAT_KERNEL_TRACE: "1"

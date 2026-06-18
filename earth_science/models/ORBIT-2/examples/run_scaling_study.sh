@@ -9,7 +9,7 @@
 #
 # ERA5 1.0_deg same-dir (timing only):
 #   export ORBIT2_DATA_ROOT=$AI4S_SHARED_DIR/models/ORBIT-2/data/superres/era5/1.0_deg
-#   export ORBIT2_CONFIG_TEMPLATE=interm_8m_lux_era5.yaml
+#   export ORBIT2_CONFIG_TEMPLATE=interm_8m_era5.yaml
 #   export ORBIT2_SCALING_TAG=era5
 #   ./run_scaling_study.sh
 
@@ -26,7 +26,7 @@ export ORBIT2_MAX_EPOCH=6
 export ORBIT2_MAX_BATCHES=20
 export ORBIT2_BATCH_SIZE=4
 export ORBIT2_DATA_ROOT="${ORBIT2_DATA_ROOT:-${AI4S_SHARED_DIR}/models/ORBIT-2/data/superres/prism/10.0_arcmin}"
-export ORBIT2_CONFIG_TEMPLATE="${ORBIT2_CONFIG_TEMPLATE:-interm_8m_lux.yaml}"
+export ORBIT2_CONFIG_TEMPLATE="${ORBIT2_CONFIG_TEMPLATE:-interm_8m_prism.yaml}"
 # sbatch_train_amd.sh: 1-node×8-GPU jobs default to fsdp=8 simple_ddp=1; N>1 uses fsdp=N simple_ddp=8 from render defaults.
 export ORBIT2_SCALING_TAG="${ORBIT2_SCALING_TAG:-prism}"
 export ORBIT2_OUTPUT_DIR="${ORBIT2_OUTPUT_DIR:-${AI4S_SHARED_DIR}/models/ORBIT-2/outputs/scaling-${ORBIT2_SCALING_TAG}}"

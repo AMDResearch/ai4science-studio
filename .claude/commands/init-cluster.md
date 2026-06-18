@@ -193,6 +193,7 @@ After writing, confirm to the user:
 Suggest what the user can do next:
 - Export `AI4S_SHARED_DIR=<scratch>` (or add to `~/.bashrc`) so all model scripts resolve paths correctly
 - Run a model: `/run-stormcast`, `/run-orbit2`, etc.
+- If **Q9 (Performance tooling)** was configured: run ORBIT-2 or HydraGNN perf recipes with `/run-perf-orbit2` or `/run-perf-hydragnn`
 - The run commands will read cluster config automatically for SLURM partition/account defaults
 
 $ARGUMENTS

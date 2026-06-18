@@ -48,9 +48,9 @@ ORBIT2_SIF="${ORBIT2_SIF:-${AI4S_SHARED_DIR}/images/pytorch_rocm7.2.2_ubuntu24.0
 ORBIT2_OVERLAY="${ORBIT2_OVERLAY:-${ORBIT2_BASE}/overlays/orbit2-overlay.img}"
 # Default ERA5 1.0° same-dir (111×111 latent) for heavier forwards / GPU saturation baselines.
 # PRISM 10.0_arcmin (18×18): export ORBIT2_DATA_ROOT=$ORBIT2_BASE/data/superres/prism/10.0_arcmin
-#   and ORBIT2_CONFIG_TEMPLATE=interm_8m_lux.yaml
+#   and ORBIT2_CONFIG_TEMPLATE=interm_8m_prism.yaml
 ORBIT2_DATA_ROOT="${ORBIT2_DATA_ROOT:-${ORBIT2_BASE}/data/superres/era5/1.0_deg}"
-# Default 6 so steady_batch_time_s (epoch >= 2) has a multi-epoch window; see perf-analysis/HANDOFF.md
+# Default 6 so steady_batch_time_s (epoch >= 2) has a multi-epoch window; see perf-analysis/README.md
 ORBIT2_MAX_EPOCH="${ORBIT2_MAX_EPOCH:-6}"
 ORBIT2_MAX_BATCHES="${ORBIT2_MAX_BATCHES:-20}"
 ORBIT2_BATCH_SIZE="${ORBIT2_BATCH_SIZE:-4}"
@@ -223,7 +223,7 @@ trap cleanup_omnistat EXIT
 MASTER_ADDR=$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -1)
 MASTER_PORT="${ORBIT2_MASTER_PORT:-29500}"
 TRACE_DIR="${ORBIT2_OUTPUT_DIR}/traces"
-# Bayes EDM: default no hook (Lux profiler imports break); allow ORBIT2_RANK_PRE_TRAIN_HOOK for sysopt patches.
+# Bayes EDM: default no hook (res_slimvit profiler imports break); allow ORBIT2_RANK_PRE_TRAIN_HOOK for sysopt patches.
 if [[ "${LAUNCH_EDM_DIRECT}" -eq 1 ]]; then
   _RANK_PRE_TRAIN_HOOK="${ORBIT2_RANK_PRE_TRAIN_HOOK:-}"
 else
@@ -257,7 +257,7 @@ export MIOPEN_USER_DB_PATH="\${TMPDIR:-/tmp}/orbit2-miopen-\${SLURM_JOB_ID:-\$\$
 mkdir -p "\$MIOPEN_USER_DB_PATH"
 # ORNL Frontier-validated MIOpen conv flags (bayes-cast launch/launch_diffusion.sh). ORNL DISABLES
 # Winograd and unbounds the multi-pass Winograd workspace; tested many times on Frontier (gfx90a /
-# ROCm 7.1.1). Defaults below replicate ORNL exactly; override at submit to A/B on Lux (gfx950 /
+# ROCm 7.1.1). Defaults below replicate ORNL exactly; override at submit to A/B on MI355X (gfx950 /
 # ROCm 7.2.2), e.g. ORBIT2_MIOPEN_CONV_WINOGRAD=1 to re-enable Winograd.
 export MIOPEN_DEBUG_AMD_WINOGRAD_MPASS_WORKSPACE_MAX="${ORBIT2_MIOPEN_WINOGRAD_MPASS_WS_MAX:--1}"
 export MIOPEN_DEBUG_AMD_MP_BD_WINOGRAD_WORKSPACE_MAX="${ORBIT2_MIOPEN_MP_BD_WINOGRAD_WS_MAX:--1}"
@@ -328,7 +328,9 @@ export ORBIT2_RANK_PRE_TRAIN_HOOK="${_RANK_PRE_TRAIN_HOOK}"
 if [[ "${LAUNCH_EDM_DIRECT}" -eq 1 ]]; then
   cd /orbit2/launch
   python3 /examples/orbit2_rank_hook_runner.py
-  exec python3 train_edm.py /config/config.yaml
+  # run_orbit2_train_edm.py wraps train_edm.main() to honour ORBIT2_MAX_BATCHES
+  # (train_edm.py runs its batch loop inline, so there is no function to patch).
+  exec python3 /examples/run_orbit2_train_edm.py /config/config.yaml
 elif [[ -n "${LAUNCH_IC}" ]]; then
   cd /orbit2/examples
   python3 /examples/orbit2_rank_hook_runner.py

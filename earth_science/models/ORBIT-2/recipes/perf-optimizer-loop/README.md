@@ -9,7 +9,7 @@ Agent-driven optimization loop for **ORBIT-2** training with **throughput (`thro
 - **Hardware:** 1 node × 8× MI355X (gfx950) for phase-1; see §Two-node gate below.
 - **Container:** `pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif` + ORBIT-2 overlay (`build_overlay_amd.sh`).
 - **Data:** staged ERA5 NPZ tree; for HBM saturation follow [`STAGING_ERA5_FOR_HBM.md`](STAGING_ERA5_FOR_HBM.md).
-- **Code:** `ORBIT2_ROOT` → Bayes-CAST with `launch/train_edm.py` (see [HANDOFF.md](../perf-analysis/HANDOFF.md)).
+- **Code:** `ORBIT2_ROOT` → Bayes-CAST with `launch/train_edm.py` (see [perf-analysis/README.md](../perf-analysis/README.md)).
 - **Tools:** `OMNIHUB_TOOLS_DIR` (omnistat-usermode + VictoriaMetrics), `AI4S_SHARED_DIR`.
 
 ## Environment variables (loop driver)
@@ -96,7 +96,7 @@ After one-node loop converges:
 
 ## Levers tried and rejected
 
-Recorded so they are not re-attempted. Full evidence in [`../perf-analysis/HANDOFF.md`](../perf-analysis/HANDOFF.md); catalog entries carry `status: rejected`.
+Recorded so they are not re-attempted. Full evidence in [`gemm-attribution.md`](gemm-attribution.md); catalog entries carry `status: rejected`.
 
 | Lever | Verdict | Why |
 |-------|---------|-----|

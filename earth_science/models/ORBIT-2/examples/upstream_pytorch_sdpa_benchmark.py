@@ -463,7 +463,7 @@ def generate_orbit_varagg_configs(
     so ``batch_size = batch * tokens`` (e.g. 256*648=165888), with ``q_seq_len = N_a = 1``
     and ``kv_seq_len = N_i`` (#input variables). This is the shape that makes ROCm Flash
     SDPA exceed the 65535 batch-grid cap (~batch>=128 at tokens=648) while EFFICIENT/MATH
-    are fine. See recipes/perf-analysis/HANDOFF.md §RESOLVED.
+    are fine. See the earth-science SKILL (bf16 Flash 65535 cap).
     """
     dev = torch.device("cuda")
     return [

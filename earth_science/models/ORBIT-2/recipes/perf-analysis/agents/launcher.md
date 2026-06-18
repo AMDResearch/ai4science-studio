@@ -33,7 +33,7 @@ Submits a 2-node ORBIT-2 training (AMD Instinct MI355X) with PyTorch profiling a
   "partition": "<partition>",
   "account": "<account>",
   "runtime_seconds": <float>,
-  "config_used": "<path to interm_8m_lux_with_profile.json>",
+  "config_used": "<path to interm_8m_with_profile.json>",
   "profile_target_epoch": <int>,
   "trace_paths": ["<path to .pt.trace.json>"],
   "omnistat_db_path": "<dir>",
@@ -131,7 +131,7 @@ If `$AI4S_SHARED_DIR/models/ORBIT-2/perf-runs/omnistat.config` doesn't exist, wr
 
 ### 3. Generate the per-job profile config
 
-Read the upstream `interm_8m_lux.json` from `$AI4S_SHARED_DIR/models/ORBIT-2/code/ORBIT-2/examples/multidataset_hpo_sc26/interm_8m_lux.json` and inject the `Profile` block **inside `NeuralNetwork`** (not at the top level — `train_validate_test()` is invoked with `config["NeuralNetwork"]` as `config`, so its Profiler reads `config["Profile"]` from that scope):
+Read `interm_8m.json` from `$AI4S_SHARED_DIR/models/ORBIT-2/code/ORBIT-2/examples/multidataset_hpo_sc26/interm_8m.json` and inject the `Profile` block **inside `NeuralNetwork`** (not at the top level — `train_validate_test()` is invoked with `config["NeuralNetwork"]` as `config`, so its Profiler reads `config["Profile"]` from that scope):
 
 ```python
 cfg.setdefault("NeuralNetwork", {})["Profile"] = {
@@ -140,7 +140,7 @@ cfg.setdefault("NeuralNetwork", {})["Profile"] = {
 }
 ```
 
-Write the result to `$AI4S_SHARED_DIR/models/ORBIT-2/perf-runs/<jobid>/interm_8m_lux_profile.json`. Use Python (`json.load`/`json.dump`) — do NOT do this with sed.
+Write the result to `$AI4S_SHARED_DIR/models/ORBIT-2/perf-runs/<jobid>/interm_8m_profile.json`. Use Python (`json.load`/`json.dump`) — do NOT do this with sed.
 
 (The wrapper `examples/sbatch_train_perf_amd.sh` already does this; this step exists in the launcher prompt for the case where the launcher is reused for a non-ORBIT-2 model.)
 

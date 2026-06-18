@@ -7,7 +7,7 @@ Use this file to **freeze** what “baseline” means while you sweep knobs. Upd
 | Field | Value (example: job **9145**) |
 |--------|--------------------------------|
 | **Job dir** | `$AI4S_SHARED_DIR/models/ORBIT-2/perf-runs/<jobid>/` |
-| **Template** | `interm_8m_lux_era5.yaml` (ERA5 1.0°, same-dir, `spatial_resolution` 111×111) |
+| **Template** | `interm_8m_era5.yaml` (ERA5 1.0°, same-dir, `spatial_resolution` 111×111) |
 | **Parallelism** | `fsdp=8`, `simple_ddp=1` (1 node × 8 ranks) |
 | **dtype** | `bfloat16` (Studio **`sbatch_train_*` / `run_scaling_study.sh`** default). Set **`ORBIT2_DATA_TYPE=float32`** if `xformers.ops` / CK attention misbehaves; **`ORBIT2_FUSED_ATTN=DEFAULT`** (already in sbatch) prefers PyTorch SDPA. |
 | **Epochs / cap** | `ORBIT2_MAX_EPOCH=6`, `ORBIT2_MAX_BATCHES=20` |
@@ -24,7 +24,7 @@ Use this file to **freeze** what “baseline” means while you sweep knobs. Upd
 | 3 | Per job: `python3 …/run_fom_extractor.py --job-dir …/perf-runs/<jobid>` then `report_orbit2_gpu_baseline.py` → **`baseline_report.md`** beside `manifest.json`. |
 | 4 | Lock **~85–90%** `memory_reserved` (leave fragmentation headroom) and best **throughput** (`run_fom_extractor` → `throughput_samples_per_s`) vs **`steady_batch_time_s`**. |
 
-**Reference job (bf16):** ✅ **bf16 works** after a compute-side attention fix (2026-06-11). The earlier crash (`var_agg` SDPA, `HIP error: invalid argument`) was **ROCm Flash attention's 65535 batch-grid cap**: `var_agg` flattens `(B,History,L)` into the SDPA batch dim `B = batch·648`, which exceeds 65535 at **batch ≥ 128**. Fix: force `CrossAttention` SDPA to **EFFICIENT_ATTENTION+MATH** (not Flash) in `src/climate_learn/models/hub/components/attention.py`. Validated job **9238** (bf16 b256 COMPLETES, decreasing loss). Root cause + probe in [`HANDOFF.md`](HANDOFF.md) → "RESOLVED". Note the **~1704-sample data cap**: bf16 won't reach 85–90% HBM at 1704 samples (fp32@1704 ≈ 183 GiB ≈ 64%; bf16 ≈ half) — stage more ERA5 to saturate.
+**Reference job (bf16):** ✅ **bf16 works** after a compute-side attention fix (2026-06-11). The earlier crash (`var_agg` SDPA, `HIP error: invalid argument`) was **ROCm Flash attention's 65535 batch-grid cap**: `var_agg` flattens `(B,History,L)` into the SDPA batch dim `B = batch·648`, which exceeds 65535 at **batch ≥ 128**. Fix: force `CrossAttention` SDPA to **EFFICIENT_ATTENTION+MATH** (not Flash) in `src/climate_learn/models/hub/components/attention.py`. Validated job **9238** (bf16 b256 COMPLETES, decreasing loss). Root cause + fix: see the earth-science SKILL (bf16 Flash 65535 cap). Note the **~1704-sample data cap**: bf16 won't reach 85–90% HBM at 1704 samples (fp32@1704 ≈ 183 GiB ≈ 64%; bf16 ≈ half) — stage more ERA5 to saturate.
 
 **Reference job (bf16, working) — LOCKED 2026-06-11:** `jobid=9240`, `ORBIT2_BATCH_SIZE=1024`, `ORBIT2_DATA_ROOT=${AI4S_SHARED_DIR}/models/ORBIT-2/data/superres/era5/1.0_deg`, `ORBIT2_ERA5_SPATIAL_RES=111`, `ORBIT2_DATA_TYPE=bfloat16`, `ORBIT2_FUSED_ATTN=DEFAULT`, `fsdp=8`/`simple_ddp=1`. **Throughput = 4098 samples/s** (`steady_batch_time_s=2.00`, gb=8192, loss sanity ✅). Reproduced by job 9257 (4097 s/s).
 
@@ -87,7 +87,7 @@ Smoke **9158** used **`ORBIT2_BATCH_SIZE=2`** (~0.35 GiB **`max_memory_allocat
 
 ## Ordered next steps (do in sequence)
 
-1. **Lock topology + data + template** — Keep **ERA5** + **`interm_8m_lux_era5.yaml`** + **1×8** + **`fsdp=8`/`simple_ddp=1`** fixed until VRAM plateaus.
+1. **Lock topology + data + template** — Keep **ERA5** + **`interm_8m_era5.yaml`** + **1×8** + **`fsdp=8`/`simple_ddp=1`** fixed until VRAM plateaus.
 2. **Sweep `ORBIT2_BATCH_SIZE`** — Prefer **binary search** between a known-good batch and a guessed upper bound (fewer SLURM jobs than stepping by +1). Re-run `run_fom_extractor.py` + `report_orbit2_gpu_baseline.py` per candidate; pick the best **time vs throughput** under high VRAM.
 3. **Optional: denser batch timing in logs** — If you need more than two `Batch … seconds` lines per epoch, raise upstream logging frequency or increase `ORBIT2_MAX_BATCHES` (still capped per epoch in trainer) so steady stats are statistically tighter.
 4. **Omnistat + TraceLens** — On the **winning** job id only: confirm MFMA/HBM story matches “saturated” intent ([`one-node-gpu-baseline.md`](one-node-gpu-baseline.md) §6–7, [`ai4science-perf-analysis`](../../../../.cursor/skills/ai4science-perf-analysis/SKILL.md)).

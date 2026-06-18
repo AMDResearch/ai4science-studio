@@ -132,12 +132,12 @@ def _resolve_rendered_yaml(job_dir: Path, manifest: dict) -> Path | None:
         if p.is_file():
             return p.resolve()
     job_id = str(manifest.get("job_id") or job_dir.name)
-    for name in (f"interm_8m_lux_{job_id}.yaml", f"interm_8m_lux_era5_{job_id}.yaml"):
+    for name in (f"interm_8m_prism_{job_id}.yaml", f"interm_8m_era5_{job_id}.yaml"):
         p = job_dir / name
         if p.is_file():
             return p.resolve()
     for p in sorted(job_dir.glob("interm_*.yaml")):
-        if p.is_file() and "lux" in p.name:
+        if p.is_file() and ("prism" in p.name or "era5" in p.name):
             return p.resolve()
     return None
 

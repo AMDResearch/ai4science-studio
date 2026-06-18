@@ -4,18 +4,6 @@ Multi-subagent workflow that launches a 2-node HydraGNN training on AMD Instinct
 
 > **Audience:** performance engineers. The output is a diagnosis of the run, not a scientific claim about HydraGNN.
 
-## OmniHub alternative (standardized results)
-
-For token-efficient agent parsing via `processed-data/`, use recipe `perf-analysis-omnihub` in `model.yaml` and `.cursor/skills/ai4science-omnihub/SKILL.md`:
-
-```bash
-./integrations/omnihub/generate-job.sh --perf --num-nodes 2 --output job.slurm
-sbatch -A vultr_lux job.slurm
-# then omnihub-process + omnihub-index
-```
-
-This uses `/shared/omnihub/tools/omnistat` and OmniHub's `tracelens` tool. The legacy path below (`sbatch_train_perf_amd.sh` + the `omnihub-inspect` venv at `/shared/omnihub/tools/omnihub-inspect` + subagent claims) remains for deep `omnistat-inspect` / PromQL workflows.
-
 ## What this recipe does
 
 1. **Launcher** subagent submits a 2-node training (`sbatch_train_perf_amd.sh`) with PyTorch profiling armed for one target epoch and Omnistat user-mode collecting on every node.

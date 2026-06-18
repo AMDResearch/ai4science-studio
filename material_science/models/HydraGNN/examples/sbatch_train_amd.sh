@@ -40,7 +40,7 @@
 #   TORCH_NCCL_HIGH_PRIORITY  Default 1 (RCCL high-priority queue)
 #   GPU_MAX_HW_QUEUES         Default 2
 #
-# HydraGNN pinned SHA: 6c45f1682783e66dc89e9e23009f61716186432b (main)
+# HydraGNN pinned SHA: 2fb0bd0157e3c85a74f9841887155095bd163303 (main)
 
 #SBATCH --job-name=hydragnn-train
 #SBATCH --partition=YOUR_GPU_PARTITION

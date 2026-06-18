@@ -45,7 +45,6 @@ secrets/
 
 # SLURM job output
 *-*.out
-*-slurm.err
 # SLURM job artifacts named foo.<jobid>.out (e.g. omnistat_failed_hosts.6851.out)
 *.[0-9][0-9][0-9][0-9].out
 
@@ -68,7 +67,6 @@ vic_server.log
 
 # Session-scoped agent handoff files (ephemeral, not for the repo)
 HANDOFF.md
-!earth_science/models/ORBIT-2/recipes/perf-analysis/HANDOFF.md
 .claude/settings.local.json
 nul
 
