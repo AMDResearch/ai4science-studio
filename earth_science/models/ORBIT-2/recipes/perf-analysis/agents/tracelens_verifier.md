@@ -6,7 +6,7 @@ Independently re-derive the top 2-3 claims from `tracelens/claims.json` against 
 
 - `<perf_run_dir>/manifest.json`
 - `<perf_run_dir>/tracelens/claims.json`
-- The raw trace at `manifest.trace_paths[0]`.
+- The raw trace: the single `*.pt.trace.json` under `manifest.trace_dir` (find with `find "$(jq -r .trace_dir <manifest>)" -name '*.pt.trace.json' | sort | head -1`).
 
 ## Outputs
 

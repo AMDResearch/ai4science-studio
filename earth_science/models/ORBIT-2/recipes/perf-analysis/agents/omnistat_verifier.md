@@ -40,9 +40,10 @@ Also: `start_time`/`end_time` from `job_info.json` are **UTC**. Convert with `ca
 | "Power throttling events" | sum increase of throttle counters over the job span, joined as above |
 
 ```bash
-PORT=$(jq -r '.[0].port' <vm_info>)  # or pull from analyst stdout
+PORT=$(cat "$PERF_RUN/omnistat/vm.pid" >/dev/null 2>&1 && grep -oE ':[0-9]+' "$PERF_RUN/omnistat/vm.log" | head -1 | tr -d :)  # or take the port from the analyst's STATUS line
+# Must join via rmsjob_info — a bare {jobid="..."} on rocm_* returns 0 series (see note above).
 curl -sG "http://127.0.0.1:$PORT/api/v1/query_range" \
-    --data-urlencode "query=avg_over_time(rocm_utilization_percentage{jobid=\"$JOBID\"}[1m])" \
+    --data-urlencode "query=avg(rocm_utilization_percentage * on (instance) group_left() (max by (instance) (rmsjob_info{jobid=\"$JOBID\"})))" \
     --data-urlencode "start=$START" \
     --data-urlencode "end=$END" \
     --data-urlencode "step=$STEP" \
