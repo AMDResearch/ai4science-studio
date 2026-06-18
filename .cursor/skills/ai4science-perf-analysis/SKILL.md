@@ -1,6 +1,6 @@
 ---
 name: ai4science-perf-analysis
-description: Runs the AMD AI agents bottleneck-analysis workflow on a HydraGNN (or other ai4science) training job using TraceLens + Omnistat user-mode + paired analyst/verifier subagents. Use when the user wants to "analyze a 2-node HydraGNN run", "find bottlenecks with TraceLens/Omnistat", or "run the AMD AI agents on a job".
+description: Runs the AMD AI agents bottleneck-analysis workflow on a HydraGNN or ORBIT-2 training job using TraceLens + Omnistat user-mode + paired analyst/verifier subagents, or drives the iterative perf-optimizer-loop (accept/revert on throughput or epoch time). Use when the user wants to analyze a perf run, analyze a 2-node HydraGNN run, find bottlenecks with TraceLens/Omnistat, run the AMD AI agents on a job, run the perf-optimizer-loop, tune ORBIT-2 throughput, or optimize HydraGNN training performance.
 ---
 
 # AI4Science perf-analysis (multi-subagent bottleneck workflow)
