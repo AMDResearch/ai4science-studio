@@ -49,6 +49,9 @@ def _cap_dataloader(dl, limit: int):
             self._inner = inner
             self._n = n
 
+        def __getattr__(self, name: str):
+            return getattr(self._inner, name)
+
         def __iter__(self):
             return iter(itertools.islice(iter(self._inner), self._n))
 
@@ -57,7 +60,6 @@ def _cap_dataloader(dl, limit: int):
                 return min(len(self._inner), self._n)
             except TypeError:
                 return self._n
-
     return _Capped(dl, limit)
 
 
@@ -102,14 +104,12 @@ def main() -> None:
 
     os.chdir(launch_dir)
     _stub_gptl4py()
+    _apply_batch_cap()
 
     import torch
     import torch.distributed as dist
 
     import train_edm  # noqa: WPS433
-
-    _apply_batch_cap()
-
     # train_edm.main() reads sys.argv[1] as the config path.
     sys.argv = ["train_edm.py", config]
 
