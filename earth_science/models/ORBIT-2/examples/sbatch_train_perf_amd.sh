@@ -328,7 +328,9 @@ export ORBIT2_RANK_PRE_TRAIN_HOOK="${_RANK_PRE_TRAIN_HOOK}"
 if [[ "${LAUNCH_EDM_DIRECT}" -eq 1 ]]; then
   cd /orbit2/launch
   python3 /examples/orbit2_rank_hook_runner.py
-  exec python3 train_edm.py /config/config.yaml
+  # run_orbit2_train_edm.py wraps train_edm.main() to honour ORBIT2_MAX_BATCHES
+  # (train_edm.py runs its batch loop inline, so there is no function to patch).
+  exec python3 /examples/run_orbit2_train_edm.py /config/config.yaml
 elif [[ -n "${LAUNCH_IC}" ]]; then
   cd /orbit2/examples
   python3 /examples/orbit2_rank_hook_runner.py

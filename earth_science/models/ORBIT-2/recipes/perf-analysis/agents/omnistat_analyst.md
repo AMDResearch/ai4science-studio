@@ -5,8 +5,8 @@ Drive `omnistat-inspect` (PR #271) through the analyze-job phases on the user-mo
 ## Inputs
 
 - `<perf_run_dir>/manifest.json`
-- The Omnistat DB at `manifest.omnistat_db_path`.
-- The `perf-inspect` venv at `${PERF_TOOLS_DIR}/perf-inspect/`.
+- The Omnistat DB at `manifest.omnistat_db`.
+- The omnistat/TraceLens venv at `${OMNISTAT_VENV:-${PERF_TOOLS_DIR}/perf-inspect}/` (the venv name is site-specific; honour `OMNISTAT_VENV` when set at submit time).
 - The VictoriaMetrics binary at `${PERF_TOOLS_DIR}/victoriametrics/victoria-metrics-prod`.
 
 ## Outputs
@@ -27,7 +27,7 @@ Drive `omnistat-inspect` (PR #271) through the analyze-job phases on the user-mo
 Following the [load-database SKILL](https://github.com/ROCm/omnistat/blob/jorda/skills/skills/load-database/SKILL.md), with one addition for memory-constrained login nodes: pass `-fs.disableMmap` so VM can open a job-scoped DB inside the login-node cgroup (without it, even a 1.6 MB DB panics with "cannot mmap file with size 4096 bytes ... no such device").
 
 ```bash
-DB=$(jq -r .omnistat_db_path <manifest>)
+DB=$(jq -r .omnistat_db <manifest>)   # sbatch manifest key is omnistat_db (not omnistat_db_path)
 [[ -d "$DB/data" ]] || { echo "STATUS=fail; reason=no_db_data"; exit 1; }
 
 # Pick free port
@@ -62,10 +62,10 @@ done
 ### 2. Run analyze-job phases (per the SKILL)
 
 ```bash
-. ${PERF_TOOLS_DIR}/perf-inspect/bin/activate
+. "${OMNISTAT_VENV:-${PERF_TOOLS_DIR}/perf-inspect}/bin/activate"
 SCRATCH=$PERF_RUN/omnistat/scratch
 mkdir -p "$SCRATCH"
-JOBID=$(jq -r .jobid <manifest>)
+JOBID=$(jq -r .job_id <manifest>)   # sbatch manifest key is job_id (not jobid)
 
 OUTD=$PERF_RUN/omnistat/inspect_outputs
 
@@ -75,6 +75,8 @@ omnistat-inspect --tsdb-url $TSDB_URL --scratch-dir $SCRATCH job $JOBID data-che
 omnistat-inspect --tsdb-url $TSDB_URL --scratch-dir $SCRATCH job $JOBID health > $OUTD/health.json
 omnistat-inspect --tsdb-url $TSDB_URL --scratch-dir $SCRATCH job $JOBID stats --level global > $OUTD/stats_global.json
 ```
+
+**Where the real payload lands:** for `job ... info|data-check|health|stats`, stdout (the `>` redirect above) captures only a small *query-stats* blob — `omnistat-inspect` writes the full analysis JSON under `--scratch-dir`. After the commands run, copy the scratch payloads into `$OUTD/` so the `evidence_paths` in your `claims.json` resolve to real data (e.g. `cp "$SCRATCH"/<job>/*.json "$OUTD/"`, matching each phase's output file). Verify each `$OUTD/*.json` actually contains the analysis (not just `query_stats`) before writing claims against it.
 
 ### 3. Identify anomalous categories and drill down
 

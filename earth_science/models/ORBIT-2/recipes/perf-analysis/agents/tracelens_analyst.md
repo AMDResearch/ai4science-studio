@@ -39,9 +39,11 @@ Every entry:
 ### 1. Sanity check
 
 ```bash
-. ${PERF_TOOLS_DIR}/perf-inspect/bin/activate
-PERF_RUN=$(jq -r .perf_run_dir <manifest>)
-TRACE=$(jq -r '.trace_paths[0] // empty' <manifest>)
+# Venv name is site-specific; honour OMNISTAT_VENV (set at submit time), else the portable default.
+. "${OMNISTAT_VENV:-${PERF_TOOLS_DIR}/perf-inspect}/bin/activate"
+# sbatch-written manifest uses job_dir / trace_dir (not perf_run_dir / trace_paths[]).
+PERF_RUN=$(jq -r .job_dir <manifest>)
+TRACE=$(find "$(jq -r .trace_dir <manifest>)" -name '*.pt.trace.json' 2>/dev/null | sort | head -1)
 [[ -z "$TRACE" ]] && { echo "STATUS=partial; reason=no_trace_in_manifest"; exit 0; }
 mkdir -p "$PERF_RUN/tracelens"
 ```
