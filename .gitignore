@@ -45,6 +45,18 @@ secrets/
 
 # SLURM job output
 *-*.out
+# SLURM job artifacts named foo.<jobid>.out (e.g. omnistat_failed_hosts.6851.out)
+*.[0-9][0-9][0-9][0-9].out
+
+# Misc tooling artifacts emitted into repo root by past omnistat / VM runs
+exporter.log
+vic_server.log
+
+# Convergence parser outputs (artifact, not source)
+**/examples/convergence*.png
+**/examples/convergence*.csv
+**/examples/scaling_study*
+**/examples/foms-*.json
 
 # Model outputs & generated data
 **/examples/outputs/
@@ -52,9 +64,15 @@ secrets/
 
 # Local cluster config (site-specific, auto-created by agent)
 .cluster-config.yaml
+
+# Session-scoped agent handoff files (ephemeral, not for the repo)
+HANDOFF.md
 .claude/settings.local.json
 nul
 
 # IDE
 .idea/
 .vscode/
+
+# Stray SLURM stdout from perf runs (real logs live under perf-runs/<jobid>/)
+orbit2-train-*.out

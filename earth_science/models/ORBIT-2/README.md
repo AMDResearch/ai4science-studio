@@ -14,6 +14,8 @@ Training, inference, visualization, and SLURM examples are maintained in the **G
 - [`recipes/train/`](recipes/train/) — large-scale / Frontier-oriented training summary  
 - [`recipes/data/`](recipes/data/) — Constellation / Globus / OLCF data context and staging  
 - [`recipes/compute/`](recipes/compute/) — Frontier, AMD cloud / HPC Fund, institutional clusters  
+- [`recipes/perf-analysis/`](recipes/perf-analysis/) — multi-subagent bottleneck analysis (TraceLens + Omnistat) on AMD Instinct  
+- [`recipes/perf-optimizer-loop/`](recipes/perf-optimizer-loop/) — iterative throughput optimizer loop + lever catalog  
 - [`examples/`](examples/) — ready-to-run Docker, SLURM, and smoke-test scripts  
 
 ## Installation (reference)

@@ -40,7 +40,7 @@ HG_BASE="${AI4S_SHARED_DIR:?AI4S_SHARED_DIR must be set}/models/HydraGNN"
 HG_SIF="${HG_SIF:-${AI4S_SHARED_DIR}/images/pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif}"
 OVERLAY="${HG_OVERLAY:-${HG_BASE}/overlays/hydragnn-overlay.img}"
 OVERLAY_SIZE_MB="${HG_OVERLAY_SIZE_MB:-4096}"
-HG_HYDRAGNN_SHA="${HG_HYDRAGNN_SHA:-6c45f1682783e66dc89e9e23009f61716186432b}"
+HG_HYDRAGNN_SHA="${HG_HYDRAGNN_SHA:-2fb0bd0157e3c85a74f9841887155095bd163303}"
 PYG_ROCM_RELEASE="${PYG_ROCM_RELEASE:-15}"
 PYG_PYTHON_TAG="${PYG_PYTHON_TAG:-py312}"
 
@@ -81,6 +81,27 @@ echo "  MPI: ${OMPI_DIR}/bin/mpicc ($(${OMPI_DIR}/bin/ompi_info --version 2>&1 |
 echo ""
 
 mkdir -p "$LOCAL_TMP" "$STAGE" "$PYG_WHEELS_DIR"
+
+# ---------------------------------------------------------------------------
+# Stage local patches (applied to the HydraGNN source inside the container)
+# ---------------------------------------------------------------------------
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PATCHES_SRC="${SCRIPT_DIR}/patches"
+PATCHES_STAGE="${LOCAL_TMP}/patches"
+mkdir -p "$PATCHES_STAGE"
+if [[ -d "$PATCHES_SRC" ]]; then
+  shopt -s nullglob
+  for p in "$PATCHES_SRC"/*.patch; do
+    cp "$p" "$PATCHES_STAGE/"
+  done
+  shopt -u nullglob
+fi
+PATCH_COUNT=$(ls "$PATCHES_STAGE"/*.patch 2>/dev/null | wc -l)
+echo "  Local patches to apply: $PATCH_COUNT"
+if [[ "$PATCH_COUNT" -gt 0 ]]; then
+  for p in "$PATCHES_STAGE"/*.patch; do echo "    - $(basename "$p")"; done
+fi
+echo ""
 
 # ---------------------------------------------------------------------------
 # Download and extract Looong01 PyG ROCm wheels
@@ -153,15 +174,42 @@ cp "$ADIOS2_INST"/lib/libadios2*.so* "$STAGE/adios2/" 2>/dev/null || true
 echo "  adios2 installed (MPI + Python bindings)"
 cd /
 
-echo "--- Step 5: HydraGNN source (main branch) ---"
+echo "--- Step 5: HydraGNN source (pinned SHA: $BUILD_SHA) ---"
 if [[ ! -d /tmp/HydraGNN-src ]]; then
-    git clone -q --depth=1 https://github.com/ORNL/HydraGNN.git /tmp/HydraGNN-src
-    cd /tmp/HydraGNN-src && git fetch --depth=1 origin "$BUILD_SHA" && git checkout "$BUILD_SHA"
+    # Full clone (not --depth=1) so arbitrary SHAs can be checked out; some
+    # remotes refuse fetch-by-sha on shallow clones depending on
+    # uploadpack.allowReachableSHA1InWant config.
+    git clone -q https://github.com/ORNL/HydraGNN.git /tmp/HydraGNN-src
+    cd /tmp/HydraGNN-src && git checkout -q "$BUILD_SHA"
+    HEAD_SHA="$(git rev-parse HEAD)"
+    if [[ "$HEAD_SHA" != "$BUILD_SHA" ]]; then
+      echo "ERROR: checkout produced $HEAD_SHA, expected $BUILD_SHA" >&2
+      exit 1
+    fi
     cd /
 fi
+
+echo "--- Step 5b: apply local patches (BUILD_PATCHES=$BUILD_PATCHES) ---"
+if [[ -d "$BUILD_PATCHES" ]]; then
+    cd /tmp/HydraGNN-src
+    shopt -s nullglob
+    for p in "$BUILD_PATCHES"/*.patch; do
+        echo "  applying: $(basename "$p")"
+        # --check first so we fail fast with a clear message if the patch
+        # was authored against a different SHA than BUILD_SHA.
+        if ! patch -p1 --dry-run --silent < "$p"; then
+            echo "ERROR: patch $(basename "$p") does not apply cleanly to SHA $BUILD_SHA" >&2
+            exit 1
+        fi
+        patch -p1 < "$p"
+    done
+    shopt -u nullglob
+    cd /
+fi
+
 # Copy the source tree directly rather than pip-installing (avoids partial package issues)
 cp -r /tmp/HydraGNN-src/hydragnn "$STAGE/hydragnn"
-echo "  HydraGNN source copied (SHA: $BUILD_SHA)"
+echo "  HydraGNN source copied (SHA: $BUILD_SHA + $(ls "$BUILD_PATCHES"/*.patch 2>/dev/null | wc -l) patches)"
 
 echo "--- Step 6: strip torch / nvidia / triton / cuda from staging dir ---"
 for pkg in torch torchvision torchaudio torchgen functorch nvidia triton cuda sympy; do
@@ -202,7 +250,14 @@ print('adios2        :', adios2.__version__, '(MPI: OK)')
 
 python3 -c "import vesin; print('vesin         : ok')"
 python3 -c "import e3nn; print('e3nn          :', e3nn.__version__)"
-python3 -c "import hydragnn; print('hydragnn      : ok')"
+python3 -c "
+import hydragnn, os, inspect
+print('hydragnn      : imported from', os.path.dirname(hydragnn.__file__))
+# Confirm the persistent_workers patch is present iff a patch file was applied.
+src = inspect.getsource(__import__('hydragnn.preprocess.load_data', fromlist=['_']))
+patched = 'HYDRAGNN_PERSISTENT_WORKERS' in src
+print('hydragnn      : persistent_workers patch =', patched)
+"
 
 echo "=== Overlay install complete ==="
 INNEREOF
@@ -224,6 +279,7 @@ apptainer exec \
     --env BUILD_STAGE="$STAGE" \
     --env BUILD_PYG_WHEELS="$PYG_WHEELS_DIR" \
     --env BUILD_SHA="$HG_HYDRAGNN_SHA" \
+    --env BUILD_PATCHES="$PATCHES_STAGE" \
     "$HG_SIF" \
     bash "${LOCAL_TMP}/overlay_install.sh"
 

@@ -1,0 +1,282 @@
+# HydraGNN perf-optimizer-loop — lever catalog
+#
+# Each entry describes ONE atomic change the orchestrator may apply between
+# iterations. Levers are tried in `catalog_order` priority. After an iteration
+# the lever id is recorded in `foms.csv`; if it regressed the primary FOM
+# (epoch_time_s), the lever id is appended to `do_not_retry.json` and the
+# orchestrator restores the previous-best config.
+#
+# Schema:
+#   id              str  unique short id (used in foms.csv and do_not_retry.json)
+#   description     str  one-line human description
+#   catalog_order   int  smaller = tried earlier; baseline=0
+#   kind            str  env_only | rank_script_patch | diagnostic
+#   env_vars        map  vars to add/change to the sbatch submission (override)
+#   rank_script_patch  str (optional) — single line of python that wraps the model
+#                       construction in the rank script. Only used when kind=rank_script_patch.
+#                       Applied via HG_RANK_PRE_TRAIN_HOOK env var (orchestrator writes
+#                       a small python file and bind-mounts it; the rank script invokes
+#                       runpy on the hook before train_validate_test()).
+#   diagnostic_only bool — when true, FOM accept/reject is skipped; counts against budget
+#   expected_payoff str  qualitative ("high"|"medium"|"low") — used by lever_picker for ranking
+#   risk            str  ("low"|"medium"|"high") — used by lever_picker
+#   revert_method   str  ("drop_env"|"drop_hook") — how the orchestrator undoes the change
+#   citation        url  source for the recommendation (ROCm blog/doc, or "local")
+#   notes           str  any caveats the lever_picker should consider
+
+levers:
+
+  - id: baseline
+    description: "Baseline run with current R2 defaults (HG_BATCH_SIZE=400, fp64, persistent_workers=1, num_workers=8). Must be iter-0."
+    catalog_order: 0
+    kind: env_only
+    env_vars:
+      HG_BATCH_SIZE: "400"
+      HG_PRECISION: "fp64"
+      HYDRAGNN_NUM_WORKERS: "8"
+      HYDRAGNN_PERSISTENT_WORKERS: "1"
+      HG_NUM_EPOCH: "3"
+      HYDRAGNN_MAX_NUM_BATCH: "50"
+      PROFILE_TARGET_EPOCH: "2"
+    diagnostic_only: false
+    expected_payoff: "n/a (baseline)"
+    risk: "low"
+    revert_method: "drop_env"
+    citation: "$AI4S_SHARED_DIR/models/HydraGNN/perf-runs/6985/combined_report.md"
+    notes: "Reference state. Establishes the FOM denominator for all subsequent iters."
+
+  - id: batch_800
+    description: "Double batch size: HG_BATCH_SIZE 400 -> 800. R2 #1 next-lever recommendation; VRAM headroom is 24/288 GB. CONFIRMED REGRESSOR for HydraGNN GFM-MLIP MACE: regressed on both tested loops (+56.8%, +87.2%)."
+    catalog_order: 1
+    kind: env_only
+    env_vars:
+      HG_BATCH_SIZE: "800"
+    diagnostic_only: false
+    expected_payoff: "none-for-MLIP-MACE"
+    risk: "high"
+    revert_method: "drop_env"
+    citation: "loop-43b33ec1 iter-2 (+56.76%) + loop-e3fac2af iter-1 (+87.2%)"
+    notes: "The lever_picker should NOT pick batch_800 for HydraGNN MLIP MACE. The MACE equivariant message-passing stack saturates dispatch at batch=400 and doubling work-per-iter doubles wall-time without proportional GPU occupancy gain. The R2 recommendation was based on an earlier non-MLIP HydraGNN config — DOES NOT apply to gfm_mlip_all_mpnn.py. Keep entry as cautionary record. May still be worth re-trying ONLY if upstream HydraGNN fuses small e3nn kernels first."
+
+  - id: torch_compile_e3nn
+    description: "BLOCKED — torch.compile is fundamentally incompatible with HydraGNN GFM-MLIP under PyTorch 2.10 / ROCm 7.2.2. Documented here so the lever_picker NEVER re-tries it."
+    catalog_order: 2
+    kind: rank_script_patch
+    status: "blocked"
+    blocked_reason: "AOT-Autograd-double-backward"
+    blocked_evidence: "compile-investigation-aa480554 (2026-05-23): 6 hooks across 3 hypotheses, all fail with same root cause."
+    env_vars:
+      HG_TORCH_COMPILE: "1"
+      HG_TORCH_COMPILE_MODE: "reduce-overhead"
+    rank_script_patch: |
+      # KNOWN-BROKEN — kept for reference only. Do NOT enable this lever.
+      #
+      # Root cause: HydraGNN's energy_force_loss (hydragnn/models/create.py:718)
+      # calls torch.autograd.grad(graph_energy_pred, data.pos, create_graph=True).
+      # With create_graph=True, training requires DOUBLE BACKWARD
+      # (loss.backward differentiates through forces, which themselves came
+      # from autograd.grad over the forward). PyTorch's AOT Autograd — used
+      # by every torch.compile mode (default, reduce-overhead, max-autotune) —
+      # pre-compiles the backward as a joint program and cannot itself be
+      # differentiated. Verbatim error (every rank):
+      #   RuntimeError: torch.compile with aot_autograd does not currently
+      #   support double backward
+      #     at torch/_functorch/_aot_autograd/runtime_wrappers.py:2356
+      #
+      # Strategies tested and rejected in compile-investigation-aa480554:
+      #   H1 — compile inner self.model (MACEStack) only → AOT boundary
+      #        severs data.pos lineage → "differentiated Tensors appears
+      #        not to have been used in the graph"
+      #   H2 — outer compile + dynamo.allow_in_graph(autograd.grad)
+      #        (the MACE upstream pattern) → allow_in_graph only prevents
+      #        dynamo from tracing THROUGH the call; FakeTensor symbolic
+      #        execution still runs autograd.grad and fails
+      #   H3 — compile only one RealAgnosticAttResidualInteractionBlock
+      #        submodule → still triggers AOT for that submodule's
+      #        backward → same double-backward error
+      #
+      # To unblock requires upstream HydraGNN source change: move
+      # energy_force_loss INTO EnhancedModelWrapper.forward so the
+      # autograd.grad call is inside the compiled forward, mirroring the
+      # canonical MACE/Allegro/NequIP pattern. ~30-50 LOC across
+      # hydragnn/models/create.py:622-758 and
+      # hydragnn/train/train_validate_test.py:725-735. Config-gated to
+      # preserve non-MLIP HydraGNN paths.
+      raise RuntimeError("torch_compile_e3nn is BLOCKED for HydraGNN MLIP; see lever_catalog.yaml")
+    diagnostic_only: false
+    expected_payoff: "none (blocked)"
+    risk: "blocked"
+    revert_method: "drop_hook"
+    citation: "$AI4S_SHARED_DIR/models/HydraGNN/perf-runs/compile-investigation-aa480554-*/INVESTIGATION_REPORT.md"
+    notes: "DO NOT pick this lever until HydraGNN upstream patches energy_force_loss into forward(). The lever_picker subagent must treat status:blocked as equivalent to do_not_retry."
+
+  - id: torch_jit_script
+    description: "BLOCKED — torch.jit.script on the inner MACEStack also fails. Both PyTorch compiler paths (AOT-Autograd via torch.compile AND legacy TorchScript JIT via torch.jit.script) are dead-ends for HydraGNN MLIP MACE as shipped."
+    catalog_order: 2
+    kind: rank_script_patch
+    status: "blocked"
+    blocked_reason: "**kwargs-expansion-not-supported-by-TorchScript-JIT"
+    blocked_evidence: "pathc-pathb-a3b8f3f0 (2026-05-23, job 7198): hook fired and caught NotSupportedError: keyword-arg expansion is not supported at hydragnn/models/MACEStack.py:397 (the interaction-block call site uses **conv_args)."
+    env_vars:
+      HG_JIT_SCRIPT: "1"
+    rank_script_patch: |
+      # KNOWN-BROKEN — kept for reference only. Do NOT enable this lever.
+      #
+      # Root cause: torch.jit.script does not support **kwargs expansion.
+      # hydragnn/models/MACEStack.py:397 has:
+      #   self.interaction_block(
+      #       inv_node_feat=inv_node_feat,
+      #       equiv_node_feat=equiv_node_feat,
+      #       **conv_args,
+      #   )
+      # The legacy TorchScript JIT errors with:
+      #   NotSupportedError: keyword-arg expansion is not supported
+      #
+      # Despite MACEStack being decorated @compile_mode("script") from
+      # e3nn, that decorator is aspirational — not enforced. The actual
+      # call sites are not scriptable.
+      #
+      # To unblock requires upstream HydraGNN source change: unpack
+      # conv_args into explicit keyword arguments at MACEStack.py:397
+      # (and likely sibling call sites). Small diff, but still in
+      # /opt/hydragnn-pkgs which is read-only inside the container.
+      #
+      # Combined with torch_compile_e3nn (BLOCKED for double-backward),
+      # this means BOTH PyTorch compiler paths are dead for HydraGNN MLIP
+      # MACE as currently shipped. Kernel-fusion wins on the 1.3M
+      # aten::bmm calls cannot be unlocked from a runtime hook alone.
+      raise RuntimeError("torch_jit_script is BLOCKED for HydraGNN MACE; see lever_catalog.yaml")
+    diagnostic_only: false
+    expected_payoff: "none (blocked)"
+    risk: "blocked"
+    revert_method: "drop_hook"
+    citation: "$AI4S_SHARED_DIR/models/HydraGNN/perf-runs/pathc-pathb-a3b8f3f0-*/pathc-result.md"
+    notes: "DO NOT pick this lever until HydraGNN upstream unpacks **conv_args at MACEStack.py:397. catalog_order=2 shared with torch_compile_e3nn since both are 'kernel-fusion via PyTorch compiler' attempts that are both dead-ends on the current stack."
+
+  - id: rccl_high_priority
+    description: "RCCL stream priority and HIP hardware queue count: TORCH_NCCL_HIGH_PRIORITY=1, GPU_MAX_HW_QUEUES=2. Improves compute<->RCCL overlap. CONFIRMED WIN — baked into baseline going forward."
+    catalog_order: 3
+    kind: env_only
+    status: "accepted-baked-in"
+    env_vars:
+      TORCH_NCCL_HIGH_PRIORITY: "1"
+      GPU_MAX_HW_QUEUES: "2"
+    diagnostic_only: false
+    expected_payoff: "1.3%-realized"
+    risk: "low"
+    revert_method: "drop_env"
+    citation: "loop-c3e4df1c iter-2 / jobid 7187: -1.3% epoch_time (76.0->75.0 s) AND -8.4% energy/sample (1.781->1.631 J/sample). Mean power dropped 4885W->4552W."
+    notes: "ACCEPTED. The only lever across 3 loops that produced a real improvement. Now part of the baseline contract for HydraGNN GFM-MLIP. Microbench (2026-05-26) confirmed identical HIP dispatch latency across all tested MI355X nodes, so this improvement is expected to be portable. lever_picker should treat this as 'already applied' and skip it in candidate set (foms.csv has it accepted with delta_pct=-1.316)."
+
+  - id: tunable_op_live
+    description: "BLOCKED on this stack — TunableOp LIVE tuning mode (PYTORCH_TUNABLEOP_TUNING=1) causes GPU memory access faults on MI355X / ROCm 7.2.2 / PyTorch 2.10 with HydraGNN. Use tunable_op_warmup_then_use instead."
+    catalog_order: 4
+    kind: env_only
+    status: "blocked"
+    blocked_reason: "GPU-mem-access-fault-during-hipBLASLt-live-tuning"
+    blocked_evidence: "loop-c3e4df1c iter-3 (job 7188, 2026-05-22): all 16 GPUs reported 'Memory access fault by GPU node-N' during hipBLASLt kernel autotuning phase; job aborted with signal 6."
+    env_vars:
+      PYTORCH_TUNABLEOP_ENABLED: "1"
+      PYTORCH_TUNABLEOP_TUNING: "1"
+      PYTORCH_TUNABLEOP_VERBOSE: "1"
+    diagnostic_only: false
+    expected_payoff: "none (blocked)"
+    risk: "blocked"
+    revert_method: "drop_env"
+    citation: "https://rocm.docs.amd.com/en/latest/how-to/tuning-guides/mi300x/workload.html"
+    notes: "Live tuning racing with training data is unsafe here. Pick tunable_op_warmup_then_use instead, which separates the tuning phase into a dedicated short job."
+
+  - id: tunable_op_warmup_then_use
+    description: "BLOCKED on this stack — even the 2-phase warmup pattern fails. The warmup phase (PYTORCH_TUNABLEOP_TUNING=1, 5 batches) itself triggers GPU memory access faults on all 16 GPUs before any CSV file can be written."
+    catalog_order: 4
+    status: "blocked"
+    blocked_reason: "GPU-mem-access-fault-also-during-warmup-phase"
+    blocked_evidence: "loop-e3fac2af iter-2 (job 7201, 2026-05-23): warmup with HG_NUM_EPOCH=1 HYDRAGNN_MAX_NUM_BATCH=5 PYTORCH_TUNABLEOP_TUNING=1 reproduces the same hipBLASLt 'Memory access fault by GPU node-N' on all 16 GPUs as the live-tuning lever. No tunableop_results_*.csv files were written. The 2-phase split doesn't help — the fault is in hipBLASLt's tuning routine itself, regardless of duration."
+    kind: rank_script_patch
+    env_vars:
+      PYTORCH_TUNABLEOP_ENABLED: "1"
+      PYTORCH_TUNABLEOP_TUNING: "0"
+      PYTORCH_TUNABLEOP_FILENAME: "$AI4S_SHARED_DIR/models/HydraGNN/tunableop_results/tunableop_results_%d.csv"
+    rank_script_patch: |
+      # 2-phase TunableOp pattern.
+      #
+      # Phase 1 (separate sbatch, NOT this lever) — orchestrator must run
+      # this BEFORE picking the lever:
+      #   1. mkdir -p $AI4S_SHARED_DIR/models/HydraGNN/tunableop_results
+      #   2. sbatch with PYTORCH_TUNABLEOP_ENABLED=1 PYTORCH_TUNABLEOP_TUNING=1
+      #      PYTORCH_TUNABLEOP_FILENAME=/shared/.../tunableop_results_%d.csv
+      #      HG_NUM_EPOCH=1 HYDRAGNN_MAX_NUM_BATCH=5
+      #      (short job; expect failure but the per-rank CSVs are written
+      #       incrementally as each shape gets tuned, so partial results
+      #       are still usable)
+      #   3. verify CSVs exist: ls /shared/.../tunableop_results_*.csv
+      #
+      # Phase 2 (this lever) — the actual training run consumes the CSVs
+      # with TUNING=0; if a shape is missing, TunableOp falls back to
+      # the default kernel (no fault). No hook code needed beyond the
+      # env vars; this stanza is present so the orchestrator can record
+      # the 2-phase intent in iter-<N>-lever.json.
+      import os
+      if int(os.environ.get("SLURM_PROCID", "0")) == 0:
+          import glob
+          _n_csv = len(glob.glob(os.path.join(os.environ.get("AI4S_SHARED_DIR",""), "models/HydraGNN/tunableop_results/tunableop_results_*.csv")))
+          print(f"[tunable_op_warmup] consuming {_n_csv} pre-tuned CSV files", flush=True)
+    diagnostic_only: false
+    expected_payoff: "none (blocked)"
+    risk: "blocked"
+    revert_method: "drop_env"
+    citation: "https://rocm.docs.amd.com/en/latest/how-to/tuning-guides/mi300x/workload.html#tunableop"
+    notes: "BLOCKED for HydraGNN (warmup phase triggers GPU memory access faults). NOTE (2026-06-13): this is WORKLOAD-specific, NOT a platform/hipBLASLt-prereq block. ORBIT-2 re-probed the identical MI355X/ROCm7.2.2/PyTorch2.10 stack with an isolated 1-GPU GEMM autotune (incl. large-M bf16 mm/F.linear) and TunableOp tuned CLEANLY with 0 faults (see ai4science-studio/SKILL.md #17, ai4science-perf-analysis/SKILL.md #28). The HydraGNN fault is likely tied to MACE double-backward shapes + 16-GPU distributed tuning. Keep blocked for HydraGNN until re-probed for THIS model; do not generalize to other models."
+
+  - id: num_workers_12
+    description: "DataLoader: HYDRAGNN_NUM_WORKERS 8 -> 12 (persistent_workers already on). HIGH RUN-TO-RUN VARIANCE: helped in one loop (-12.4%) and regressed in another (+10.7%) — both on the same node pair, so this is run-to-run variance, not a systematic win. Treat as unreliable until replicated within ±5% on the same nodes."
+    catalog_order: 5
+    kind: env_only
+    env_vars:
+      HYDRAGNN_NUM_WORKERS: "12"
+    diagnostic_only: false
+    expected_payoff: "unreliable (variance > effect)"
+    risk: "low"
+    revert_method: "drop_env"
+    citation: "local (loop 43b33ec1 + loop c3e4df1c, same node pair both times)"
+    notes: "Both observations were on the same node pair on different days, so the result is run-to-run noise. Recommended next step: re-run num_workers={8,10,12} three times each on the SAME node pair with the SAME warm/cold cache state. If the kernel_correlation.csv from fom_extractor shows dataloader prefetch gaps > 10 ms, that's a stronger signal than the epoch-time delta. Until then the lever_picker should rank this lever LOWER than levers with smaller variance."
+
+  - id: nccl_minchannels
+    description: "NCCL_MIN_NCHANNELS=112: forces more channels for collective dispatch, helps when message size is moderate. CONFIRMED REGRESSOR at N=2 (+10.3%)."
+    catalog_order: 6
+    kind: env_only
+    env_vars:
+      NCCL_MIN_NCHANNELS: "112"
+    diagnostic_only: false
+    expected_payoff: "negative-at-N=2"
+    risk: "medium"
+    revert_method: "drop_env"
+    citation: "loop-e3fac2af iter-3 (job 7202): +10.3% epoch_time (78->86 s)"
+    notes: "Confirmed bad at N=2. Forcing 112 channels increases synchronization overhead vs the default at small node count. The lever_picker should DROP this lever entirely for N<8 runs. Keep entry for future >=8-node runs only."
+
+  - id: precision_fp32
+    description: "HG_PRECISION fp64 -> fp32. CONFIRMED NEUTRAL — but the very fact that it's neutral is the project's most important diagnostic finding (fp32 ≈ fp64 means the workload is DISPATCH-BOUND, not compute-bound). Repurpose this lever as diagnostic-only going forward."
+    catalog_order: 7
+    kind: env_only
+    status: "diagnostic-realized"
+    env_vars:
+      HG_PRECISION: "fp32"
+    diagnostic_only: false
+    expected_payoff: "negligible-but-diagnostically-valuable"
+    risk: "low"
+    revert_method: "drop_env"
+    citation: "loop-e3fac2af iter-4 (job 7203): +1.3% epoch_time (78->79 s) confirmed in fp32 (precision-diagnostic logs show model_param_dtype=torch.float32, first_batch_float_dtype=torch.float32)"
+    notes: "RAN GENUINELY IN FP32 (verified by precision-diagnostic). fp32 MFMA peak on gfx950 is 2x fp64 peak, so a compute-bound workload would show ~50% speedup. Observed ~0% speedup proves HydraGNN GFM-MLIP MACE is dispatch-bound. A-vs-b microbench (2026-05-26) confirmed identical HIP launch latency (3.7 us/launch) on every tested node of both classes, so the dispatch ceiling is class-portable. lever_picker should NOT re-pick this lever. bf16 remains INTENTIONALLY EXCLUDED: breaks equivariance for MACE-class features. The fp32-vs-fp64 comparison is now the canonical low-cost dispatch-vs-compute discriminator for any future HydraGNN-class workload — see ai4science-perf-analysis/SKILL.md lesson #13."
+
+  - id: kernel_trace_diag_only
+    description: "DIAGNOSTIC: enable OMNISTAT_KERNEL_TRACE=1 for ONE iteration to capture per-kernel-name dispatch counts/durations. Fires only when the 1-s TraceLens<->Omnistat correlation cannot attribute the dominant kernel."
+    catalog_order: 8
+    kind: diagnostic
+    env_vars:
+      OMNISTAT_KERNEL_TRACE: "1"
+    diagnostic_only: true
+    expected_payoff: "n/a (diagnostic)"
+    risk: "medium"
+    revert_method: "drop_env"
+    citation: "../../../../../.cursor/skills/ai4science-studio/SKILL.md#12-three-rocprofiler-sdk-surfaces-pick-the-right-one"
+    notes: "Costs ~1000x VictoriaMetrics cardinality vs default. Use only when lever_picker decides per-kernel attribution is needed AND the kernel_correlation.csv from fom_extractor is too coarse. At most 1 of 5 iters."

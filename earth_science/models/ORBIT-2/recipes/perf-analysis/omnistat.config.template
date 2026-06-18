@@ -1,0 +1,147 @@
+#--
+# Omnistat user-mode config for AMD Instinct MI355X (gfx950).
+#
+# Adapted from HydraGNN's upstream omnistat.hydragnn-external.config.
+# Differences from upstream / from the system-mode default:
+#   - enable_amd_smi (newer SMI), not rocm_smi
+#   - rocprofiler counters ENABLED by default (bf16 MFMA + HBM read); override per-probe if needed
+#   - allowed_ips includes 0.0.0.0 so the user-mode VM scrapes
+#   - victoria_datadir under the per-job dir (@JOB_DIR@), persists after job
+#--
+
+[omnistat.collectors]
+
+port = 8101
+enable_rocm_smi = False
+enable_amd_smi = True
+enable_ras_ecc = True
+enable_rms = True
+enable_rocprofiler = True
+enable_network = True
+enable_vendor_counters = True
+enable_xgmi = True
+enable_cu_occupancy = False
+
+# Kernel-dispatch tracing collector (per-kernel name + duration histogram on
+# every node). Disabled by default: it requires the standalone tool library
+# `libomnistat_trace.so` to be built (see rocprofiler-sdk/README.md
+# "Kernel Tracing Library") and loaded into the workload via
+# ROCP_TOOL_LIBRARIES. The sbatch wrapper enables this automatically when
+# OMNISTAT_KERNEL_TRACE=1 is set; otherwise it stays False.
+#
+# IMPORTANT: kernel tracing and the rocprofiler device-counting service
+# (enable_rocprofiler above) BOTH talk to rocprofiler-sdk. They can co-exist
+# on a single GPU, but if you're chasing per-kernel attribution it's usually
+# cleaner to either (a) run kernel-trace alone, or (b) run device counting
+# alone — see ai4science-studio SKILL §11 for the tradeoffs.
+enable_kernel_trace = False
+
+# Path to local ROCm install (validated on ROCm 7.2.x)
+rocm_path = /opt/rocm
+
+# allowed scrapers: localhost (the user-mode VM sits on the same node) + 0.0.0.0
+# wildcard for any user-mode VictoriaMetrics that might run on a sibling node.
+allowed_ips = 127.0.0.1, 0.0.0.0
+
+[omnistat.collectors.rms]
+
+host_skip = "login.*"
+enable_annotations = True
+# Note: /tmp/omni_rmsjobinfo (the upstream default) is often owned by the
+# system-mode collector's service user on compute nodes, so user-mode
+# omnistat-rms-env hits PermissionError if it tries to write there. The
+# sbatch wrapper substitutes @JOB_DIR@ with the job-scoped perf-run dir
+# (NFS-mounted on every compute node) before passing the resolved config
+# to omnistat-usermode --configfile.
+job_detection_mode = file-based
+job_detection_file = @JOB_DIR@/omni_rmsjobinfo
+step_detection_file = @JOB_DIR@/omni_rmsjobinfo_step
+
+[omnistat.collectors.host]
+enable_proc_io_stats = True
+
+# Rocprofiler — HBM read traffic + BF16 MFMA (matches ORBIT-2 bf16 EDM training).
+# FP64 profile `hbm_flops_f64` remains available if you set:
+#   OMNISTAT_ROCPROF_PROFILE=hbm_flops_f64
+# in the environment before rendering this file (sbatch can sed-replace profile name).
+# Counter group selection follows the user-validated pattern (one profile,
+# one sub-section, all counters listed together; rocprofiler-sdk
+# time-multiplexes hardware counter sets internally as needed).
+#
+# All eight counters below are defined for gfx950 (MI355X) in
+# /opt/rocm/share/rocprofiler-sdk/counter_defs.yaml; verified before pinning.
+#
+# Useful derivations from these raw counters (compute in the verifier or
+# downstream; rocprofiler-sdk also exposes derived counters
+# MfmaFlopsF64 and TotalFlopsF64 if a downstream consumer prefers those):
+#   peak_fp64_GFLOP/s = (SQ_INSTS_VALU_MFMA_MOPS_F64 * 512
+#                        + (SQ_INSTS_VALU_FMA_F64*2
+#                           + SQ_INSTS_VALU_ADD_F64
+#                           + SQ_INSTS_VALU_MUL_F64) * 64
+#                       ) / wall_seconds / 1e9
+#   HBM_GB/s = (FETCH_SIZE + WRITE_SIZE) / wall_seconds / 1e9
+[omnistat.collectors.rocprofiler]
+# Default profile for ORBIT-2 bf16: BF16 MFMA MOPS + FETCH_SIZE (2 counters, gfx950-safe).
+# Citation: AMD MI300/MI200 counter tables — `SQ_INSTS_VALU_MFMA_MOPS_BF16` is in units of 512 FLOPs:
+#   https://rocm.docs.amd.com/en/develop/conceptual/gpu-arch/mi300-mi200-performance-counters.html
+profile = hbm_flops_bf16
+
+[omnistat.collectors.rocprofiler.hbm_flops_bf16]
+# MI355X (gfx950) — keep one rocprofiler profile under constant sampling (SKILL §11).
+# TFLOP/s (BF16 MFMA only): rate(SQ_INSTS_VALU_MFMA_MOPS_BF16) * 512 / 1e12
+# HBM read GB/s: rate(FETCH_SIZE) * 1024 / 1e9  (FETCH_SIZE units per omnistat/HydraGNN lesson; verify on your omnistat build)
+sampling_mode = constant
+counters = ["FETCH_SIZE", "SQ_INSTS_VALU_MFMA_MOPS_BF16"]
+
+[omnistat.collectors.rocprofiler.hbm_flops_f64]
+# Legacy fp64-rich profile (HydraGNN-style). Optional via OMNISTAT_ROCPROF_PROFILE=hbm_flops_f64.
+# MI355X (gfx950) rocprofiler counter limits — see ai4science-studio SKILL §10.
+#
+# Constraints surfaced on MI355X (gfx950) / ROCm 7.2.2:
+#   * FETCH_SIZE + WRITE_SIZE in ONE profile fails: "error code 38: Request
+#     exceeds the capabilities of the hardware to collect" (both in TCC block).
+#   * FETCH_SIZE OR WRITE_SIZE + 4 x SQ_INSTS_VALU_*_F64 in one profile works.
+#   * sampling_mode = periodic in omnistat 1.12.0+git.65ea9ac (PR #271 + main)
+#     ONLY fires the first counter set — half the data silently lost. (See
+#     SKILL §11.)
+#
+# Workaround: use `constant` mode with a single counter set that fits the
+# hardware limits and the omnistat bug. We capture HBM read traffic only
+# (FETCH_SIZE) plus the 4 fp64 instruction counters needed to derive the
+# fp64 FLOP rate using the formula:
+#     fp64_GFLOP/s = (MFMA_MOPS_F64 * 512 + (FMA_F64*2 + ADD_F64 + MUL_F64) * 64)
+#                    / wall_seconds / 1e9
+# Drop SQ_INSTS_VALU_TRANS_F64 (not relevant for GEMM-heavy ML training).
+#
+# WRITE_SIZE (HBM-write bandwidth) is NOT collected in this profile until
+# upstream omnistat fixes the periodic-mode bug. For most ML training
+# workloads, FETCH_SIZE is the dominant component of HBM traffic anyway.
+#
+# All counters on one line: configparser multi-line values require every
+# continuation line (including the closing `]`) to have leading whitespace.
+sampling_mode = constant
+counters = ["FETCH_SIZE", "SQ_INSTS_VALU_ADD_F64", "SQ_INSTS_VALU_MUL_F64", "SQ_INSTS_VALU_FMA_F64", "SQ_INSTS_VALU_MFMA_MOPS_F64"]
+
+[omnistat.query]
+prometheus_url = http://localhost:8428
+system_name = mi355x
+
+#--
+# User-mode settings — VictoriaMetrics + per-job datadir
+# (Like the [rms] section above, @JOB_DIR@ is substituted by the sbatch
+#  wrapper at runtime; ConfigParser's %(VAR)s interpolation does NOT pull
+#  from os.environ, so we can't rely on %(SLURM_JOB_ID)s here.)
+#--
+[omnistat.usermode]
+
+victoria_binary = @PERF_TOOLS_DIR@/victoriametrics/victoria-metrics-prod
+victoria_datadir = @JOB_DIR@/omnistat-db
+victoria_logfile = vic_server.log
+
+# No external VM; we keep everything local to the job.
+external_victoria = False
+
+# Bind exporter to a single core to keep monitoring overhead off the data path.
+exporter_corebinding = 0
+
+ssh_key = ~/.ssh/id_rsa

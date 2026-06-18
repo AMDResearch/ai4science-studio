@@ -67,4 +67,4 @@ When you fix anything in a model's scripts, do **all** of the following in the s
 ## Agent Skills
 
 - **Cursor**: `.cursor/skills/` — domain conventions (earth science, healthcare, material science, protein folding, physics simulation, run-models, discover)
-- **Claude Code**: `.claude/commands/` — slash commands for add-model, add-recipe, check-model, list-models, audit-models, init-cluster, and run-* for each model
+- **Claude Code**: `.claude/commands/` — slash commands for add-model, add-recipe, check-model, list-models, audit-models, init-cluster, run-* for each model, and **`/run-perf-orbit2`** / **`/run-perf-hydragnn`** for perf-analysis + perf-optimizer-loop recipes

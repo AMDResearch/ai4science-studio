@@ -10,7 +10,7 @@ This recipe summarizes the **exascale-oriented** workflow documented in [`XiaoWa
 ## High-level steps (from upstream)
 
 1. **Environment** — On Frontier-class AMD nodes, follow the **Frontier** installation block in the ORBIT-2 README (Python 3.11 conda env, PyTorch ROCm build, `xformers`, `mpi4py`, `pip install -e .`).
-2. **Choose a config** — Under `configs/`, pick a size (e.g. `interm_8m.yaml`, `interm_117m.yaml`, `interm_1b.yaml`, `interm_10b.yaml`). Larger models need more nodes/GPUs.
+2. **Choose a config** — Under `configs/`, pick a size (e.g. `interm_8m.yaml`, `interm_117m.yaml`, `interm_1b.yaml`, `interm_10b.yaml`). Larger models need more nodes/GPUs. Those upstream configs set **`trainer.data_type: bfloat16`**; Bayes-CAST-style trees often ship ERA5 configs such as **`edm_8m_era5.yaml`** with the same dtype — Studio templates (`interm_8m_era5.yaml`) mirror that via `ORBIT2_DATA_TYPE` / `render_orbit2_config.py`.
 3. **GPU and parallelism** — In YAML, set `trainer.gpu_type: "amd"`. Set `parallelism` fields (`fsdp`, `simple_ddp`, `tensor_par`, `seq_par`) so the product matches your **total GPU count** (see upstream comments).
 4. **TILES** — For very large images, enable `tiling.do_tiling` and tune `div` / `overlap` per upstream guidance (patch divisibility matters).
 5. **Data paths** — Populate `low_res_dir`, `high_res_dir`, `spatial_resolution`, and variable dictionaries to point at **your** staged dataset. Paths on Orion are **project- and allocation-specific**; see [../data/README.md](../data/README.md).

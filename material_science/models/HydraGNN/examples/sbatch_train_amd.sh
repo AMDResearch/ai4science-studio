@@ -35,8 +35,12 @@
 #   SCRATCH_LOCAL     Node-local fast storage root (default: /scratch)
 #   HYDRAGNN_MAX_NUM_BATCH  Cap batches per epoch (sanity test: 20-50, full: unset)
 #   HYDRAGNN_VALTEST  Run val/test during training (default: 0 = skip)
+#   HG_STARTFROM      Resume from logs/<name>/<name>.pk (default: none)
+#   HG_WARM_CKPT      Host path to .pk copied into logs/<HG_STARTFROM>/ before launch
+#   TORCH_NCCL_HIGH_PRIORITY  Default 1 (RCCL high-priority queue)
+#   GPU_MAX_HW_QUEUES         Default 2
 #
-# HydraGNN pinned SHA: 6c45f1682783e66dc89e9e23009f61716186432b (main)
+# HydraGNN pinned SHA: 2fb0bd0157e3c85a74f9841887155095bd163303 (main)
 
 #SBATCH --job-name=hydragnn-train
 #SBATCH --partition=YOUR_GPU_PARTITION
@@ -75,6 +79,10 @@ HG_PRECISION="${HG_PRECISION:-fp64}"
 HG_OUTPUT_DIR="${HG_OUTPUT_DIR:-${HG_BASE}/outputs}"
 HG_REPO_DIR="${HG_REPO_DIR:-${HG_BASE}/code/HydraGNN}"
 
+# Validated on MI355X perf-optimizer-loop: ~1.3% epoch-time improvement on 2-node GFM-MLIP.
+TORCH_NCCL_HIGH_PRIORITY="${TORCH_NCCL_HIGH_PRIORITY:-1}"
+GPU_MAX_HW_QUEUES="${GPU_MAX_HW_QUEUES:-2}"
+
 NODES="${SLURM_JOB_NUM_NODES:-1}"
 GPUS_PER_NODE=8
 TOTAL_RANKS=$((NODES * GPUS_PER_NODE))
@@ -101,7 +109,7 @@ done
 # ---------------------------------------------------------------------------
 # Clone HydraGNN source if not present
 # ---------------------------------------------------------------------------
-HG_HYDRAGNN_SHA="${HG_HYDRAGNN_SHA:-6c45f1682783e66dc89e9e23009f61716186432b}"
+HG_HYDRAGNN_SHA="${HG_HYDRAGNN_SHA:-2fb0bd0157e3c85a74f9841887155095bd163303}"
 if [[ ! -d "${HG_REPO_DIR}/examples/multidataset_hpo_sc26" ]]; then
   echo "--- Cloning HydraGNN (pinned SHA: ${HG_HYDRAGNN_SHA}) ---"
   git clone https://github.com/ORNL/HydraGNN.git "$HG_REPO_DIR"
@@ -129,6 +137,16 @@ done
 # ---------------------------------------------------------------------------
 mkdir -p "$HG_OUTPUT_DIR"
 
+# Optional warm checkpoint for scaling resume (HG_STARTFROM + HG_WARM_CKPT).
+if [[ -n "${HG_STARTFROM:-}" && "${HG_STARTFROM}" != "none" && -n "${HG_WARM_CKPT:-}" ]]; then
+  _WARM_DIR="${HG_OUTPUT_DIR}/logs/${HG_STARTFROM}"
+  mkdir -p "$_WARM_DIR"
+  if [[ ! -f "${_WARM_DIR}/${HG_STARTFROM}.pk" ]]; then
+    cp -a "$HG_WARM_CKPT" "${_WARM_DIR}/${HG_STARTFROM}.pk"
+    echo "  Warm ckpt  : $HG_WARM_CKPT -> ${_WARM_DIR}/${HG_STARTFROM}.pk"
+  fi
+fi
+
 # ---------------------------------------------------------------------------
 # Print job configuration
 # ---------------------------------------------------------------------------
@@ -144,6 +162,9 @@ echo "  Precision    : $HG_PRECISION"
 echo "  Batch size   : ${HG_BATCH_SIZE:-200}"
 echo "  Num epochs   : ${HG_NUM_EPOCH:-1}"
 echo "  Max batches  : ${HYDRAGNN_MAX_NUM_BATCH:-unlimited}"
+echo "  RCCL priority: TORCH_NCCL_HIGH_PRIORITY=${TORCH_NCCL_HIGH_PRIORITY}"
+echo "  HW queues    : GPU_MAX_HW_QUEUES=${GPU_MAX_HW_QUEUES}"
+echo "  Start from   : ${HG_STARTFROM:-none}"
 echo "  Output dir   : $HG_OUTPUT_DIR"
 echo "  Repo dir     : $HG_REPO_DIR"
 echo "  Config       : ${EXAMPLE_DIR}/gfm_mlip.json"
@@ -216,7 +237,7 @@ sys.argv = [
     '--precision=' + os.environ['HG_PRECISION'],
     '--batch_size=' + str(batch_size),
     '--num_epoch=' + os.environ.get('HG_NUM_EPOCH', '1'),
-    '--startfrom=none',
+    '--startfrom=' + os.environ.get('HG_STARTFROM', 'none'),
     '--log=hydragnn-train-' + os.environ.get('SLURM_JOB_ID','0') + '-N' + os.environ.get('SLURM_JOB_NUM_NODES','1'),
 ]
 
@@ -311,6 +332,18 @@ fi
 echo "--- Launching training: $TOTAL_RANKS ranks across $NODES nodes ---"
 echo ""
 
+# Optional env passthrough — HydraGNN's training code uses
+# `os.getenv(KEY) is not None` to detect these knobs, so an empty string
+# passes the check and then `int("")` blows up. Build a separate array of
+# `--env` flags that are only added when the var is set non-empty.
+OPT_ENVS=()
+for k in HYDRAGNN_MAX_NUM_BATCH HYDRAGNN_NUM_WORKERS HYDRAGNN_PERSISTENT_WORKERS; do
+  v="${!k:-}"
+  if [[ -n "$v" ]]; then
+    OPT_ENVS+=( --env "${k}=${v}" )
+  fi
+done
+
 srun --mpi=pmix \
     apptainer exec \
     --rocm \
@@ -328,11 +361,14 @@ srun --mpi=pmix \
     --env HG_PRECISION="$HG_PRECISION" \
     --env HG_BATCH_SIZE="${HG_BATCH_SIZE:-200}" \
     --env HG_NUM_EPOCH="${HG_NUM_EPOCH:-1}" \
-    --env HYDRAGNN_MAX_NUM_BATCH="${HYDRAGNN_MAX_NUM_BATCH:-}" \
+    --env HG_STARTFROM="${HG_STARTFROM:-none}" \
     --env HYDRAGNN_VALTEST="${HYDRAGNN_VALTEST:-0}" \
     --env HYDRAGNN_TRACE_LEVEL="${HYDRAGNN_TRACE_LEVEL:-1}" \
     --env HG_EXAMPLE_DIR="$EXAMPLE_DIR" \
     --env HG_OUTPUT_DIR="$HG_OUTPUT_DIR" \
+    --env TORCH_NCCL_HIGH_PRIORITY="$TORCH_NCCL_HIGH_PRIORITY" \
+    --env GPU_MAX_HW_QUEUES="$GPU_MAX_HW_QUEUES" \
+    "${OPT_ENVS[@]}" \
     "${RCCL_MULTINODE_ENVS[@]}" \
     "$HG_SIF" \
     bash "$RANK_SCRIPT"

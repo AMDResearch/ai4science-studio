@@ -16,11 +16,45 @@ recipes:
     recipe_path: recipes/inference/
     script: examples/run_visualize.py
     slurm: examples/sbatch_infer_amd.sh
+  - task: perf-analysis
+    description: Training perf analysis (default 1 node × 8 GPU) with Omnistat + PyTorch profiler; default template **edm_8m_era5_1x8.yaml** (Bayes-CAST EDM, `fsdp=8`/`simple_ddp=1`); override with `interm_8m_era5.yaml`
+    recipe_path: recipes/perf-analysis/
+    script: examples/run_orbit2_train.py
+    slurm: examples/sbatch_train_perf_amd.sh
+  - task: train
+    description: Multi-node intermediate downscaling on staged NPZ data (PRISM same-dir or ERA5 sanity templates)
+    recipe_path: recipes/train/
+    script: examples/run_orbit2_train.py
+    slurm: examples/sbatch_train_amd.sh
 
 env_vars:
   ORBIT2_ROOT:
-    description: Path to cloned XiaoWang-Github/ORBIT-2 repository
+    description: Path to training code; bind-mounted at /orbit2. **Bayes-CAST** (`…/code/bayes-cast`) for **`edm_8m_era5_1x8.yaml`** + `launch/launch_diffusion.sh`; public ORBIT-2 clone otherwise.
     required: true
+    default: null
+  ORBIT2_CONFIG_TEMPLATE:
+    description: YAML template basename under examples/ (Bayes-CAST **`edm_8m_era5_1x8.yaml`** default for perf; **`interm_8m_prism.yaml`** / **`interm_8m_era5.yaml`** for public ORBIT-2 `res_slimvit`)
+    required: false
+    default: edm_8m_era5_1x8.yaml
+  ORBIT2_FSDP:
+    description: Override YAML fsdp when set with ORBIT2_SIMPLE_DDP (optional)
+    required: false
+    default: null
+  ORBIT2_SIMPLE_DDP:
+    description: Override YAML simple_ddp when set with ORBIT2_FSDP (optional)
+    required: false
+    default: null
+  ORBIT2_DATA_TYPE:
+    description: trainer.data_type — bfloat16 or float32 (sbatch_train_* default bfloat16; float32 for CK/xformers debug)
+    required: false
+    default: bfloat16
+  ORBIT2_FUSED_ATTN:
+    description: xFormers attention backend hint (sbatch defaults DEFAULT = PyTorch SDPA when CK path unavailable)
+    required: false
+    default: DEFAULT
+  ORBIT2_LAUNCH_SCRIPT:
+    description: Absolute path under ORBIT2_ROOT to launch_diffusion.sh (optional; auto-detected if omitted)
+    required: false
     default: null
   ORBIT2_CHECKPOINT:
     description: Path to .ckpt file (downloaded from HF in synthetic mode)

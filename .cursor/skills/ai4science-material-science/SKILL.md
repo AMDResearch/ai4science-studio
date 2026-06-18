@@ -35,6 +35,7 @@ HydraGNN uses MPI-based distributed training with ADIOS datasets. Key patterns f
 - **Env vars inside container:** Set `OMP_NUM_THREADS` to match `--cpus-per-task`, `MIOPEN_DISABLE_CACHE=1`, `MIOPEN_USER_DB_PATH=$SCRATCH_LOCAL/<jobid>/miopen` (node-local fast storage from `.cluster-config.yaml`), `HYDRAGNN_USE_VARIABLE_GRAPH_SIZE=1`.
 - **Multi-node MPI transport (ob1/tcp):** On Pensando/ionic fabrics, data NICs use `/31` subnets that don't route between nodes — IB verbs cannot work for MPI. Use `OMPI_MCA_pml=ob1`, `OMPI_MCA_btl=tcp,self`, `OMPI_MCA_btl_tcp_if_include=$MGMT_NIC`, `MPI4PY_RC_THREADS=false`. RCCL uses ANP plugin (`librccl-anp.so`) over ionic native transport (RoCEv2/GDRDMA) for GPU allreduce, independent of MPI. The ANP plugin and `libionic.so.1` must be bind-mounted from the host into the container.
 - **Convergence capture:** Run with `HYDRAGNN_VALTEST=1` to get epoch-level loss reporting. Parse with `examples/parse_convergence.py --log <slurm_output>`.
+- **Strong-scaling sweep:** Submit matched 1/2/4/8-node runs via `examples/run_scaling_study.sh` (identical env, `HYDRAGNN_VALTEST=0`, 6 epochs). Collate steady-state throughput (epochs 2–5) with `examples/collate_scaling_study.py`. Results table and methodology in `recipes/train/README.md` §6. `sbatch_train_amd.sh` defaults `TORCH_NCCL_HIGH_PRIORITY=1` and `GPU_MAX_HW_QUEUES=2`.
 
 ## HydraGNN inference pattern
 

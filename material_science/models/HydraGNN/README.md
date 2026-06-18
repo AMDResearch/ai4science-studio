@@ -14,6 +14,8 @@ Authoritative training, HPO, ensemble, and inference scripts live in **upstream 
 - [`recipes/train/`](recipes/train/) — Frontier-scale pretraining / HPO summary  
 - [`recipes/data/`](recipes/data/) — Hub ADIOS bundles, Constellation, staging, and data context  
 - [`recipes/compute/`](recipes/compute/) — OLCF, AMD cloud / HPC Fund, institutional clusters  
+- [`recipes/perf-analysis/`](recipes/perf-analysis/) — multi-subagent bottleneck analysis (TraceLens + Omnistat) on AMD Instinct  
+- [`recipes/perf-optimizer-loop/`](recipes/perf-optimizer-loop/) — iterative epoch-time optimizer loop + lever catalog  
 - [`examples/`](examples/) — ready-to-run Docker and run scripts  
 
 ## Installation (reference)
