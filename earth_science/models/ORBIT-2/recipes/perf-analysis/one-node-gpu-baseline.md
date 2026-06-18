@@ -21,7 +21,7 @@ Goal: on **one MI355-class node × 8 GPUs**, pick a **per-rank batch size** and 
 
 ## 2. Submit a perf job (1 node)
 
-**Studio default (`sbatch_train_perf_amd.sh`):** staged **ERA5 1.0°** + template **`edm_8m_era5_1x8.yaml`** (Bayes-CAST EDM; **`fsdp=8`**, **`simple_ddp=1`** after render). **`ORBIT2_ROOT`** defaults to **`…/code/bayes-cast`** when that directory exists. Override `ORBIT2_CONFIG_TEMPLATE` for Lux **`interm_8m_lux_era5.yaml`**. Set **`ORBIT2_ERA5_SPATIAL_RES`** if your ERA5_1 grid token count ≠ 111.
+**Studio default (`sbatch_train_perf_amd.sh`):** staged **ERA5 1.0°** + template **`edm_8m_era5_1x8.yaml`** (Bayes-CAST EDM; **`fsdp=8`**, **`simple_ddp=1`** after render). **`ORBIT2_ROOT`** defaults to **`…/code/bayes-cast`** when that directory exists. Override `ORBIT2_CONFIG_TEMPLATE` for **`interm_8m_era5.yaml`**. Set **`ORBIT2_ERA5_SPATIAL_RES`** if your ERA5_1 grid token count ≠ 111.
 
 ```bash
 export AI4S_SHARED_DIR=...
@@ -29,7 +29,7 @@ export PERF_TOOLS_DIR=...
 export ORBIT2_ROOT=...   # optional; defaults to $AI4S_SHARED_DIR/models/ORBIT-2/code/ORBIT-2
 # Defaults pick ERA5 path + template; omit these if data is already staged there:
 # export ORBIT2_DATA_ROOT=$AI4S_SHARED_DIR/models/ORBIT-2/data/superres/era5/1.0_deg
-# export ORBIT2_CONFIG_TEMPLATE=interm_8m_lux_era5.yaml
+# export ORBIT2_CONFIG_TEMPLATE=interm_8m_era5.yaml
 # Push batch until VRAM is high *and* steady_batch_time_s stops improving (not “max batch always best”):
 export ORBIT2_BATCH_SIZE=4                # sweep 2, 4, 8, …
 export ORBIT2_MAX_EPOCH=6
@@ -54,12 +54,12 @@ The second command writes **`baseline_report.md`** and **`baseline_report.json`*
 
 ### Model size vs activation size (why ~9M params can still look “tiny”)
 
-ORBIT-2 Studio templates (`interm_8m_lux.yaml`, `interm_8m_lux_era5.yaml`) use **`preset: res_slimvit`** with **`embed_dim: 256`**, **`depth: 6`**, **`decoder_depth: 4`**, **`mlp_ratio: 4`**, **`num_heads: 4`**. That yields on the order of **~10M trainable parameters** — expected, not a mis-parse. **Parameter count is not the same as per-step FLOPs or VRAM:** most HBM during training is often **activations**, which scale roughly with **batch × spatial tokens × width × depth**. The PRISM same-dir template uses **`spatial_resolution: { 'PRISM': 18 }`** (a **18×18** latent grid) — very few tokens per sample, so GPUs can show **low MFMA / “low utilization”** even when the job is “correct.”
+ORBIT-2 Studio templates (`interm_8m_prism.yaml`, `interm_8m_era5.yaml`) use **`preset: res_slimvit`** with **`embed_dim: 256`**, **`depth: 6`**, **`decoder_depth: 4`**, **`mlp_ratio: 4`**, **`num_heads: 4`**. That yields on the order of **~10M trainable parameters** — expected, not a mis-parse. **Parameter count is not the same as per-step FLOPs or VRAM:** most HBM during training is often **activations**, which scale roughly with **batch × spatial tokens × width × depth**. The PRISM same-dir template uses **`spatial_resolution: { 'PRISM': 18 }`** (a **18×18** latent grid) — very few tokens per sample, so GPUs can show **low MFMA / “low utilization”** even when the job is “correct.”
 
 **Practical order to push toward steady-state saturation:**
 
 1. **`ORBIT2_BATCH_SIZE` (per-rank)** — Cheapest knob; raise until you approach VRAM limits (watch Omnistat / `amd-smi` during **epoch ≥ 2**). FSDP (`fsdp=8`) shards **weights**, not activations across the sample batch in the same way; large batches still grow **per-rank** activation memory.
-2. **Larger spatial workload without inventing a new architecture** — Prefer **`interm_8m_lux_era5.yaml`** + staged ERA5 data: **`spatial_resolution: { 'ERA5_2': 111 }`** → many more tokens per forward than PRISM-18, often better for **GPU fill** and more honest perf baselines (still same-dir = non-physical loss).
+2. **Larger spatial workload without inventing a new architecture** — Prefer **`interm_8m_era5.yaml`** + staged ERA5 data: **`spatial_resolution: { 'ERA5_2': 111 }`** → many more tokens per forward than PRISM-18, often better for **GPU fill** and more honest perf baselines (still same-dir = non-physical loss).
 3. **Widen / deepen the ViT stack (YAML `model:` block)** — Increase **`embed_dim`** and **`depth`** (and usually **`decoder_depth`**) together; keep **`num_heads`** such that **`embed_dim % num_heads == 0`**. **`mlp_ratio`** bumps FFN FLOPs and memory. These changes are **upstream-architecture-sensitive**: stay within combinations your ORBIT-2 / Bayes-CAST revision actually constructs (if training fails, compare against upstream example configs for valid presets).
 4. **`superres_mag: 4`** (vs `1` in same-dir perf templates) — Restores the **high→low upsampling** path used in the paper-style setup; **strongly increases decoder-side compute and memory** but requires **consistent low/high data layout** (not the current same-dir PRISM/ERA5 perf shortcut). Use for “stress the pipeline” only when data paths match upstream expectations.
 5. **`preset`** — If upstream ships additional presets (names differ by repo/version), switching preset is the largest architectural jump; treat it like a **new model** for perf baselines (re-document param count, batch, and loss sanity expectations).

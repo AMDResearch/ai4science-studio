@@ -4,7 +4,7 @@ Multi-subagent workflow for ORBIT-2 / Bayes-CAST training on AMD MI355X, with Om
 
 > **Audience:** performance engineers. Output is a diagnosis of the run, not a scientific ORBIT-2 claim.
 
-> **Data mode:** Perf defaults **Bayes-CAST** **`edm_8m_era5_1x8.yaml`** + staged **ERA5 1.0°** (`ORBIT2_DATA_ROOT`). Lux **`interm_8m_lux_era5.yaml`** remains for public ORBIT-2 same-dir `res_slimvit`. Loss is not meaningful without true downscaling targets.
+> **Data mode:** Perf defaults **Bayes-CAST** **`edm_8m_era5_1x8.yaml`** + staged **ERA5 1.0°** (`ORBIT2_DATA_ROOT`). **`interm_8m_era5.yaml`** remains for public ORBIT-2 same-dir `res_slimvit`. Loss is not meaningful without true downscaling targets.
 
 ## Quick start (1 node × 8 GPUs, Bayes-CAST EDM template)
 

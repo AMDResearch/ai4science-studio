@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Submit ORBIT-2 perf baseline: ERA5 1.0° same-dir + interm_8m_lux_era5.yaml (matches
+# Submit ORBIT-2 perf baseline: ERA5 1.0° same-dir + interm_8m_era5.yaml (matches
 # sbatch_train_perf_amd.sh defaults). Requires staged NPZ under ORBIT2_DATA_ROOT.
 #
 # Usage (from anywhere):
 #   export AI4S_SHARED_DIR=/path/to/shared
 #   export PERF_TOOLS_DIR=/path/to/perf-tools
 #   ./submit_perf_baseline_era5_amd.sh
-# Extra sbatch flags: ./submit_perf_baseline_era5_amd.sh --partition=lux --account=myacct
+# Extra sbatch flags: ./submit_perf_baseline_era5_amd.sh --partition=YOUR_PARTITION --account=myacct
 
 set -euo pipefail
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)

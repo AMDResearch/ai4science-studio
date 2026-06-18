@@ -17,7 +17,7 @@ recipes:
     script: examples/run_visualize.py
     slurm: examples/sbatch_infer_amd.sh
   - task: perf-analysis
-    description: Training perf analysis (default 1 node × 8 GPU) with Omnistat + PyTorch profiler; default template **edm_8m_era5_1x8.yaml** (Bayes-CAST EDM, `fsdp=8`/`simple_ddp=1`); override for Lux `interm_8m_lux_era5.yaml`
+    description: Training perf analysis (default 1 node × 8 GPU) with Omnistat + PyTorch profiler; default template **edm_8m_era5_1x8.yaml** (Bayes-CAST EDM, `fsdp=8`/`simple_ddp=1`); override with `interm_8m_era5.yaml`
     recipe_path: recipes/perf-analysis/
     script: examples/run_orbit2_train.py
     slurm: examples/sbatch_train_perf_amd.sh
@@ -33,7 +33,7 @@ env_vars:
     required: true
     default: null
   ORBIT2_CONFIG_TEMPLATE:
-    description: YAML template basename under examples/ (Bayes-CAST **`edm_8m_era5_1x8.yaml`** default for perf; Lux **`interm_8m_lux.yaml`** / **`interm_8m_lux_era5.yaml`** for public ORBIT-2 `res_slimvit`)
+    description: YAML template basename under examples/ (Bayes-CAST **`edm_8m_era5_1x8.yaml`** default for perf; **`interm_8m_prism.yaml`** / **`interm_8m_era5.yaml`** for public ORBIT-2 `res_slimvit`)
     required: false
     default: edm_8m_era5_1x8.yaml
   ORBIT2_FSDP:

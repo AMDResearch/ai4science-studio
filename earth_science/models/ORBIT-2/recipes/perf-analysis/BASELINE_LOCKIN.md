@@ -7,7 +7,7 @@ Use this file to **freeze** what “baseline” means while you sweep knobs. Upd
 | Field | Value (example: job **9145**) |
 |--------|--------------------------------|
 | **Job dir** | `$AI4S_SHARED_DIR/models/ORBIT-2/perf-runs/<jobid>/` |
-| **Template** | `interm_8m_lux_era5.yaml` (ERA5 1.0°, same-dir, `spatial_resolution` 111×111) |
+| **Template** | `interm_8m_era5.yaml` (ERA5 1.0°, same-dir, `spatial_resolution` 111×111) |
 | **Parallelism** | `fsdp=8`, `simple_ddp=1` (1 node × 8 ranks) |
 | **dtype** | `bfloat16` (Studio **`sbatch_train_*` / `run_scaling_study.sh`** default). Set **`ORBIT2_DATA_TYPE=float32`** if `xformers.ops` / CK attention misbehaves; **`ORBIT2_FUSED_ATTN=DEFAULT`** (already in sbatch) prefers PyTorch SDPA. |
 | **Epochs / cap** | `ORBIT2_MAX_EPOCH=6`, `ORBIT2_MAX_BATCHES=20` |
@@ -87,7 +87,7 @@ Smoke **9158** used **`ORBIT2_BATCH_SIZE=2`** (~0.35 GiB **`max_memory_allocat
 
 ## Ordered next steps (do in sequence)
 
-1. **Lock topology + data + template** — Keep **ERA5** + **`interm_8m_lux_era5.yaml`** + **1×8** + **`fsdp=8`/`simple_ddp=1`** fixed until VRAM plateaus.
+1. **Lock topology + data + template** — Keep **ERA5** + **`interm_8m_era5.yaml`** + **1×8** + **`fsdp=8`/`simple_ddp=1`** fixed until VRAM plateaus.
 2. **Sweep `ORBIT2_BATCH_SIZE`** — Prefer **binary search** between a known-good batch and a guessed upper bound (fewer SLURM jobs than stepping by +1). Re-run `run_fom_extractor.py` + `report_orbit2_gpu_baseline.py` per candidate; pick the best **time vs throughput** under high VRAM.
 3. **Optional: denser batch timing in logs** — If you need more than two `Batch … seconds` lines per epoch, raise upstream logging frequency or increase `ORBIT2_MAX_BATCHES` (still capped per epoch in trainer) so steady stats are statistically tighter.
 4. **Omnistat + TraceLens** — On the **winning** job id only: confirm MFMA/HBM story matches “saturated” intent ([`one-node-gpu-baseline.md`](one-node-gpu-baseline.md) §6–7, [`ai4science-perf-analysis`](../../../../.cursor/skills/ai4science-perf-analysis/SKILL.md)).

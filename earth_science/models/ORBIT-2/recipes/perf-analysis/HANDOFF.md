@@ -7,10 +7,10 @@ _Last updated: 2026-06-11 (perf-optimizer-loop + bf16 omnistat profile + manifes
 | Item | Status | Notes |
 |------|--------|-------|
 | 1-node × 8-GPU training on **ERA5 1.0°** same-dir (default perf template) | **Green** | Heavier **111×111** latent vs PRISM **18×18**; better default for GPU saturation baselines. Representative steady batch time workload-dependent. |
-| 1-node × 8-GPU on **PRISM** 10.0_arcmin same-dir | **Green** | Lighter forwards; override `ORBIT2_DATA_ROOT` + `interm_8m_lux.yaml` if ERA5 not staged. |
+| 1-node × 8-GPU on **PRISM** 10.0_arcmin same-dir | **Green** | Lighter forwards; override `ORBIT2_DATA_ROOT` + `interm_8m_prism.yaml` if ERA5 not staged. |
 | `sbatch_train_amd.sh` / `sbatch_train_perf_amd.sh` | **Green** | Prefer `launch_diffusion.sh` under `ORBIT2_ROOT` when present; else `run_orbit2_train.py`. `orbit2_rank_hook_runner.py` runs profiler hook before shell launcher. |
 | **1-node default parallelism** | **fsdp=8, simple_ddp=1** | Override with `ORBIT2_FSDP` / `ORBIT2_SIMPLE_DDP`. Multi-node: omit for `fsdp=nodes`, `simple_ddp=8`. |
-| `ORBIT2_CONFIG_TEMPLATE` + `render_orbit2_config.py` | **Green** | Default perf: **`edm_8m_era5_1x8.yaml`** (Bayes-CAST `edm_8m_era5` + **`fsdp=8`/`simple_ddp=1`/`seq_par:1`**, templated `data_dir` + **`ORBIT2_ERA5_SPATIAL_RES`** default 111). Lux **`interm_8m_lux_era5.yaml`** for public ORBIT-2 `res_slimvit`. `__DATA_TYPE__` defaults **bfloat16**. |
+| `ORBIT2_CONFIG_TEMPLATE` + `render_orbit2_config.py` | **Green** | Default perf: **`edm_8m_era5_1x8.yaml`** (Bayes-CAST `edm_8m_era5` + **`fsdp=8`/`simple_ddp=1`/`seq_par:1`**, templated `data_dir` + **`ORBIT2_ERA5_SPATIAL_RES`** default 111). **`interm_8m_era5.yaml`** for public ORBIT-2 `res_slimvit`. `__DATA_TYPE__` defaults **bfloat16**. |
 | Node health probe (exit 42) | **Green** | Catches broken home/shared/SIF/data mounts before training |
 | `superres_mag: 1` same-dir config | **Required** | Without it, 4× superres vs same-resolution targets causes tensor shape mismatch |
 | Baseline lock-in + VRAM-first sweep | **Doc** | [BASELINE_LOCKIN.md](BASELINE_LOCKIN.md) — freeze topology/template; sweep `ORBIT2_BATCH_SIZE` before widening ViT |
@@ -20,9 +20,9 @@ _Last updated: 2026-06-11 (perf-optimizer-loop + bf16 omnistat profile + manifes
 1. **`max_epochs` must be ≥ 2** — upstream loop is `while (epoch_start + 1) < max_epochs`; `max_epochs=1` runs zero epochs.
 2. **`xformers.ops` missing in overlay** — `run_orbit2_train.py` can fall back to `FusedAttn.DEFAULT` (PyTorch SDPA). Rebuild overlay per `build_overlay_amd.sh` if you need the CK attention path.
 3. **`bfloat16` + xformers CK path** — needs working `xformers.ops`. Studio sbatch sets **`ORBIT2_FUSED_ATTN=DEFAULT`** so PyTorch SDPA is used when CK is unavailable. If you still see dtype-related crashes, fall back to **`ORBIT2_DATA_TYPE=float32`** for isolation.
-4. **Same-dir data** — both `low_res_dir` and `high_res_dir` point at the same grid; set `superres_mag: 1` in `interm_8m_lux.yaml` / `interm_8m_lux_era5.yaml`.
+4. **Same-dir data** — both `low_res_dir` and `high_res_dir` point at the same grid; set `superres_mag: 1` in `interm_8m_prism.yaml` / `interm_8m_era5.yaml`.
 5. **Batch cap** — must patch `intermediate_downscaling` before `main()` (not via `runpy.run_path` reload).
-6. **Bayes-CAST `launch/launch_diffusion.sh`** — upstream file is often an OLCF/Crusher **job wrapper** (nested `srun`, ignores argv). Studio **`sbatch_train_*`** does **not** exec it when **`$ORBIT2_ROOT/launch/train_edm.py`** exists; ranks run **`python3 train_edm.py /config/config.yaml`** from **`/orbit2/launch`** (no `examples/` required). For Lux/public ORBIT-2, **`launch_diffusion.sh`** + argv still applies when **`train_edm.py`** is absent.
+6. **Bayes-CAST `launch/launch_diffusion.sh`** — upstream file is often an OLCF/Crusher **job wrapper** (nested `srun`, ignores argv). Studio **`sbatch_train_*`** does **not** exec it when **`$ORBIT2_ROOT/launch/train_edm.py`** exists; ranks run **`python3 train_edm.py /config/config.yaml`** from **`/orbit2/launch`** (no `examples/` required). For public ORBIT-2, **`launch_diffusion.sh`** + argv still applies when **`train_edm.py`** is absent.
 7. **`train_edm.py` + `ERA5_1`** — some Bayes-CAST snapshots only define **`std_delta`** for IMERG/HRRR; **`data_key=="ERA5_1"`** then hits **`UnboundLocalError`** at the first step. Fix: add an **`elif data_key == "ERA5_1"`** branch (per-channel std aligned with your staged **`normalize_std.npz`** and **`dict_out_variables` order**), or use the small patch applied on your shared clone (example values `[20.601086, 5.542934, 4.7573]` for T2m / u10 / v10 @ 1.0°).
 
 ## FOM contract (steady-state + loss sanity)
@@ -61,10 +61,10 @@ Full TraceLens+Omnistat analyst/verifier run (`agents/orchestrator_gemm_analysis
   "comm-bound" claim was refuted by the trace).
 - **EDM trainer now has an env-gated profiler.** `train_edm.py:_orbit2_make_profiler` writes a rank-0
   `*.pt.trace.json` for `PROFILE_TARGET_EPOCH` into `ORBIT2_PROFILE_DIR` (no-op unless set). This is
-  what makes "where does GEMM time go" answerable for the EDM path (the old Lux `res_slimvit` hook
+  what makes "where does GEMM time go" answerable for the EDM path (the old `res_slimvit` hook
   did not apply).
 
-### ORNL Frontier MIOpen flags ported to the sbatch (validate on Lux)
+### ORNL Frontier MIOpen flags ported to the sbatch (validate on MI355X)
 
 From bayes-cast `launch/launch_diffusion.sh` (ORNL, gfx90a/ROCm7.1.1, "tested many times"): ORNL
 **disables Winograd** and unbounds the multi-pass Winograd workspace. Now defaults in
@@ -79,12 +79,12 @@ HSA_FORCE_FINE_GRAIN_PCIE=1
 
 `MIOPEN_DISABLE_CACHE=1` + `MIOPEN_USER_DB_PATH=/tmp/<job>` already matched ORNL — keep them (do NOT
 "persist the find-db"; that deviates from the validated setup). **Deliberately NOT ported** (Frontier
-Slingshot/Cray-specific, would break Lux IB/ionic): `FI_CXI_*`, `NCCL_NET="AWS Libfabric"`,
+Slingshot/Cray-specific, would break non-Slingshot IB/ionic): `FI_CXI_*`, `NCCL_NET="AWS Libfabric"`,
 `NCCL_NET_PLUGIN=librccl-net.so`, `NCCL_SOCKET_IFNAME=hsn0`, Frontier `LD_PRELOAD` host paths.
 A/B (ORNL Winograd-off vs Winograd-on vs pre-flags
 baseline) → `perf-runs/miopen-ornl-validation-<uuid>/MIOPEN_ORNL_VALIDATION.md`.
 
-**MIOpen ORNL-flags A/B result (2026-06-16, jobs 12997/12998 vs 12562): performance-NEUTRAL on Lux**
+**MIOpen ORNL-flags A/B result (2026-06-16, jobs 12997/12998 vs 12562): performance-NEUTRAL on MI355X**
 (steady 8.62→8.66→8.74 s, within ~1-2 % noise; loss sanity OK). MIOpen never selected Winograd for
 the 3/4-channel convs (0 % Winograd kernels in all arms), so toggling it changes nothing — our
 bottleneck is shape-driven, not algorithm-selection-driven. Keeping the flags as defaults (faithful,
@@ -192,7 +192,7 @@ File "/orbit2/src/climate_learn/models/hub/components/attention.py", line 280, i
 torch.AcceleratorError: HIP error: invalid argument (hipErrorInvalidValue)
 ```
 
-- **Reproduced across 6 jobs (lux MI355X, `pytorch_rocm7.2.2` SIF + ORBIT-2 overlay):**
+- **Reproduced across 6 jobs (MI355X, `pytorch_rocm7.2.2` SIF + ORBIT-2 overlay):**
   - **9228/9229/9230** — bf16 batch 1024/2048/4096 → crash. (Also confirmed restaged ERA5 lifted the old ~1704 sample cap: batch 1024 → `y.shape[0]=1024`; batch ≥2048 → caps at **1704** = total train samples.)
   - **9231** — bf16 batch **256** → **same crash** (not large-M dependent).
   - **9232** — bf16 batch 1024 + **`TORCH_BLAS_PREFER_HIPBLASLT=0`** (rocBLAS fallback) → **same crash** (not hipBLASLt-specific).

@@ -81,7 +81,7 @@ grep -oE "[0-9.]+s/it" /tmp/probe-$SLURM_JOB_ID.out | tail -5
 '
 ```
 
-Note: `sbatch_train_amd.sh` is designed for `sbatch`, not `srun --pty`. For probes prefer using its rank-script logic directly via a small ad-hoc wrapper rather than running the whole sbatch under srun. The verifier may inline a minimal Python invocation that bypasses sbatch and just runs the upstream `interm_8m_lux_all_mpnn.py` for 10 batches inside the container with the alternate precision.
+Note: `sbatch_train_amd.sh` is designed for `sbatch`, not `srun --pty`. For probes prefer using its rank-script logic directly via a small ad-hoc wrapper rather than running the whole sbatch under srun. The verifier may inline a minimal Python invocation that bypasses sbatch and just runs `interm_8m_all_mpnn.py` for 10 batches inside the container with the alternate precision.
 
 If the verifier judges that no cheap probe is feasible, set `remedy_probe.ran=false` with a clear note and proceed.
 

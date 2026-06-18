@@ -15,7 +15,7 @@ with AMD/ROCm container launch, overlay builds, and synthetic smoke tests.
 | [`sbatch_infer_amd.sh`](sbatch_infer_amd.sh) | SLURM driver for inference on AMD Instinct (MI250X/MI300X/MI350X) |
 | [`build_overlay_amd.sh`](build_overlay_amd.sh) | One-time overlay build (pre-bakes pip deps, skips ~15 min per job) |
 | [`interm_8m_synthetic.yaml`](interm_8m_synthetic.yaml) | Template YAML for synthetic mode |
-| [`sbatch_train_amd.sh`](sbatch_train_amd.sh) | Multi-node training (Apptainer + MPI); defaults PRISM 10.0_arcmin + `interm_8m_lux.yaml` |
+| [`sbatch_train_amd.sh`](sbatch_train_amd.sh) | Multi-node training (Apptainer + MPI); defaults PRISM 10.0_arcmin + `interm_8m_prism.yaml` |
 | [`sbatch_train_perf_amd.sh`](sbatch_train_perf_amd.sh) | 1-node × 8-GPU perf (Omnistat + profiler); defaults **ERA5 1.0°** + `edm_8m_era5_1x8.yaml`; multi-node: `sbatch --nodes=N …` |
 | [`submit_perf_baseline_era5_amd.sh`](submit_perf_baseline_era5_amd.sh) | Thin `sbatch` wrapper (sets ERA5 defaults, forwards extra `sbatch` flags) |
 | [`sweep_orbit2_batch_bf16_amd.sh`](sweep_orbit2_batch_bf16_amd.sh) | Submit multiple `ORBIT2_BATCH_SIZE` probes (bf16 + SDPA) for HBM saturation sweeps |
@@ -26,7 +26,7 @@ with AMD/ROCm container launch, overlay builds, and synthetic smoke tests.
 | [`parse_training_log.py`](parse_training_log.py) | Extract batch/epoch metrics from SLURM log (handles both `intermediate_downscaling.py` and Bayes-CAST `train_edm.py` `epoch:/batch_idx/tic4-tic1` formats) |
 | [`run_fom_extractor.py`](run_fom_extractor.py) | Write `foms.json` (throughput + steady batch time + optional Omnistat PromQL via `ORBIT2_TSDB_URL`) |
 | [`report_orbit2_gpu_baseline.py`](report_orbit2_gpu_baseline.py) | `baseline_report.md` / JSON for perf runs |
-| [`interm_8m_lux.yaml`](interm_8m_lux.yaml) | Lux config template (10.0_arcmin same-dir) |
+| [`interm_8m_prism.yaml`](interm_8m_prism.yaml) | PRISM config template (10.0_arcmin same-dir) |
 | [`edm_8m_era5_1x8.yaml`](edm_8m_era5_1x8.yaml) | Bayes-CAST `edm_8m_era5.yaml` + **`fsdp=8`/`simple_ddp=1`** + `seq_par:1`; `ORBIT2_ROOT` → `code/bayes-cast` (auto if present) |
 | [`orbit2_rank_hook_runner.py`](orbit2_rank_hook_runner.py) | Runs an optional per-rank pre-train hook (`ORBIT2_RANK_PRE_TRAIN_HOOK`) before the shell launcher |
 | [`stage_era5_3x_symlink.sh`](stage_era5_3x_symlink.sh) | Symlink-replicate a staged ERA5 year (Nx) to break the small-corpus per-step batch cap for HBM saturation |
@@ -42,7 +42,7 @@ Verifies the staged ERA5 NPZ tree loads and training runs (same-dir mode; loss n
 ```bash
 export AI4S_SHARED_DIR=/path/to/shared
 export ORBIT2_DATA_ROOT=$AI4S_SHARED_DIR/models/ORBIT-2/data/superres/era5/1.0_deg
-export ORBIT2_CONFIG_TEMPLATE=interm_8m_lux_era5.yaml
+export ORBIT2_CONFIG_TEMPLATE=interm_8m_era5.yaml
 export ORBIT2_MAX_EPOCH=2 ORBIT2_MAX_BATCHES=5 ORBIT2_BATCH_SIZE=2 ORBIT2_DATA_TYPE=float32
 sbatch sbatch_train_amd.sh
 ```
