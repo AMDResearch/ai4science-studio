@@ -1,16 +1,30 @@
 #!/usr/bin/env bash
-# Submit matched ORBIT-2 strong-scaling sweep (1/2/4/8 nodes).
+# Submit a matched ORBIT-2 WEAK-scaling sweep (1/2/4/8 nodes).
 #
-# Usage:
+# Weak scaling: per-rank batch is held FIXED at every node count (each GPU does the same
+# work; global batch grows as batch x 8 x N). Ideal result is constant steady step time vs N;
+# the efficiency reported by collate_scaling_study.py is then a comm-overlap (RCCL bandwidth)
+# metric, not a classic strong-scaling speedup. Parallelism is HSDP: fsdp=8 within a node
+# (XGMI), simple_ddp=N across nodes (IB/ANP) — see ORBIT2_SCALING_FSDP below.
+#
+# Usage (PRISM res_slimvit, default):
 #   export AI4S_SHARED_DIR=/path/to/shared
 #   export ORBIT2_DATA_ROOT=$AI4S_SHARED_DIR/models/ORBIT-2/data/superres/prism/10.0_arcmin
 #   ./run_scaling_study.sh
 #   ./run_scaling_study.sh --nodes 1,2
 #
-# ERA5 1.0_deg same-dir (timing only):
+# ERA5 1.0_deg same-dir res_slimvit (timing only):
 #   export ORBIT2_DATA_ROOT=$AI4S_SHARED_DIR/models/ORBIT-2/data/superres/era5/1.0_deg
 #   export ORBIT2_CONFIG_TEMPLATE=interm_8m_era5.yaml
 #   export ORBIT2_SCALING_TAG=era5
+#   ./run_scaling_study.sh
+#
+# Bayes-CAST EDM, compute-saturated (per-rank batch fills the GPU at every node count):
+#   export ORBIT2_ROOT=$AI4S_SHARED_DIR/models/ORBIT-2/code/bayes-cast
+#   export ORBIT2_CONFIG_TEMPLATE=edm_8m_era5_1x8.yaml
+#   export ORBIT2_DATA_ROOT=$AI4S_SHARED_DIR/models/ORBIT-2/data/superres/era5/1.0_deg
+#   export ORBIT2_ERA5_SPATIAL_RES=111 ORBIT2_DATA_TYPE=bfloat16 ORBIT2_FUSED_ATTN=DEFAULT
+#   export ORBIT2_BATCH_SIZE=1024 ORBIT2_SCALING_TAG=edm-era5
 #   ./run_scaling_study.sh
 
 set -euo pipefail
@@ -22,12 +36,21 @@ export TORCH_NCCL_HIGH_PRIORITY=1
 export GPU_MAX_HW_QUEUES=2
 export ORBIT2_DATA_TYPE="${ORBIT2_DATA_TYPE:-bfloat16}"
 # max_epochs=6 → trains epochs 0–4; collate uses steady epochs 2–4 for FOM
-export ORBIT2_MAX_EPOCH=6
-export ORBIT2_MAX_BATCHES=20
-export ORBIT2_BATCH_SIZE=4
+# All sizing knobs honor caller overrides (EDM weak-scaling uses larger batch).
+export ORBIT2_MAX_EPOCH="${ORBIT2_MAX_EPOCH:-6}"
+export ORBIT2_MAX_BATCHES="${ORBIT2_MAX_BATCHES:-20}"
+export ORBIT2_BATCH_SIZE="${ORBIT2_BATCH_SIZE:-4}"
 export ORBIT2_DATA_ROOT="${ORBIT2_DATA_ROOT:-${AI4S_SHARED_DIR}/models/ORBIT-2/data/superres/prism/10.0_arcmin}"
 export ORBIT2_CONFIG_TEMPLATE="${ORBIT2_CONFIG_TEMPLATE:-interm_8m_prism.yaml}"
-# sbatch_train_amd.sh: 1-node×8-GPU jobs default to fsdp=8 simple_ddp=1; N>1 uses fsdp=N simple_ddp=8 from render defaults.
+# Pass-through for the EDM (Bayes-CAST) path; harmless when unset for the PRISM/ERA5 res_slimvit path.
+[[ -n "${ORBIT2_ROOT:-}" ]] && export ORBIT2_ROOT
+[[ -n "${ORBIT2_ERA5_SPATIAL_RES:-}" ]] && export ORBIT2_ERA5_SPATIAL_RES
+export ORBIT2_FUSED_ATTN="${ORBIT2_FUSED_ATTN:-DEFAULT}"
+# Weak-scaling parallelism: keep FSDP sharding *within* a node (fast XGMI) and add a
+# data-parallel replica *per node* across the IB fabric → per-rank work stays fixed at
+# every node count (fsdp=8 simple_ddp=N), instead of the render default (fsdp=N simple_ddp=8)
+# which would shard weights across slow inter-node links. Override fsdp/node via ORBIT2_SCALING_FSDP.
+export ORBIT2_SCALING_FSDP="${ORBIT2_SCALING_FSDP:-8}"
 export ORBIT2_SCALING_TAG="${ORBIT2_SCALING_TAG:-prism}"
 export ORBIT2_OUTPUT_DIR="${ORBIT2_OUTPUT_DIR:-${AI4S_SHARED_DIR}/models/ORBIT-2/outputs/scaling-${ORBIT2_SCALING_TAG}}"
 
@@ -47,6 +70,9 @@ mkdir -p "$LOG_DIR"
 
 submit() {
   local n="$1" t="$2"
+  # Weak-scaling HSDP: fsdp = GPUs/node (intra-node), simple_ddp = node count (inter-node).
+  export ORBIT2_FSDP="$ORBIT2_SCALING_FSDP"
+  export ORBIT2_SIMPLE_DDP="$n"
   sbatch --parsable \
     --partition="$SBATCH_PARTITION" \
     --account="$SBATCH_ACCOUNT" \
@@ -55,7 +81,7 @@ submit() {
     --job-name="orbit2-scale-${n}N" \
     --output="${LOG_DIR}/orbit2-train-%j.out" \
     --error="${LOG_DIR}/orbit2-train-%j.out" \
-    --export=ALL,TORCH_NCCL_HIGH_PRIORITY,GPU_MAX_HW_QUEUES,ORBIT2_DATA_TYPE,ORBIT2_MAX_EPOCH,ORBIT2_MAX_BATCHES,ORBIT2_BATCH_SIZE,ORBIT2_DATA_ROOT,ORBIT2_CONFIG_TEMPLATE,ORBIT2_SCALING_TAG,ORBIT2_OUTPUT_DIR,AI4S_SHARED_DIR,ORBIT2_DISABLE_CKPT=1 \
+    --export=ALL,TORCH_NCCL_HIGH_PRIORITY,GPU_MAX_HW_QUEUES,ORBIT2_DATA_TYPE,ORBIT2_MAX_EPOCH,ORBIT2_MAX_BATCHES,ORBIT2_BATCH_SIZE,ORBIT2_DATA_ROOT,ORBIT2_CONFIG_TEMPLATE,ORBIT2_SCALING_TAG,ORBIT2_OUTPUT_DIR,AI4S_SHARED_DIR,ORBIT2_ROOT,ORBIT2_ERA5_SPATIAL_RES,ORBIT2_FUSED_ATTN,ORBIT2_FSDP,ORBIT2_SIMPLE_DDP,ORBIT2_DISABLE_CKPT=1 \
     "$SCRIPT_DIR/sbatch_train_amd.sh"
 }
 
@@ -65,7 +91,10 @@ echo "=== ORBIT-2 scaling sweep (${ORBIT2_SCALING_TAG}) ==="
 echo "  Data root    : $ORBIT2_DATA_ROOT"
 echo "  Config       : $ORBIT2_CONFIG_TEMPLATE"
 echo "  Output base  : $ORBIT2_OUTPUT_DIR"
+echo "  Per-rank batch: $ORBIT2_BATCH_SIZE (fixed → weak scaling)  dtype: $ORBIT2_DATA_TYPE"
+echo "  Parallelism  : fsdp=$ORBIT2_SCALING_FSDP/node, simple_ddp=N (HSDP)"
 echo "  Epochs: $ORBIT2_MAX_EPOCH  Max batches: $ORBIT2_MAX_BATCHES"
+[[ -n "${ORBIT2_ROOT:-}" ]] && echo "  ORBIT2_ROOT  : $ORBIT2_ROOT"
 echo ""
 
 JOB_IDS=()
