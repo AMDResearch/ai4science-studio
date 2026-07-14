@@ -4,14 +4,14 @@
 #
 # Usage (from anywhere):
 #   export AI4S_SHARED_DIR=/path/to/shared
-#   export PERF_TOOLS_DIR=/path/to/perf-tools
+#   export OMNIHUB_TOOLS_DIR=/shared/omnihub/tools
 #   ./submit_perf_baseline_era5_amd.sh
 # Extra sbatch flags: ./submit_perf_baseline_era5_amd.sh --partition=YOUR_PARTITION --account=myacct
 
 set -euo pipefail
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 : "${AI4S_SHARED_DIR:?set AI4S_SHARED_DIR}"
-: "${PERF_TOOLS_DIR:?set PERF_TOOLS_DIR}"
+: "${OMNIHUB_TOOLS_DIR:?set OMNIHUB_TOOLS_DIR}"
 
 export ORBIT2_DATA_ROOT="${ORBIT2_DATA_ROOT:-${AI4S_SHARED_DIR}/models/ORBIT-2/data/superres/era5/1.0_deg}"
 export ORBIT2_CONFIG_TEMPLATE="${ORBIT2_CONFIG_TEMPLATE:-edm_8m_era5_1x8.yaml}"

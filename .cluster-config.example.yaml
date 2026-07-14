@@ -41,9 +41,18 @@ network:
   rccl_anp_plugin: ""    # Path to librccl-anp.so on host (default: /opt/rocm/lib/librccl-anp.so)
   libionic_path: ""      # Path to libionic.so.1 on host (default: /usr/lib/x86_64-linux-gnu/libionic.so.1)
 
-# Performance tooling (perf-analysis / perf-optimizer-loop recipes)
-# Shared location of the omnistat + TraceLens perf tools, exported to scripts as
-# PERF_TOOLS_DIR. Expected layout under this dir: perf-inspect/ (Python venv with
-# omnistat + TraceLens), omnistat-src/, victoriametrics/victoria-metrics-prod.
-perf_tools:
-  dir: ""                # e.g. "/shared/perf-tools"; leave blank if not using perf recipes
+# OmniHub integration (sibling repo — see integrations/omnihub/README.md)
+omnihub:
+  repo_dir: ""             # e.g. /home/$USER/git/omnihub
+  cluster: vultr           # maps to omnihub config/vultr.yaml on Lux
+  shared_dir: /shared/omnihub
+  results_dir: ""          # default: /shared/$USER/results/omnihub
+  rocm_version: "7.2.2"
+  # Shared perf/telemetry tools. Cluster-specific — set per site, do not hardcode
+  # these into recipes/scripts. Default: <shared_dir>/tools.
+  # The HydraGNN/ORBIT-2 perf recipes read this value via the OMNIHUB_TOOLS_DIR
+  # env var (export OMNIHUB_TOOLS_DIR=<tools_dir> before running them).
+  tools_dir: ""            # default: /shared/omnihub/tools
+  #   <tools_dir>/omnistat              GPU telemetry, no PMC          (--tools omnistat)
+  #   <tools_dir>/omnistat-rocprofiler  adds rocprofiler PMC counters  (--tools omnistat-rocprofiler-pmc1)
+  #   <tools_dir>/omnihub-inspect       omnistat-inspect + TraceLens venv (legacy deep-dive)

@@ -60,7 +60,7 @@ Tested stacking `channels_last` on the padding idea as a clean 2×2 ({NCHW, chan
 
 ```bash
 export AI4S_SHARED_DIR=/path/to/shared
-export PERF_TOOLS_DIR=/path/to/perf-tools
+export OMNIHUB_TOOLS_DIR=/shared/omnihub/tools
 # 1- and 2-node profiled GEMM analysis (TraceLens + Omnistat analyst/verifier)
 bash earth_science/models/ORBIT-2/examples/run_gemm_analysis.sh
 # Tool-independent kernel ranking from a single trace:

@@ -40,7 +40,7 @@ Every entry:
 
 ```bash
 # Venv name is site-specific; honour OMNISTAT_VENV (set at submit time), else the portable default.
-. "${OMNISTAT_VENV:-${PERF_TOOLS_DIR}/perf-inspect}/bin/activate"
+. "${OMNISTAT_VENV:-${OMNIHUB_TOOLS_DIR}/omnihub-inspect}/bin/activate"
 # sbatch-written manifest uses job_dir / trace_dir (not perf_run_dir / trace_paths[]).
 PERF_RUN=$(jq -r .job_dir <manifest>)
 TRACE=$(find "$(jq -r .trace_dir <manifest>)" -name '*.pt.trace.json' 2>/dev/null | sort | head -1)

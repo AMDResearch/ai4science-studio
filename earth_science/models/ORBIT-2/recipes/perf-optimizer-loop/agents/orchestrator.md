@@ -8,7 +8,7 @@ Drives the ORBIT-2 (Bayes-CAST EDM) optimizer loop on **MI355X-class** hardware.
 
 - Loop args: `<loop-uuid>`, `<n_iters_budget>`.
 - `REPO_ROOT` (cwd or env).
-- `.cluster-config.yaml` (partition, perf_tools.dir).
+- `.cluster-config.yaml` (partition, omnihub.tools_dir).
 - [`../lever_catalog.yaml`](../lever_catalog.yaml).
 
 ## Outputs
@@ -32,7 +32,7 @@ Per job: existing perf-analysis layout under `../<jobid>/` plus `foms.json` from
 
 ## Preflight (ORBIT-2)
 
-- `AI4S_SHARED_DIR`, `PERF_TOOLS_DIR` set.
+- `AI4S_SHARED_DIR`, `OMNIHUB_TOOLS_DIR` set.
 - `${AI4S_SHARED_DIR}/models/ORBIT-2/overlays/orbit2-overlay.img` exists.
 - `${AI4S_SHARED_DIR}/images/pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif` (or `ORBIT2_SIF`) exists.
 - `omnistat-usermode` + `victoria-metrics-prod` binaries present.

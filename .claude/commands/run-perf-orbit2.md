@@ -13,7 +13,7 @@ Read `.cluster-config.yaml` (repo root) or `~/.config/ai4science-studio/cluster.
 **Required for perf recipes:**
 
 - `paths.scratch` (or equivalent) → use as **`AI4S_SHARED_DIR`** (same convention as other studio scripts).
-- `perf_tools.dir` → use as **`PERF_TOOLS_DIR`** (layout: `perf-inspect/`, `omnistat-src/`, `victoriametrics/`). If missing or empty, stop and tell the user to re-run **`/init-cluster`** and answer **Q9 (Performance tooling)**.
+- `omnihub.tools_dir` → use as **`OMNIHUB_TOOLS_DIR`** (layout: `omnihub-inspect/`, `omnistat-src/`, `victoriametrics/`). If missing or empty, stop and tell the user to re-run **`/init-cluster`** and answer **Q9 (Performance tooling)**.
 
 Pre-fill SLURM partition/account from `slurm.partition` / `slurm.account` when present.
 
@@ -97,7 +97,7 @@ Export from cluster config + user answers:
 
 ```bash
 export AI4S_SHARED_DIR=<from cluster config paths.scratch>
-export PERF_TOOLS_DIR=<from cluster config perf_tools.dir>
+export OMNIHUB_TOOLS_DIR=<from cluster config omnihub.tools_dir>
 export ORBIT2_ROOT=<path to Bayes-CAST or ORBIT-2 tree with launch/train_edm.py>
 export ORBIT2_SIF=<path>                    # if not using default under $AI4S_SHARED_DIR/images/...
 export ORBIT2_OVERLAY=<path>                # optional if script defaults suffice

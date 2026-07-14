@@ -1,0 +1,13 @@
+entrypoint: applications/ai4science-hydragnn-train/train_wrapper.py
+
+# HydraGNN multi-dataset GFM training via OmniHub.
+# Paths resolve from AI4S_SHARED_DIR / HG_* env vars (see train_wrapper.py).
+
+HydraGNN:
+  datasets: ANI1x,Alexandria
+  batch_size: 200
+  num_epoch: 1
+  precision: fp64
+  max_num_batch: null
+  valtest: 0
+  profile_target_epoch: null

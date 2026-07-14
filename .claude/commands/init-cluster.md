@@ -69,9 +69,9 @@ echo "HTTPS_PROXY=${HTTPS_PROXY:-<unset>}"
 find "$HOME" /scratch /projects /opt -maxdepth 4 -name "*.sif" 2>/dev/null | head -20
 
 # 14. Performance tooling (perf-analysis / perf-optimizer-loop recipes — optional)
-# Look for an existing shared perf-tools dir (omnistat + TraceLens venv "perf-inspect/").
+# Look for an existing shared perf-tools dir (omnistat + TraceLens venv "omnihub-inspect/").
 for d in /shared/*/tools /shared/perf-tools "$HOME/perf-tools"; do
-    [[ -d "$d/perf-inspect" || -d "$d/omnistat-src" ]] && echo "perf_tools: $d"
+    [[ -d "$d/omnihub-inspect" || -d "$d/omnistat-src" ]] && echo "perf_tools: $d"
 done
 ```
 
@@ -127,8 +127,8 @@ If no internet, ask for proxy settings.
 
 **Q9. Performance tooling** (optional — only for `perf-analysis` / `perf-optimizer-loop` recipes)
 If a perf-tools dir was discovered (step 14), show it and ask to confirm; otherwise ask for the path
-or leave blank. This is exported to perf scripts as `PERF_TOOLS_DIR`; expected layout under it:
-`perf-inspect/` (omnistat + TraceLens venv), `omnistat-src/`, `victoriametrics/victoria-metrics-prod`.
+or leave blank. This is exported to perf scripts as `OMNIHUB_TOOLS_DIR`; expected layout under it:
+`omnihub-inspect/` (omnistat + TraceLens venv), `omnistat-src/`, `victoriametrics/victoria-metrics-prod`.
 
 **Q10. Config file location**
 - `.cluster-config.yaml` in this repo (recommended — per-checkout)
@@ -173,9 +173,9 @@ network:
   libionic_path: ""      # path to libionic.so.1 (default: /usr/lib/x86_64-linux-gnu/libionic.so.1)
 
 # Performance tooling — only if using perf-analysis / perf-optimizer-loop recipes (Q9).
-# Exported to scripts as PERF_TOOLS_DIR. Leave dir blank if not used.
+# Exported to scripts as OMNIHUB_TOOLS_DIR. Leave dir blank if not used.
 perf_tools:
-  dir: "<perf-tools dir or empty>"   # layout: perf-inspect/, omnistat-src/, victoriametrics/
+  dir: "<perf-tools dir or empty>"   # layout: omnihub-inspect/, omnistat-src/, victoriametrics/
 
 discovered_sifs:
   # SIF files found during init (informational — confirm they are under sif_cache)

@@ -15,7 +15,7 @@ Read `.cluster-config.yaml` (repo root) or `~/.config/ai4science-studio/cluster.
 **Required for perf recipes:**
 
 - Set **`AI4S_SHARED_DIR`** from cluster config (`paths.scratch` or documented scratch root).
-- Set **`PERF_TOOLS_DIR`** from `perf_tools.dir`. If missing, stop and send the user to **`/init-cluster`** Q9 (Performance tooling).
+- Set **`OMNIHUB_TOOLS_DIR`** from `omnihub.tools_dir`. If missing, stop and send the user to **`/init-cluster`** Q9 (Performance tooling).
 
 Pre-fill SLURM partition/account from config.
 
@@ -92,7 +92,7 @@ Confirm branch **`Predictive_GFM_2024`** if user cares about upstream alignment 
 
 ```bash
 export AI4S_SHARED_DIR=<from cluster config>
-export PERF_TOOLS_DIR=<from cluster config perf_tools.dir>
+export OMNIHUB_TOOLS_DIR=<from cluster config omnihub.tools_dir>
 # Optional overrides:
 # export HG_SIF=...  HG_OVERLAY=...  HG_REPO_DIR=...  HG_DATASETS=...  HG_DATA_DIR=...
 ```
