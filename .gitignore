@@ -69,6 +69,12 @@ vic_server.log
 studio/.venv/
 studio/.studio-jobs.*.json
 
+# Studio React/FastAPI stack — local venv, node deps, and built SPA
+studio/api/.venv/
+studio/api/__pycache__/
+studio/web/node_modules/
+studio/web/dist/
+
 # Session-scoped agent handoff files (ephemeral, not for the repo)
 HANDOFF.md
 .claude/settings.local.json
