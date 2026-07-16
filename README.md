@@ -157,6 +157,26 @@ cd earth_science/models/StormCast/examples
 No build step, no compiled code. The scripts pull public container images and model weights on first run.
 
 
+## Web GUI (point-and-click, no agent)
+
+Prefer a browser over a terminal or an agent? **Studio** is a small web GUI that runs on your
+cluster login node — browse models, set up your cluster, launch inference/training jobs, and
+watch their logs, all from forms. It reads the same `model.yaml` metadata and submits the same
+`sbatch` scripts as the agent, so nothing is duplicated.
+
+```bash
+# on the login node
+./studio.sh                                  # first run creates a venv (streamlit only)
+
+# from your laptop, in another terminal
+ssh -L 8501:localhost:8501 $USER@<login-node>
+# then open http://localhost:8501
+```
+
+It binds to `localhost` only and jobs run as you — reach it through the SSH tunnel above (there
+is no public URL, by design). See [`studio/README.md`](studio/README.md) for details.
+
+
 ## Contributing
 
 The fastest way to add a model is to let the agent do it:
