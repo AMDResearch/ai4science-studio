@@ -87,14 +87,19 @@ qos = p3.text_input("QOS", value=sl["qos"])
 
 # --- env var form -----------------------------------------------------------
 st.subheader("Parameters")
-scratch = cluster_config.scratch_dir(cfg)
-assets = cluster_config.assets(cfg)
+from core import suggestions
 
-if scratch:
-    env_overrides.setdefault("AI4S_SHARED_DIR", scratch)
-    st.caption(f"`AI4S_SHARED_DIR` = `{scratch}` (from cluster config)")
+root = suggestions.shared_root(cfg)
 
 fields = [f for f in form_builder.build_fields(model.env_vars) if f.name not in hidden]
+
+# Every sbatch script needs AI4S_SHARED_DIR. If a model doesn't declare it as an
+# env var (e.g. ORBIT-2), seed it from the cluster config so it's still exported.
+if root and not any(f.name == "AI4S_SHARED_DIR" for f in fields):
+    env_overrides.setdefault("AI4S_SHARED_DIR", root)
+    st.caption(f"`AI4S_SHARED_DIR` = `{root}` (from cluster config)")
+
+_CUSTOM = "✎ Enter a custom path…"
 
 values: dict[str, str] = {}
 preflight_warnings: list[str] = []
@@ -112,13 +117,43 @@ for f in fields:
         raw = st.text_input(label, value=f.default, help=f.description)
         values[f.name] = raw
         default_val = f.default
+    elif f.is_path:
+        # Path/config var: offer concrete suggestions (assets cache, path
+        # conventions, or examples/*.yaml) so a required field is never a blank
+        # box. "Custom" reveals a text input.
+        default_val = f.default
+        is_config = suggestions._kind(f.name) == "config"
+        opts: list[str] = []
+        # Config vars: put the model.yaml default first (it's the recommended one).
+        if is_config and f.default:
+            opts.append(f.default)
+        if f.name == "AI4S_SHARED_DIR" and root and root not in opts:
+            opts.append(root)
+        opts += [c for c in suggestions.candidates(model, f.name, cfg) if c not in opts]
+        if f.default and f.default not in opts:
+            opts.append(f.default)
+        opts.append(_CUSTOM)
+
+        def _fmt(p: str) -> str:
+            if p == _CUSTOM:
+                return p
+            if is_config:  # basename resolved at runtime; don't mark existence
+                return p
+            return f"{'✓ ' if suggestions.path_exists(p) else '⚠ '}{p}"
+
+        pick = st.selectbox(label, opts, index=0, help=f.description, format_func=_fmt)
+        if pick == _CUSTOM:
+            val = st.text_input(f"{f.name} — custom", value="", key=f"custom_{f.name}")
+        else:
+            val = pick
+        values[f.name] = val
+        # Only warn about missing absolute paths, not config basenames.
+        if val and not is_config and not suggestions.path_exists(val):
+            preflight_warnings.append(f"`{f.name}` path does not exist: `{val}`")
     else:
         val = st.text_input(label, value=f.default, help=f.description)
         values[f.name] = val
         default_val = f.default
-        # pre-flight: required path that doesn't exist
-        if f.is_path and val and not Path(val).expanduser().exists():
-            preflight_warnings.append(f"`{f.name}` path does not exist: `{val}`")
 
     # Only emit if changed from default OR required-and-nonempty. Never emit "".
     v = values[f.name]
