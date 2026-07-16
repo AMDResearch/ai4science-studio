@@ -23,6 +23,28 @@ ssh -L 8501:localhost:8501 $USER@<login-node>
 
 Override the port with `STUDIO_PORT=8600 ./studio.sh`.
 
+### Tip: one-command tunnel
+
+Add an alias to `~/.ssh/config` on your laptop so you don't retype the forward:
+
+```
+Host studio
+  HostName <login-node>
+  User <you>
+  LocalForward 8501 localhost:8501
+```
+
+Then just `ssh studio` and open `http://localhost:8501`.
+
+### Why there is no public URL
+
+Studio submits `sbatch`/`squeue` **as you, on your cluster**, so the process must live on
+the login node where your identity, filesystem, and the SLURM commands all exist. A hosted
+public link can't do that — it has no login and no scheduler. Reaching it through your own
+SSH tunnel is both the simplest and the safest access path (your SSH login *is* the auth).
+A durable team-wide URL would require a reverse proxy **with authentication** on an
+internal host — out of scope here.
+
 ## What it does
 
 - **Catalog** — browse all models with domain / task / license filters.
