@@ -1,0 +1,74 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/AMDResearch/ai4science-studio/studio/schema/cluster-config.schema.json",
+  "title": "AI4Science Studio .cluster-config.yaml",
+  "description": "Site-specific cluster config. Extra top-level blocks (omnihub, assets, perf_tools, discovered_sifs) are allowed and preserved on save.",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "slurm": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "partition": {"type": "string"},
+        "account": {"type": "string"},
+        "qos": {"type": "string"}
+      }
+    },
+    "paths": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "home": {"type": "string"},
+        "scratch": {"type": "string", "description": "Exported as AI4S_SHARED_DIR."},
+        "scratch_local": {"type": "string"},
+        "projects": {"type": "string"},
+        "sif_cache": {"type": "string"}
+      }
+    },
+    "containers": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "runtime": {"type": "string", "description": "apptainer | singularity | docker. Studio v1 runs apptainer only."},
+        "gpu_method": {"type": "string"}
+      }
+    },
+    "gpu": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "architecture": {"type": "string"},
+        "count_per_node": {"type": "number"},
+        "vram_gb": {"type": "number"}
+      }
+    },
+    "network": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "internet_access": {"type": "boolean"},
+        "proxy": {"type": "string"},
+        "mgmt_iface": {"type": "string"},
+        "ib_hca": {"type": "string"},
+        "rccl_anp_plugin": {"type": "string"},
+        "libionic_path": {"type": "string"}
+      }
+    },
+    "perf_tools": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {"dir": {"type": "string"}}
+    },
+    "assets": {
+      "type": "object",
+      "description": "Cached per-model discovered paths (SIF/overlay/clone/weights). Reused by the Run page to pre-fill path fields. Historically documented as 'discovered_sifs' in init-cluster.md; both names are tolerated.",
+      "additionalProperties": true
+    },
+    "discovered_sifs": {
+      "description": "Legacy alias / informational list of discovered SIF files.",
+      "type": ["array", "object"]
+    },
+    "omnihub": {"type": "object", "additionalProperties": true}
+  }
+}

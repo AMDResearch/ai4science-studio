@@ -65,6 +65,10 @@ vic_server.log
 # Local cluster config (site-specific, auto-created by agent)
 .cluster-config.yaml
 
+# Studio web GUI — local venv and per-user job state
+studio/.venv/
+studio/.studio-jobs.*.json
+
 # Session-scoped agent handoff files (ephemeral, not for the repo)
 HANDOFF.md
 .claude/settings.local.json
