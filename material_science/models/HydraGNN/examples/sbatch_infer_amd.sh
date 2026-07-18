@@ -43,7 +43,11 @@ set -euo pipefail
 # ---------------------------------------------------------------------------
 # SCRIPT_DIR — works both at submit time and inside the SLURM job
 # ---------------------------------------------------------------------------
-if [[ -n "${SLURM_JOB_ID:-}" ]]; then
+if [[ -n "${STUDIO_EXAMPLES_DIR:-}" ]]; then
+  # Invoked by AI4Science Studio, which bash-calls this script; scontrol would
+  # resolve to the studio's generated job.sh, so honor the explicit dir instead.
+  SCRIPT_DIR=$(cd "$STUDIO_EXAMPLES_DIR" && pwd)
+elif [[ -n "${SLURM_JOB_ID:-}" ]]; then
   _ORIG_CMD=$(scontrol show job "$SLURM_JOB_ID" | sed -n 's/.*Command=\(\S\+\).*/\1/p')
   SCRIPT_DIR=$(cd "$(dirname "$_ORIG_CMD")" && pwd)
 else
@@ -103,7 +107,16 @@ echo ""
 
 HG_INFER_REPO="${HG_INFER_REPO:-${HG_OUTPUT_DIR}/HydraGNN-infer}"
 
-apptainer exec --rocm \
+# Single-GPU inference runs mpi4py in singleton mode. When this job runs under
+# sbatch, the SLURM/PMIx launcher env leaks into the plain `apptainer exec` and
+# OpenMPI's ess/pmix module then tries (and fails) to join a nonexistent MPI
+# launch — "MPI_Init on a NULL communicator". Clear those vars for the exec only.
+_MPI_UNSET=()
+while IFS= read -r _v; do _MPI_UNSET+=(-u "$_v"); done < <(
+  env | grep -oE '^(SLURM_|PMIX_|PMI_|OMPI_)[A-Za-z0-9_]+' || true
+)
+
+env "${_MPI_UNSET[@]}" apptainer exec --rocm \
     --overlay "${HG_OVERLAY}:ro" \
     --bind "$(dirname "$HG_CHECKPOINT"):$(dirname "$HG_CHECKPOINT"):ro" \
     --bind "$(dirname "$HG_CONFIG"):$(dirname "$HG_CONFIG"):ro" \

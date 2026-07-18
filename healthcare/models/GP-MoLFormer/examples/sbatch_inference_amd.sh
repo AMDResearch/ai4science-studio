@@ -54,7 +54,11 @@
 
 set -euo pipefail
 
-if [[ -n "${SLURM_JOB_ID:-}" ]]; then
+if [[ -n "${STUDIO_EXAMPLES_DIR:-}" ]]; then
+  # Invoked by AI4Science Studio, which bash-calls this script; scontrol would
+  # resolve to the studio's generated job.sh, so honor the explicit dir instead.
+  SCRIPT_DIR=$(cd "$STUDIO_EXAMPLES_DIR" && pwd)
+elif [[ -n "${SLURM_JOB_ID:-}" ]]; then
   _ORIG_CMD=$(scontrol show job "$SLURM_JOB_ID" | sed -n 's/.*Command=\(\S\+\).*/\1/p')
   SCRIPT_DIR=$(cd "$(dirname "$_ORIG_CMD")" && pwd)
 else

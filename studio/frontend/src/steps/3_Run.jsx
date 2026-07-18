@@ -1,0 +1,157 @@
+import { useEffect, useRef, useState } from 'react'
+import { useStore } from '../store'
+import { api } from '../api'
+import { StepHeader, StatusBadge, Spinner } from '../components/ui'
+
+export function StepRun() {
+  const { model, domain, prompt, customPrompt, mode, partition, setPartition,
+          runId, setRunId, runState, setRunState, setResult, setStep,
+          params, resetRun, task, modelVariant } = useStore()
+  const [log, setLog] = useState([])
+  const [launching, setLaunching] = useState(false)
+  const [partitions, setPartitions] = useState([])
+  const logRef = useRef(null)
+  const esRef = useRef(null)
+
+  const activePrompt = customPrompt || prompt
+
+  useEffect(() => {
+    api.slurmPartitions().then(d => {
+      if (d.partitions) setPartitions(d.partitions)
+    }).catch(() => {})
+  }, [])
+
+  // Auto-scroll log
+  useEffect(() => {
+    if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight
+  }, [log])
+
+  // Cleanup SSE on unmount
+  useEffect(() => () => esRef.current?.close(), [])
+
+  async function launch() {
+    setLaunching(true)
+    setLog([])
+    resetRun()
+    try {
+      const { run_id } = await api.launchJob({
+        slug: model.slug,
+        domain,
+        task: task || 'inference',
+        mode,
+        prompt: activePrompt,
+        params: { ...params, model_variant: modelVariant },
+        partition,
+      })
+      setRunId(run_id)
+      setRunState('running')
+      // Start SSE stream
+      const es = new EventSource(`/api/jobs/${run_id}/stream`)
+      esRef.current = es
+      es.onmessage = (e) => {
+        const data = JSON.parse(e.data)
+        if (data.line) setLog(l => [...l, data.line])
+        if (data.done) {
+          es.close()
+          // Fetch final state
+          api.job(run_id).then(job => {
+            setRunState(job.state)
+            if (job.result) setResult(job.result)
+            if (job.state === 'completed') setStep(4)
+          })
+        }
+      }
+      es.onerror = () => es.close()
+    } catch (e) {
+      setLog(l => [...l, `[error] ${e.message}`])
+      setRunState('failed')
+    } finally {
+      setLaunching(false)
+    }
+  }
+
+  return (
+    <div>
+      <StepHeader
+        title="Run"
+        sub={`${model?.name || model?.slug} — ${mode === 'demo' ? 'Demo (synthetic)' : 'Live SLURM'} mode`}
+      />
+      <button className="btn btn-ghost" style={{ marginBottom: '1.2rem', fontSize: '.8rem' }}
+        onClick={() => setStep(2)}>← Back</button>
+
+      {/* Config summary */}
+      <div className="card" style={{ padding: '1rem', marginBottom: '1.2rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '.75rem', fontSize: '.85rem' }}>
+          <div>
+            <span style={{ color: '#52525b' }}>Model: </span>
+            <span style={{ color: '#f5f5f7', fontWeight: 600 }}>{model?.name || model?.slug}</span>
+          </div>
+          <div>
+            <span style={{ color: '#52525b' }}>Mode: </span>
+            <span className={`badge badge-${mode === 'demo' ? 'ok' : 'amd'}`}>{mode.toUpperCase()}</span>
+            {model?.slug === 'HydraGNN' && (
+              <span className="badge badge-info" style={{ marginLeft: '.4rem' }}>
+                {task === 'train' ? 'training scaling' : `inference · ${modelVariant}`}
+              </span>
+            )}
+          </div>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <span style={{ color: '#52525b' }}>Prompt: </span>
+            <span style={{ color: '#94a3b8' }}>{activePrompt.slice(0, 120)}{activePrompt.length > 120 ? '...' : ''}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Partition picker (live mode only) */}
+      {mode === 'live' && (
+        <div style={{ marginBottom: '1.2rem' }}>
+          <label className="section-label" style={{ display: 'block', marginBottom: '.4rem' }}>SLURM Partition</label>
+          <div style={{ display: 'flex', gap: '.5rem', flexWrap: 'wrap' }}>
+            {(partitions.length > 0 ? partitions : [
+              { partition: 'lux' }, { partition: 'rad' }
+            ]).map(p => (
+              <button key={p.partition}
+                className={`btn ${partition === p.partition ? 'btn-primary' : 'btn-ghost'}`}
+                style={{ fontSize: '.78rem', padding: '.3rem .7rem' }}
+                onClick={() => setPartition(p.partition)}>
+                {p.partition}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Launch button */}
+      {runState === 'idle' && (
+        <button className="btn btn-primary" style={{ marginBottom: '1.2rem' }}
+          disabled={launching} onClick={launch}>
+          {launching ? <Spinner size={14} /> : null}
+          {launching ? 'Launching...' : mode === 'demo' ? '▶ Run Demo' : '▶ Submit SLURM Job'}
+        </button>
+      )}
+
+      {/* Status */}
+      {runState !== 'idle' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '.75rem', marginBottom: '1rem' }}>
+          <StatusBadge state={runState} />
+          {runId && <span style={{ fontSize: '.75rem', color: '#52525b' }}>Run: {runId.slice(0, 8)}...</span>}
+          {(runState === 'completed' || runState === 'failed') && (
+            <button className="btn btn-ghost" style={{ fontSize: '.75rem', padding: '.25rem .6rem' }}
+              onClick={() => { resetRun(); setLog([]); }}>Reset</button>
+          )}
+          {runState === 'completed' && (
+            <button className="btn btn-primary" style={{ fontSize: '.75rem', padding: '.25rem .7rem' }}
+              onClick={() => setStep(4)}>View Results →</button>
+          )}
+        </div>
+      )}
+
+      {/* Log */}
+      {log.length > 0 && (
+        <div className="log-pane" ref={logRef}>
+          {log.join('\n')}
+        </div>
+      )}
+    </div>
+  )
+}

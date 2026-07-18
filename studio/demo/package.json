@@ -1,0 +1,11 @@
+{
+  "name": "studio-demo-recorder",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "record": "node record-demo.js"
+  },
+  "dependencies": {
+    "playwright": "^1.44.0"
+  }
+}

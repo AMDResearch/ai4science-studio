@@ -79,3 +79,55 @@ runs/
 
 # Stray SLURM stdout from perf runs (real logs live under perf-runs/<jobid>/)
 orbit2-train-*.out
+
+# ── Studio web application ────────────────────────────────────────────────────
+
+# Frontend build output and dependencies (regenerate with npm install / npm run build)
+studio/frontend/dist/
+studio/frontend/node_modules/
+
+# Backend runtime artifacts (ephemeral job output, SQLite state, bytecode)
+studio/backend/runs/
+studio/backend/studio.db
+studio/backend/__pycache__/
+studio/backend/tools/__pycache__/
+
+# Demo large media — videos > 1 MB and screenshot grids (keep scripts, not outputs)
+studio/demo/demo-output/*.mp4
+studio/demo/demo-output/*.webm
+studio/demo/demo-output/shots/
+studio/demo/demo-output/backend_*.log
+studio/demo/demo-output/frontend_*.log
+studio/demo/node_modules/
+
+# Baked data assets (large, regenerable via tools/bake_*.py — see assets/README.md)
+studio/backend/assets/*.json
+
+# ── LaTeX documentation ───────────────────────────────────────────────────────
+# Keep .tex source, .bib, Makefile; ignore compiled artifacts and binaries
+docs/*.pdf
+docs/*.aux
+docs/*.bbl
+docs/*.blg
+docs/*.log
+docs/*.out
+docs/*.toc
+docs/*.lof
+docs/*.lot
+docs/*.fls
+docs/*.fdb_latexmk
+docs/*.synctex.gz
+docs/*.xdv
+docs/*-blx.bib
+docs/*.bcf
+docs/*.run.xml
+
+# ── Root-level site-specific SLURM overlay build scripts ─────────────────────
+# These reference absolute paths for a specific cluster; not portable.
+# The canonical templates live in each model's examples/ directory.
+build_*.slurm
+build_*.log
+
+# Demo capture job logs (per-run, ephemeral)
+studio/scripts/demo/capture_demo_*.log
+studio/demo/studio_demo_*.log
