@@ -5,7 +5,7 @@ const STEPS = ['Domain', 'Model', 'Configure', 'Run', 'Analyze']
 
 export function AppShell({ children }) {
   const { step, setStep, mode, setMode, addModelOpen, setAddModelOpen,
-          domain, model } = useStore()
+          domain, model, view, setView } = useStore()
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
@@ -36,18 +36,39 @@ export function AppShell({ children }) {
           </div>
         </div>
 
-        {/* Step pills */}
-        <nav style={{ display: 'flex', gap: '.35rem', flex: 1, flexWrap: 'wrap' }}>
-          {STEPS.map((label, i) => {
-            const cls = i < step ? 'done' : i === step ? 'active' : 'future'
-            return (
-              <button key={i} className={`step-pill ${cls}`}
-                onClick={() => i < step && setStep(i)}
-                style={{ border: 'none', cursor: i < step ? 'pointer' : 'default' }}>
-                {i < step ? '✓ ' : `${i+1}. `}{label}
-              </button>
-            )
-          })}
+        {/* Step pills (hidden when in catalog view) */}
+        <nav style={{ display: 'flex', gap: '.35rem', flex: 1, flexWrap: 'wrap', alignItems: 'center' }}>
+          {view === 'catalog' ? (
+            <button className="step-pill active" style={{ border: 'none', cursor: 'default' }}>
+              Model Catalog
+            </button>
+          ) : (
+            STEPS.map((label, i) => {
+              const cls = i < step ? 'done' : i === step ? 'active' : 'future'
+              return (
+                <button key={i} className={`step-pill ${cls}`}
+                  onClick={() => i < step && setStep(i)}
+                  style={{ border: 'none', cursor: i < step ? 'pointer' : 'default' }}>
+                  {i < step ? '✓ ' : `${i+1}. `}{label}
+                </button>
+              )
+            })
+          )}
+          {/* Catalog toggle */}
+          <button
+            onClick={() => setView(view === 'catalog' ? 'wizard' : 'catalog')}
+            style={{
+              marginLeft: '.5rem', padding: '.25rem .65rem', borderRadius: '9999px',
+              fontSize: '.72rem', fontWeight: 700, letterSpacing: '.04em',
+              border: '1px solid',
+              background: view === 'catalog' ? '#ED1C24' : 'transparent',
+              borderColor: view === 'catalog' ? '#ED1C24' : '#52525b',
+              color: view === 'catalog' ? '#fff' : '#a1a1aa',
+              cursor: 'pointer', flexShrink: 0,
+              transition: 'all .15s',
+            }}>
+            {view === 'catalog' ? '← Wizard' : '⊞ Catalog'}
+          </button>
         </nav>
 
         {/* Demo / Live toggle */}

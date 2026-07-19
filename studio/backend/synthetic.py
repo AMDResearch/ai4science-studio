@@ -26,6 +26,50 @@ def _progress(emit: Callable, run_id: str, steps: list[str], delay: float = 0.8)
 
 def _earth_science(slug: str, task: str, prompt: str, params: dict,
                    out_dir: Path, emit: Callable, run_id: str) -> dict:
+    # ORBIT-2 DC temperature downscaling demo — uses REAL ERA5 data baked from Open-Meteo.
+    if slug == "ORBIT-2":
+        asset = Path(__file__).resolve().parent / "assets" / "dc_temperature.json"
+        if asset.exists():
+            data = json.loads(asset.read_text())
+            # Determine which event the user asked for (check params and prompt keywords)
+            event_key = params.get("dc_event", "july16_2024")
+            if event_key not in data.get("events", {}):
+                event_key = data.get("default_event", "july16_2024")
+            ev = data["events"][event_key]
+            steps = [
+                f"Loading ERA5 reanalysis: {ev.get('label', event_key)}...",
+                "Extracting DC-area patch (38–42°N, 74–80°W)...",
+                f"Coarse grid ({ev['coarse']['resolution_deg']}° = {ev['coarse']['model']}): {len(ev['coarse']['lat'])}×{len(ev['coarse']['lat'])} cells...",
+                "Running ORBIT-2 super-resolution (4× downscaling)...",
+                f"Fine grid ({ev['fine']['resolution_deg']}° = {ev['fine']['model']}): {len(ev['fine']['lat'])}×{len(ev['fine']['lat'])} cells...",
+                "Computing temperature gradient metrics...",
+                f"Peak temperature: {ev['peak_temp_c']} °C ({ev['peak_temp_f']} °F) — {ev['date']}",
+            ]
+            _progress(emit, run_id, steps, delay=0.55)
+            result = {
+                "type": "dc_downscaling",
+                "slug": slug,
+                "event_key": event_key,
+                "label": ev.get("label", event_key),
+                "date": ev["date"],
+                "peak_temp_c": ev["peak_temp_c"],
+                "peak_temp_f": ev["peak_temp_f"],
+                "dc": ev["dc"],
+                "coarse": ev["coarse"],
+                "fine": ev["fine"],
+                "time_series": ev.get("time_series", {}),
+                "available_events": {k: v.get("label", k) for k, v in data.get("events", {}).items()},
+                "note": ev.get("note", ""),
+                "source": data.get("source", "Open-Meteo ERA5 reanalysis"),
+            }
+            (out_dir / "dc_temperature.json").write_text(json.dumps({
+                "coarse": ev["coarse"], "fine": ev["fine"],
+                "dc": ev["dc"], "date": ev["date"],
+            }, indent=2))
+            emit(run_id, f"[demo] Real ERA5 data — peak {ev['peak_temp_c']}°C / {ev['peak_temp_f']}°F")
+            emit(run_id, f"[demo] Coarse grid {len(ev['coarse']['lat'])}×{len(ev['coarse']['lat'])} | Fine grid {len(ev['fine']['lat'])}×{len(ev['fine']['lat'])}")
+            return result
+
     try:
         import numpy as np
     except ImportError:
@@ -224,6 +268,57 @@ _SMILES_POOL = [
 def _healthcare(slug: str, task: str, prompt: str, params: dict,
                 out_dir: Path, emit: Callable, run_id: str) -> dict:
     rng = random.Random(42)
+
+    if slug == "GP-MoLFormer" and task == "finetune":
+        # GP-MoLFormer pair-tuning demo — replays REAL baked pair-tuning results.
+        asset = Path(__file__).resolve().parent / "assets" / "gpmolformer_finetune.json"
+        if asset.exists():
+            data = json.loads(asset.read_text())
+            prop = params.get("pairtune_prop", data.get("property", "qed")).upper()
+            steps = [
+                "Loading GP-MoLFormer pretrained checkpoint (IBM Research)...",
+                f"Building {prop}-steered molecule pairs (1000 pairs)...",
+                "Initializing soft-prompt tokens (pair-tuning PEFT)...",
+                f"Pair-tuning epoch 1/{data.get('num_epochs',10)} — backbone frozen, prompts training...",
+                f"Pair-tuning epoch 5/{data.get('num_epochs',10)} — {prop} improving...",
+                f"Pair-tuning epoch {data.get('num_epochs',10)}/{data.get('num_epochs',10)} — converged",
+                f"Evaluating: generating 20 molecules (before vs after)...",
+                "Computing molecular property shift...",
+            ]
+            _progress(emit, run_id, steps, delay=0.55)
+            result = dict(data)
+            result["type"] = "molecule_finetune"
+            result["slug"] = slug
+            b, a = data.get("before", {}), data.get("after", {})
+            emit(run_id, f"[demo] Before tuning: QED mean={b.get('qed_mean','?')}, Lipinski={b.get('lipinski_pass_rate','?'):.0%}" if isinstance(b.get('lipinski_pass_rate'), float) else f"[demo] Before: {b}")
+            emit(run_id, f"[demo] After tuning:  QED mean={a.get('qed_mean','?')}, Lipinski={a.get('lipinski_pass_rate','?'):.0%}" if isinstance(a.get('lipinski_pass_rate'), float) else f"[demo] After: {a}")
+            (out_dir / "finetune_result.json").write_text(json.dumps(result, indent=2))
+            return result
+        # Fallback: synthesize plausible pair-tuning results if asset not yet baked.
+        emit(run_id, "[demo] Pair-tuning asset not found — generating plausible synthetic results...")
+        emit(run_id, "[demo] Run tools/bake_gpmolformer_finetune.py to bake real results.")
+        before_mols, after_mols = [], []
+        for i in range(10):
+            smiles = _SMILES_POOL[i % len(_SMILES_POOL)]
+            mw = round(rng.uniform(200, 450), 1)
+            logp_b = round(rng.gauss(3.0, 1.5), 2)
+            logp_a = round(rng.gauss(2.3, 1.0), 2)   # lower logP after QED tuning
+            qed_b = round(rng.uniform(0.3, 0.6), 3)
+            qed_a = round(rng.uniform(0.55, 0.85), 3)  # higher QED after tuning
+            before_mols.append({"smiles": smiles, "qed": qed_b, "logp": logp_b,
+                                 "mw": mw, "lipinski": int(mw <= 500 and logp_b <= 5)})
+            after_mols.append({"smiles": smiles, "qed": qed_a, "logp": logp_a,
+                                "mw": mw, "lipinski": int(mw <= 500 and logp_a <= 5)})
+        def means(lst): return {k: round(sum(m[k] for m in lst)/len(lst), 4) for k in ("qed","logp") if lst}
+        def lrate(lst): return round(sum(m["lipinski"] for m in lst)/len(lst), 4) if lst else 0
+        result = {
+            "type": "molecule_finetune", "slug": slug, "property": "qed", "num_epochs": 10,
+            "epochs": [{"ep": i, "loss": round(1.2 - 0.08*i + rng.gauss(0, 0.03), 4)} for i in range(10)],
+            "before": {**means(before_mols), "lipinski_pass_rate": lrate(before_mols), "molecules": before_mols},
+            "after":  {**means(after_mols),  "lipinski_pass_rate": lrate(after_mols),  "molecules": after_mols},
+        }
+        (out_dir / "finetune_result.json").write_text(json.dumps(result, indent=2))
+        return result
 
     if slug == "GP-MoLFormer":
         steps = [

@@ -54,6 +54,10 @@ export const useStore = create((set, get) => ({
   outputFiles: [],
   setOutputFiles: (f) => set({ outputFiles: f }),
 
+  // App view — 'wizard' (default) or 'catalog' (model-gallery tab)
+  view: 'wizard',
+  setView: (v) => set({ view: v }),
+
   // Add-model modal
   addModelOpen: false,
   setAddModelOpen: (v) => set({ addModelOpen: v }),

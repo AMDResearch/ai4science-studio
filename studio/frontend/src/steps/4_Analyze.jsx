@@ -528,12 +528,284 @@ function TrainingConvergenceViz({ result }) {
   )
 }
 
+// ── DC Temperature Downscaling Viz ────────────────────────────────────────────
+function DCDownscalingViz({ result }) {
+  const [activeEvent, setActiveEvent] = useState(result.event_key || 'july16_2024')
+
+  // Use the current result if no event switch; event switching requires a new job.
+  const coarse = result.coarse || {}
+  const fine = result.fine || {}
+
+  // Map temperature to CSS rgb (blue=cold 15°C → white=25°C → red=42°C)
+  function tempToRgb(t, tmin, tmax) {
+    const norm = Math.max(0, Math.min(1, (t - tmin) / (tmax - tmin || 1)))
+    if (norm < 0.5) {
+      const f = norm * 2
+      return `rgb(${Math.round(f * 255)},${Math.round(f * 255)},255)`
+    } else {
+      const f = (norm - 0.5) * 2
+      return `rgb(255,${Math.round((1 - f) * 255)},${Math.round((1 - f) * 255)})`
+    }
+  }
+
+  function HeatMap({ grid, lats, lons, dcLat, dcLon, height = 220 }) {
+    if (!grid || grid.length === 0) return <div style={{ color: '#52525b', padding: '1rem', textAlign: 'center' }}>No grid data</div>
+    const allTemps = grid.flat().filter(t => t !== null)
+    const tmin = Math.min(...allTemps), tmax = Math.max(...allTemps)
+    const rows = grid.length, cols = grid[0]?.length || 1
+    const cellW = 100 / cols, cellH = height / rows
+
+    // DC marker position in grid coords
+    const dcRow = dcLat !== undefined && lats ? Math.round((dcLat - lats[0]) / ((lats[lats.length-1] - lats[0]) / (rows-1))) : null
+    const dcCol = dcLon !== undefined && lons ? Math.round((dcLon - lons[0]) / ((lons[lons.length-1] - lons[0]) / (cols-1))) : null
+
+    return (
+      <svg width="100%" viewBox={`0 0 100 ${height}`} preserveAspectRatio="none"
+        style={{ borderRadius: '.4rem', overflow: 'hidden', display: 'block' }}>
+        {grid.map((row, ri) =>
+          row.map((t, ci) => t !== null ? (
+            <rect key={`${ri}-${ci}`}
+              x={ci * cellW} y={ri * cellH}
+              width={cellW + 0.5} height={cellH + 0.5}
+              fill={tempToRgb(t, tmin, tmax)} />
+          ) : null)
+        )}
+        {/* DC marker */}
+        {dcRow !== null && dcCol !== null && dcRow >= 0 && dcRow < rows && dcCol >= 0 && dcCol < cols && (
+          <g>
+            <circle cx={(dcCol + 0.5) * cellW} cy={(dcRow + 0.5) * cellH} r={2}
+              fill="none" stroke="#ED1C24" strokeWidth={0.8} />
+            <circle cx={(dcCol + 0.5) * cellW} cy={(dcRow + 0.5) * cellH} r={0.8}
+              fill="#ED1C24" />
+          </g>
+        )}
+      </svg>
+    )
+  }
+
+  function ColorBar({ tmin, tmax }) {
+    const steps = 20
+    const w = 100 / steps
+    return (
+      <div style={{ marginTop: '.5rem' }}>
+        <svg width="100%" viewBox="0 0 100 8" style={{ display: 'block' }}>
+          {Array.from({ length: steps }, (_, i) => {
+            const t = tmin + (tmax - tmin) * i / (steps - 1)
+            return <rect key={i} x={i * w} y={0} width={w + 0.5} height={8} fill={tempToRgb(t, tmin, tmax)} />
+          })}
+        </svg>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.65rem', color: '#71717a' }}>
+          <span>{tmin.toFixed(1)}°C</span>
+          <span>Temperature</span>
+          <span>{tmax.toFixed(1)}°C</span>
+        </div>
+      </div>
+    )
+  }
+
+  const allCoarse = (coarse.temp_c || []).flat().filter(t => t !== null)
+  const allFine   = (fine.temp_c   || []).flat().filter(t => t !== null)
+  const tmin = Math.min(...allCoarse, ...allFine)
+  const tmax = Math.max(...allCoarse, ...allFine)
+
+  return (
+    <div>
+      <div style={{ marginBottom: '.75rem', fontSize: '.88rem', color: '#a1a1aa', lineHeight: 1.5 }}>
+        <strong style={{ color: '#f5f5f7' }}>{result.label || result.date}</strong>
+        {result.peak_temp_c && (
+          <span style={{ marginLeft: '.75rem' }}>
+            Peak: <span style={{ color: '#ff8f93', fontWeight: 700 }}>
+              {result.peak_temp_c}°C / {result.peak_temp_f}°F
+            </span>
+          </span>
+        )}
+      </div>
+
+      {/* Event selector */}
+      {result.available_events && Object.keys(result.available_events).length > 1 && (
+        <div style={{ marginBottom: '1rem', fontSize: '.78rem', color: '#71717a' }}>
+          <span style={{ marginRight: '.5rem' }}>Dataset:</span>
+          {Object.entries(result.available_events).map(([k, label]) => (
+            <span key={k} style={{
+              marginRight: '.5rem', padding: '.2rem .55rem', borderRadius: '9999px',
+              background: activeEvent === k ? '#ED1C24' : 'transparent',
+              border: '1px solid', borderColor: activeEvent === k ? '#ED1C24' : '#3f3f46',
+              color: activeEvent === k ? '#fff' : '#a1a1aa', cursor: 'default',
+              fontSize: '.7rem',
+            }}>{label}</span>
+          ))}
+          <span style={{ color: '#52525b' }}>— run a new job to switch events</span>
+        </div>
+      )}
+
+      {/* Stat cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(140px,1fr))', gap: '.65rem', marginBottom: '1rem' }}>
+        {[
+          { label: 'Date', value: result.date || '—' },
+          { label: 'Peak Temp', value: result.peak_temp_c ? `${result.peak_temp_c}°C` : '—', color: '#ff8f93' },
+          { label: 'Coarse Grid', value: coarse.label || `${coarse.resolution_deg}°` },
+          { label: 'Fine Grid', value: fine.label || `${fine.resolution_deg}°` },
+          { label: 'Coarse Peak', value: coarse.peak_temp_c ? `${coarse.peak_temp_c}°C` : '—' },
+          { label: 'Fine Peak', value: fine.peak_temp_c ? `${fine.peak_temp_c}°C` : '—', color: '#ff8f93' },
+        ].map(s => (
+          <div key={s.label} className="card" style={{ padding: '.65rem', textAlign: 'center' }}>
+            <div className="section-label" style={{ marginBottom: '.25rem', fontSize: '.62rem' }}>{s.label}</div>
+            <div style={{ fontSize: '1rem', fontWeight: 800, color: s.color || '#f5f5f7' }}>{s.value}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Two heat maps side by side */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '.75rem' }}>
+        {[
+          { label: `Coarse — ${coarse.label || coarse.model || '0.25°'} (input)`,
+            grid: coarse.temp_c, lats: coarse.lat, lons: coarse.lon },
+          { label: `Fine — ${fine.label || fine.model || '0.1°'} (ORBIT-2 output)`,
+            grid: fine.temp_c, lats: fine.lat, lons: fine.lon },
+        ].map(({ label, grid, lats, lons }) => (
+          <div key={label} className="card" style={{ padding: '.6rem' }}>
+            <div className="section-label" style={{ marginBottom: '.4rem', fontSize: '.68rem' }}>{label}</div>
+            <HeatMap grid={grid} lats={lats} lons={lons}
+              dcLat={result.dc?.lat} dcLon={result.dc?.lon} />
+          </div>
+        ))}
+      </div>
+      <ColorBar tmin={tmin} tmax={tmax} />
+      <div style={{ marginTop: '.5rem', fontSize: '.72rem', color: '#52525b' }}>
+        <span style={{ color: '#ED1C24' }}>●</span> Washington DC (38.9°N 77.0°W) ·
+        Source: {result.source || 'Open-Meteo ERA5'} · ORBIT-2 4× super-resolution
+      </div>
+    </div>
+  )
+}
+
+// ── GP-MoLFormer Pair-Tuning Viz ─────────────────────────────────────────────
+function MolefineTuneViz({ result }) {
+  const b = result.before || {}, a = result.after || {}
+  const prop = (result.property || 'qed').toUpperCase()
+  const epochs = result.epochs || []
+
+  function delta(av, bv, higher = true) {
+    if (av == null || bv == null) return null
+    const d = av - bv
+    const better = higher ? d > 0 : d < 0
+    return { d: Math.abs(d).toFixed(3), better, pct: Math.abs(d / (bv || 1) * 100).toFixed(0) }
+  }
+
+  const metrics = [
+    { label: 'QED Mean', bv: b.qed_mean, av: a.qed_mean, higher: true },
+    { label: 'logP Mean', bv: b.logp_mean, av: a.logp_mean, higher: false },
+    { label: 'Lipinski Pass', bv: b.lipinski_pass_rate, av: a.lipinski_pass_rate, higher: true, pct: true },
+  ]
+
+  const curveDat = epochs.map(e => ({ ep: e.ep, loss: e.loss }))
+
+  return (
+    <div>
+      <div style={{ marginBottom: '.75rem', fontSize: '.88rem', color: '#a1a1aa', lineHeight: 1.5 }}>
+        <strong style={{ color: '#f5f5f7' }}>GP-MoLFormer pair-tuning</strong>
+        {' — '} property optimized: <span style={{ color: '#38bdf8', fontWeight: 700 }}>{prop}</span>
+        {result.num_epochs && ` · ${result.num_epochs} epochs`}
+      </div>
+
+      {/* Before / after comparison */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(170px,1fr))', gap: '.75rem', marginBottom: '1rem' }}>
+        {metrics.map(({ label, bv, av, higher, pct }) => {
+          const d = delta(av, bv, higher)
+          return (
+            <div key={label} className="card" style={{ padding: '.75rem', textAlign: 'center' }}>
+              <div className="section-label" style={{ marginBottom: '.3rem' }}>{label}</div>
+              <div style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'center' }}>
+                <div>
+                  <div style={{ fontSize: '.6rem', color: '#52525b' }}>Before</div>
+                  <div style={{ fontSize: '1rem', fontWeight: 800, color: '#71717a' }}>
+                    {bv != null ? (pct ? `${(bv*100).toFixed(0)}%` : bv.toFixed(3)) : '—'}
+                  </div>
+                </div>
+                <div style={{ fontSize: '1.2rem', color: d?.better ? '#21c77a' : '#f5a524' }}>
+                  {d?.better ? '↑' : '↓'}
+                </div>
+                <div>
+                  <div style={{ fontSize: '.6rem', color: '#52525b' }}>After</div>
+                  <div style={{ fontSize: '1rem', fontWeight: 800, color: d?.better ? '#21c77a' : '#f5a524' }}>
+                    {av != null ? (pct ? `${(av*100).toFixed(0)}%` : av.toFixed(3)) : '—'}
+                  </div>
+                </div>
+              </div>
+              {d && (
+                <div style={{ fontSize: '.65rem', color: d.better ? '#21c77a' : '#f5a524', marginTop: '.2rem' }}>
+                  {d.better ? '+' : '-'}{d.d} ({d.pct}%)
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+        {/* Loss curve */}
+        {curveDat.length > 0 && (
+          <div className="card" style={{ padding: '.75rem' }}>
+            <div className="section-label" style={{ marginBottom: '.4rem' }}>Pair-tuning loss</div>
+            <ResponsiveContainer width="100%" height={180}>
+              <LineChart data={curveDat} margin={{ top: 4, right: 12, bottom: 4, left: 0 }}>
+                <CartesianGrid stroke="#27272a" strokeDasharray="3 3" />
+                <XAxis dataKey="ep" tick={{ fill: '#71717a', fontSize: 10 }} />
+                <YAxis tick={{ fill: '#71717a', fontSize: 10 }} domain={['auto','auto']} />
+                <Tooltip contentStyle={{ background: '#141416', border: '1px solid #27272a', fontSize: 11 }} />
+                <Line type="monotone" dataKey="loss" stroke="#38bdf8" dot={false}
+                  strokeWidth={2} isAnimationActive={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+
+        {/* Before/after molecule samples */}
+        <div className="card" style={{ padding: '.75rem' }}>
+          <div className="section-label" style={{ marginBottom: '.4rem' }}>Generated molecules (sample)</div>
+          {(['before','after']).map(stage => {
+            const mols = result[stage]?.molecules?.slice(0, 4) || []
+            return (
+              <div key={stage} style={{ marginBottom: '.5rem' }}>
+                <div style={{ fontSize: '.68rem', fontWeight: 700, color: stage === 'before' ? '#71717a' : '#21c77a',
+                  marginBottom: '.25rem', textTransform: 'uppercase', letterSpacing: '.05em' }}>{stage}</div>
+                {mols.map((m, i) => (
+                  <div key={i} style={{ marginBottom: '.2rem', display: 'flex', justifyContent: 'space-between',
+                    alignItems: 'center', gap: '.5rem' }}>
+                    <code style={{ fontSize: '.65rem', color: '#7dd3fc', flex: 1,
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {m.smiles}
+                    </code>
+                    {m.qed != null && (
+                      <span className={`badge badge-${m.qed > 0.7 ? 'ok' : m.qed > 0.5 ? 'info' : 'muted'}`}
+                        style={{ fontSize: '.6rem', flexShrink: 0 }}>
+                        QED {m.qed.toFixed(3)}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      <div style={{ fontSize: '.75rem', color: '#52525b', lineHeight: 1.5 }}>
+        {result.model || 'GP-MoLFormer'} · Pair-tuning PEFT (IBM Research) ·
+        Backbone frozen; only soft-prompt tokens are trained
+      </div>
+    </div>
+  )
+}
+
 function ResultView({ result, runId }) {
   if (!result) return null
   switch (result.type) {
     case 'downscaling': return <DownscalingViz result={result} runId={runId} />
     case 'atomistic_energy': return <EnergyViz result={result} />
     case 'training_convergence': return <TrainingConvergenceViz result={result} />
+    case 'dc_downscaling': return <DCDownscalingViz result={result} />
+    case 'molecule_finetune': return <MolefineTuneViz result={result} />
     case 'weather_forecast': return <WeatherViz result={result} />
     case 'atomistic_properties':
     case 'crystal_generation': return <MaterialsViz result={result} />

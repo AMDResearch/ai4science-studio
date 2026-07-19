@@ -6,7 +6,8 @@ import { StepHeader, PromptCard, Spinner } from '../components/ui'
 export function StepConfigure() {
   const { model, domain, prompt, setPrompt, customPrompt, setCustomPrompt,
           promptError, setPromptError, mode, setStep,
-          task, setTask, modelVariant, setModelVariant } = useStore()
+          task, setTask, modelVariant, setModelVariant,
+          setParam } = useStore()
   const [curated, setCurated] = useState([])
   const [loading, setLoading] = useState(true)
   const [showCustom, setShowCustom] = useState(false)
@@ -103,10 +104,43 @@ export function StepConfigure() {
         </div>
       )}
 
+      {/* GP-MoLFormer: task toggle (Generation vs Fine-tuning) */}
+      {model?.slug === 'GP-MoLFormer' && (
+        <div style={{ marginBottom: '1.2rem' }}>
+          <div className="section-label" style={{ marginBottom: '.5rem' }}>Task</div>
+          <div style={{ display: 'flex', gap: '.5rem' }}>
+            {[
+              { id: 'inference', label: 'Generation', sub: 'Generate novel drug-like molecules' },
+              { id: 'finetune', label: 'Pair-tuning', sub: 'Steer generation toward QED / logP / DRD2' },
+            ].map(t => (
+              <div key={t.id}
+                className={`card clickable${task === t.id ? ' selected' : ''}`}
+                onClick={() => setTask(t.id)}
+                style={{ flex: 1, padding: '.7rem .9rem', userSelect: 'none' }}>
+                <div style={{ fontWeight: 700, fontSize: '.88rem', color: '#f5f5f7' }}>{t.label}</div>
+                <div style={{ fontSize: '.74rem', color: '#a1a1aa', marginTop: '.15rem' }}>{t.sub}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ORBIT-2: DC event selector */}
+      {model?.slug === 'ORBIT-2' && (
+        <div style={{ marginBottom: '1.2rem' }}>
+          <div className="section-label" style={{ marginBottom: '.4rem' }}>DC Temperature Dataset</div>
+          <div style={{ fontSize: '.78rem', color: '#a1a1aa', marginBottom: '.6rem' }}>
+            Select the DC heatwave event for the downscaling demo, or use another prompt below.
+          </div>
+        </div>
+      )}
+
       {/* Curated prompts */}
       <div style={{ marginBottom: '1.2rem' }}>
         <div className="section-label" style={{ marginBottom: '.6rem' }}>
-          {model?.slug === 'HydraGNN' && task === 'train' ? 'Training-scaling Demo' : 'Suggested Prompts'}
+          {model?.slug === 'HydraGNN' && task === 'train' ? 'Training-scaling Demo'
+            : model?.slug === 'GP-MoLFormer' && task === 'finetune' ? 'Pair-tuning Demo'
+            : 'Suggested Prompts'}
         </div>
         {loading && <Spinner size={20} />}
         {!loading && curated.length === 0 && (
@@ -114,8 +148,13 @@ export function StepConfigure() {
         )}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '.5rem' }}>
           {curated
-            .filter(p => model?.slug !== 'HydraGNN' ||
-              (task === 'train' ? p.task === 'train' : p.task !== 'train'))
+            .filter(p => {
+              if (model?.slug === 'HydraGNN')
+                return task === 'train' ? p.task === 'train' : p.task !== 'train'
+              if (model?.slug === 'GP-MoLFormer')
+                return task === 'finetune' ? p.task === 'finetune' : p.task !== 'finetune'
+              return true
+            })
             .map((p, i) => (
             <PromptCard
               key={i}
@@ -123,7 +162,11 @@ export function StepConfigure() {
               text={p.text}
               task={p.task}
               selected={!showCustom && prompt === p.text}
-              onClick={() => { setPrompt(p.text); setShowCustom(false); setPromptError('') }}
+              onClick={() => {
+                setPrompt(p.text); setShowCustom(false); setPromptError('')
+                // Pass event-specific params from prompt metadata through to the job.
+                if (p.dc_event) setParam('dc_event', p.dc_event)
+              }}
             />
           ))}
         </div>

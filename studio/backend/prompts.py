@@ -14,6 +14,8 @@ _CURATED: dict[str, list[dict]] = {
         {"label": "Rapid intensification ensemble", "text": "Generate a 10-member ensemble forecast of a Category 2 hurricane for 2025-09-10T00:00 over the Atlantic, 6 forecast steps.", "task": "ensemble"},
     ],
     "ORBIT-2": [
+        {"label": "DC July 2024 record heatwave", "text": "Downscale the July 14-17 2024 Washington DC record heatwave (104F / 40C peak) from ERA5 0.25-degree to 0.1-degree resolution — show temperature field at two resolutions.", "task": "inference", "dc_event": "july16_2024"},
+        {"label": "DC July 4 2024 Independence Day heat", "text": "Downscale the July 4 2024 Independence Day heat in Washington DC from ERA5 0.25-degree to 0.1-degree resolution.", "task": "inference", "dc_event": "july4_2024"},
         {"label": "Western US climate downscaling", "text": "Downscale ERA5 reanalysis to 4 km over the Western US (California, Nevada, Arizona) for July 2024, focusing on temperature and precipitation.", "task": "inference"},
         {"label": "Pacific Northwest precipitation", "text": "Produce high-resolution precipitation maps for the Pacific Northwest for winter 2023-2024 from coarse GCM output.", "task": "inference"},
         {"label": "Heat dome event downscaling", "text": "Downscale the June 2021 Pacific Northwest heat dome event from ERA5 at hourly resolution over Washington and Oregon.", "task": "inference"},
@@ -55,7 +57,8 @@ _CURATED: dict[str, list[dict]] = {
         {"label": "Benzene-scaffold drug molecules", "text": "Generate 20 drug-like molecules with a benzene scaffold (SMILES: c1ccccc1) optimized for oral bioavailability.", "task": "inference"},
         {"label": "Kinase inhibitor generation", "text": "Generate 50 ATP-competitive kinase inhibitor candidates with molecular weight < 500 Da and LogP < 5.", "task": "inference"},
         {"label": "Antibiotic scaffold expansion", "text": "Generate 30 novel beta-lactam antibiotic analogs from the penicillin core scaffold for gram-negative bacteria.", "task": "inference"},
-        {"label": "Fine-tune on bioactivity data", "text": "Fine-tune GP-MoLFormer on 2000 SMILES with IC50 measurements against EGFR kinase.", "task": "finetune"},
+        {"label": "Pair-tune for drug-likeness (QED)", "text": "Pair-tune GP-MoLFormer on 1000 QED-steered molecule pairs to shift generation toward higher drug-likeness. Compare before/after QED distribution and Lipinski compliance.", "task": "finetune"},
+        {"label": "Pair-tune for lipophilicity (logP)", "text": "Pair-tune GP-MoLFormer on 1000 logP-steered pairs to reduce lipophilicity toward the optimal oral drug range (1 < logP < 3).", "task": "finetune"},
     ],
     "SwinUNETR": [
         {"label": "Brain tumor segmentation", "text": "Segment tumor core, enhancing tumor, and peritumoral edema in a 3D brain MRI using SwinUNETR trained on BraTS.", "task": "inference"},

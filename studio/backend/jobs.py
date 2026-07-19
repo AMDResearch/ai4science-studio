@@ -108,10 +108,15 @@ def _build_slurm_script(run_id: str, slug: str, domain: str, task: str,
     log_path = str(_run_dir(run_id) / "slurm.log")
 
     # Pick the most specific sbatch script (prefer task-matching name).
-    # HydraGNN uses our own trained-model inference script (studio_infer), which
-    # predicts energy on a real held-out material and reports pred vs DFT.
     if slug == "HydraGNN":
+        # Use our trained-model inference script; DDP scripts are for the training workflow.
         sbatch_candidates = list(model_dir.glob("examples/sbatch_studio_infer_amd.sh"))
+    elif slug == "GP-MoLFormer" and task == "finetune":
+        # Pair-tuning: prefer the dedicated pairtune sbatch if it exists.
+        sbatch_candidates = (
+            list(model_dir.glob("examples/sbatch*pairtune*amd*.sh")) +
+            list(model_dir.glob("examples/sbatch*finetune*amd*.sh"))
+        )
     else:
         sbatch_candidates = (
             list(model_dir.glob(f"examples/sbatch*{task}*amd*.sh")) +
@@ -193,9 +198,25 @@ def _build_slurm_script(run_id: str, slug: str, domain: str, task: str,
             "",
         ]
 
-    # Extra params from UI
+    # GP-MoLFormer: pass pairtune params and result output path for finetune task.
+    _GPMOL_WORK = f"{_AI4S_SHARED_DIR}/models/GP-MoLFormer"
+    if slug == "GP-MoLFormer" and task == "finetune":
+        prop = str(params.get("pairtune_prop", "qed")).lower()
+        epochs = int(params.get("pairtune_epochs", 10))
+        script_lines += [
+            f"export GPMOL_WORK_DIR={_GPMOL_WORK!r}",
+            f"export PAIRTUNE_PROP={prop!r}",
+            f"export PAIRTUNE_EPOCHS={epochs}",
+            f"export STUDIO_RESULT_OUT={str(_run_dir(run_id) / 'gpmol_finetune_result.json')!r}",
+            "",
+        ]
+
+    # Extra params from UI (skip ones already handled above)
+    _handled = {"model_variant", "struct_index", "pairtune_prop", "pairtune_epochs",
+                "dc_event", "model_variant", "STRUCT_INDEX"}
     for k, v in params.items():
-        script_lines.append(f"export {k.upper()}={v!r}")
+        if k.lower() not in _handled:
+            script_lines.append(f"export {k.upper()}={v!r}")
     script_lines.append("")
 
     if upstream_script:
@@ -284,6 +305,43 @@ def _harvest_results(run_id: str):
                 _emit(run_id, f"[studio] Results harvested: {rjson.read_text()}")
             except Exception as e:
                 _emit(run_id, f"[studio] Could not parse HydraGNN result: {e}")
+
+    elif slug == "GP-MoLFormer":
+        # sbatch_pairtune_amd.sh writes a result JSON for finetune task;
+        # inference task parses generated_molecules.csv from workspace.
+        rjson = _run_dir(run_id) / "gpmol_finetune_result.json"
+        if rjson.exists():
+            try:
+                job["result"] = json.loads(rjson.read_text())
+                _jobs[run_id] = job
+                _emit(run_id, f"[studio] GP-MoLFormer finetune results harvested.")
+            except Exception as e:
+                _emit(run_id, f"[studio] Could not parse GP-MoLFormer finetune result: {e}")
+        else:
+            # Inference: parse generated_molecules.csv from GPMOL_WORK_DIR
+            work = f"{_AI4S_SHARED_DIR}/models/GP-MoLFormer"
+            csv_path = Path(work) / "generated.csv"
+            if csv_path.exists():
+                try:
+                    import csv as csv_mod
+                    molecules = []
+                    with open(csv_path) as f:
+                        for row in csv_mod.reader(f):
+                            s = row[0].strip() if row else ""
+                            if s and s.lower() != "smiles":
+                                molecules.append({"smiles": s})
+                    job["result"] = {
+                        "type": "molecule_generation",
+                        "model": "GP-MoLFormer",
+                        "n_generated": len(molecules),
+                        "n_valid": len(molecules),
+                        "lipinski_pass_rate": None,
+                        "molecules": molecules[:20],
+                    }
+                    _jobs[run_id] = job
+                    _emit(run_id, f"[studio] {len(molecules)} molecules harvested.")
+                except Exception as e:
+                    _emit(run_id, f"[studio] Could not parse GP-MoLFormer output: {e}")
 
 
 def _poll_slurm(run_id: str, slurm_job_id: str):
