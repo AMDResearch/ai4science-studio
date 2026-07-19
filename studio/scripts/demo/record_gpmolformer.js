@@ -1,5 +1,4 @@
 'use strict'
-/* GP-MoLFormer demo video: baseline generation then QED pair-tuning comparison. */
 const path = require('path')
 const { chromium } = require('/home/spannala/Projects/ai4science-studio/studio/demo/node_modules/playwright')
 const { execSync } = require('child_process')
@@ -8,17 +7,21 @@ const FRONT = process.env.FRONT_URL || 'http://127.0.0.1:5299'
 const BACK  = process.env.BACK_URL  || 'http://127.0.0.1:8299'
 const OUT   = process.env.OUT_DIR   || '/home/spannala/Projects/ai4science-studio/studio/demo/demo-output'
 const FFMPEG = process.env.FFMPEG || '/home/spannala/Projects/ai4science-studio/studio/backend/.venv/lib/python3.12/site-packages/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2'
+const HOLD = 30000
 
-async function caption(page, text, ms = 2200) {
+async function showCaption(page, text) {
   await page.evaluate(t => {
+    document.getElementById('__cap__')?.remove()
     const el = document.createElement('div'); el.id = '__cap__'
-    el.style.cssText = 'position:fixed;bottom:48px;left:50%;transform:translateX(-50%);' +
-      'background:rgba(237,28,36,.92);color:#fff;font-weight:700;font-size:22px;' +
-      'padding:14px 32px;border-radius:12px;z-index:99999;max-width:80vw;text-align:center;' +
-      'font-family:Inter,sans-serif;letter-spacing:.02em;box-shadow:0 4px 24px rgba(0,0,0,.5)'
+    el.style.cssText = 'position:fixed;bottom:40px;left:50%;transform:translateX(-50%);' +
+      'background:rgba(10,2,3,0.88);color:#fff;font-weight:700;font-size:20px;' +
+      'padding:12px 28px;border-radius:10px;z-index:99999;max-width:88vw;text-align:center;' +
+      'font-family:Inter,sans-serif;letter-spacing:.015em;' +
+      'border:2px solid #ED1C24;box-shadow:0 4px 24px rgba(0,0,0,.6)'
     el.textContent = t; document.body.appendChild(el)
   }, text)
-  await page.waitForTimeout(ms)
+}
+async function hideCaption(page) {
   await page.evaluate(() => document.getElementById('__cap__')?.remove())
 }
 
@@ -62,7 +65,7 @@ async function launchDemo(page, body) {
   const mp4Path  = path.join(OUT, 'gpmolformer_finetune_demo.mp4')
 
   await page.goto(FRONT, { waitUntil:'networkidle', timeout:45000 })
-  await page.waitForTimeout(1200)
+  await page.waitForTimeout(1500)
 
   const rec = await ctx.newCDPSession(page)
   await rec.send('Page.startScreencast', { format:'jpeg',quality:85,maxWidth:1280,maxHeight:900,everyNthFrame:2 })
@@ -72,51 +75,97 @@ async function launchDemo(page, body) {
     await rec.send('Page.screencastFrameAck',{sessionId}).catch(()=>{})
   })
 
-  // Act 1: Baseline molecule generation
-  await caption(page, 'GP-MoLFormer — AI Drug Discovery (IBM Research × AMD)', 20000)
+  // ── Slide 1: Landing ────────────────────────────────────────────────────────
+  await showCaption(page, 'GP-MoLFormer — AI Drug Discovery · IBM Research × AMD')
+  await page.waitForTimeout(HOLD)
+
+  // Domain
   await setState(page, { domain:'healthcare', step:1 })
-  await page.waitForTimeout(900)
-  await caption(page, 'Pretrained generative model: SMILES molecule design', 20000)
+  await page.waitForTimeout(800)
+  await showCaption(page, 'Healthcare domain — drug discovery, molecular design, medical imaging')
+  await page.waitForTimeout(HOLD)
+
+  // Model
   await setState(page, {
     model:{slug:'GP-MoLFormer',name:'GP-MoLFormer',domain:'healthcare'},
     mode:'demo', task:'inference', step:2,
   })
-  await page.waitForTimeout(900)
+  await page.waitForTimeout(800)
+  await showCaption(page, 'GP-MoLFormer: pretrained generative model for SMILES molecule design')
+  await page.waitForTimeout(HOLD)
+
+  // Configure / run baseline generation
+  await setState(page, {
+    prompt:'Generate 20 drug-like molecules with a benzene scaffold (SMILES: c1ccccc1) optimized for oral bioavailability.',
+    step:3
+  })
+  await page.waitForTimeout(800)
+  await showCaption(page, 'Baseline generation: benzene-scaffold molecules, no property steering')
+  await page.waitForTimeout(HOLD)
+
   const {rid:r1, job:j1} = await launchDemo(page, {
     slug:'GP-MoLFormer', domain:'healthcare', task:'inference', mode:'demo',
     prompt:'Generate 20 drug-like molecules with a benzene scaffold (SMILES: c1ccccc1) optimized for oral bioavailability.',
     params:{},
   })
   await setState(page, { runId:r1, result:j1?.result, step:4 })
-  await page.waitForTimeout(2500)
-  await caption(page, 'Baseline generation: diverse molecules, moderate drug-likeness', 20000)
   await page.waitForTimeout(1500)
 
-  // Act 2: QED pair-tuning
-  await caption(page, 'Pair-Tuning: Steer Generation Toward Higher QED (Drug-Likeness)', 20000)
+  // ── Slides: baseline results ─────────────────────────────────────────────────
+  await showCaption(page, 'Baseline generation: diverse SMILES molecules from pretrained GP-MoLFormer')
+  await page.waitForTimeout(HOLD)
+
+  await showCaption(page, 'Lipinski rule-of-five: MW ≤500, LogP ≤5, HBD ≤5, HBA ≤10 — drug-likeness filter')
+  await page.waitForTimeout(HOLD)
+
+  // Switch to pair-tuning
   await setState(page, { task:'finetune', step:2 })
-  await page.waitForTimeout(900)
+  await page.waitForTimeout(800)
+  await showCaption(page, 'Pair-Tuning (PEFT) — steer generation toward higher QED drug-likeness score')
+  await page.waitForTimeout(HOLD)
+
+  await setState(page, {
+    prompt:'Pair-tune GP-MoLFormer on 1000 QED-steered molecule pairs to shift generation toward higher drug-likeness. Compare before/after QED distribution and Lipinski compliance.',
+    step:3
+  })
+  await page.waitForTimeout(800)
+  await showCaption(page, 'Pair-tuning trains only N soft-prompt tokens — backbone weights stay frozen')
+  await page.waitForTimeout(HOLD)
+
   const {rid:r2, job:j2} = await launchDemo(page, {
     slug:'GP-MoLFormer', domain:'healthcare', task:'finetune', mode:'demo',
     prompt:'Pair-tune GP-MoLFormer on 1000 QED-steered molecule pairs to shift generation toward higher drug-likeness. Compare before/after QED distribution and Lipinski compliance.',
     params:{},
   })
   await setState(page, { runId:r2, result:j2?.result, step:4 })
-  await page.waitForTimeout(25000)
-  await caption(page, 'After pair-tuning: QED 0.76→0.80 — backbone frozen (PEFT)', 20000)
-  await page.waitForTimeout(2000)
-  await caption(page, 'Loss curve, before/after SMILES, property shift — AMD Instinct', 20000)
-  await page.waitForTimeout(5000)
+  await page.waitForTimeout(1500)
 
+  // ── Slides: pair-tuning results ──────────────────────────────────────────────
+  await showCaption(page, 'After pair-tuning: QED improves 0.756 → 0.804 — more drug-like molecules generated')
+  await page.waitForTimeout(HOLD)
+
+  await showCaption(page, 'Loss curve converges over 10 epochs — efficient PEFT, no backbone retraining needed')
+  await page.waitForTimeout(HOLD)
+
+  await showCaption(page, 'Before/after SMILES comparison — pair-tuning steers toward oral bioavailability space')
+  await page.waitForTimeout(HOLD)
+
+  await showCaption(page, 'GP-MoLFormer fine-tuning on AMD Instinct MI355X · IBM Research model · AI4Science Studio')
+  await page.waitForTimeout(HOLD)
+
+  await hideCaption(page)
+  await page.waitForTimeout(2000)
   await rec.send('Page.stopScreencast')
+
   const ffp = require('child_process').spawn(FFMPEG, [
     '-y','-f','image2pipe','-r','12','-i','pipe:0',
-    '-c:v','libvpx-vp9','-b:v','1200k','-crf','33','-pix_fmt','yuv420p', webmPath,
+    '-c:v','libvpx-vp9','-b:v','1500k','-crf','30','-pix_fmt','yuv420p', webmPath,
   ])
   for (const f of frames) ffp.stdin.write(f)
   ffp.stdin.end()
   await new Promise((res,rej)=>{ ffp.on('close',c=>c===0?res():rej(new Error(`ffmpeg ${c}`))); ffp.on('error',rej) })
-  execSync(`${FFMPEG} -y -i ${webmPath} -c:v libx264 -preset fast -crf 23 -pix_fmt yuv420p ${mp4Path}`, { stdio:'inherit' })
+  execSync(`${FFMPEG} -y -i ${webmPath} -c:v libx264 -preset fast -crf 20 -pix_fmt yuv420p ${mp4Path}`, { stdio:'inherit' })
   await browser.close()
-  console.log('[done]', mp4Path, require('fs').statSync(mp4Path).size, 'bytes')
+  const sz = (require('fs').statSync(mp4Path).size / 1024 / 1024).toFixed(1)
+  console.log(`[done] ${mp4Path} (${sz} MB)`)
 })().catch(e => { console.error('FAIL:', e.stack || e.message); process.exit(1) })

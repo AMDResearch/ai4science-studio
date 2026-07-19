@@ -42,12 +42,12 @@ function MoleculeViewer({ atoms, height = 340, formula, sublabel }) {
       model.addAtoms(atoms.map((a, i) => ({
         elem: a.element, x: a.x, y: a.y, z: a.z, serial: i,
       })))
-      // Infer bonds from interatomic distances (addAtoms doesn't do this itself).
-      try { model.assignBonds?.() } catch { /* older 3dmol: bonds via distance below */ }
-      // Per-element sphere colors + sticks for bonds.
+      // Use sphere-only rendering for inorganic/metallic structures.
+      // Bond connectivity in multi-component DFT crystals is ambiguous (mixed
+      // ionics, metals, covalents) and partial bonds look worse than no bonds.
+      // CPK spheres with element colors give a clean, universally correct view.
       viewer.setStyle({}, {
-        sphere: { scale: 0.30, colorscheme: 'Jmol' },
-        stick: { radius: 0.14, colorscheme: 'Jmol' },
+        sphere: { scale: 0.38, colorscheme: 'Jmol' },
       })
       viewer.zoomTo()
       viewer.render()
@@ -443,105 +443,132 @@ function TrainingConvergenceViz({ result }) {
 
   return (
     <div>
-      <div style={{ marginBottom: '1rem', fontSize: '.9rem', color: '#a1a1aa', lineHeight: 1.5 }}>
-        Real HydraGNN energy-model training on Alexandria DFT data. Scaling to 8 GPUs lets us
-        train on <b style={{ color: '#f5f5f7' }}>{(r8.n_samples / r1.n_samples).toFixed(1)}×</b> more
-        data in comparable wall-clock, improving accuracy.
+      {/* Compact header row: description + key metrics inline */}
+      <div style={{ display: 'flex', gap: '.75rem', marginBottom: '.75rem', flexWrap: 'wrap', alignItems: 'flex-start' }}>
+        <div className="card" style={{ padding: '.6rem .9rem', flex: 1, minWidth: 200 }}>
+          <div style={{ fontSize: '.8rem', color: '#a1a1aa', lineHeight: 1.5 }}>
+            Real HydraGNN training on <b style={{ color: '#f5f5f7' }}>Alexandria DFT</b> data.
+            8 GPUs → <b style={{ color: '#ED1C24' }}>{(r8.n_samples / r1.n_samples).toFixed(1)}×</b> more data,
+            same wall-clock time.
+          </div>
+        </div>
+        {/* Inline metric deltas */}
+        {[
+          { k: 'Corr', a: m1.corr, b: m8.corr, hi: true },
+          { k: 'R²', a: m1.r2, b: m8.r2, hi: true },
+          { k: 'MAE', a: m1.mae, b: m8.mae, hi: false },
+        ].map(({ k, a, b, hi }) => {
+          const win = hi ? b > a : b < a
+          return (
+            <div key={k} className="card" style={{ padding: '.5rem .7rem', textAlign: 'center', minWidth: 80 }}>
+              <div className="section-label" style={{ fontSize: '.6rem' }}>{k}</div>
+              <div style={{ fontSize: '.72rem', color: '#71717a' }}>{a?.toFixed(3)}</div>
+              <div style={{ fontSize: '.78rem', fontWeight: 800, color: win ? '#21c77a' : '#ff8f93' }}>→ {b?.toFixed(3)}</div>
+            </div>
+          )
+        })}
       </div>
 
-      {/* Loss convergence */}
-      <div className="card" style={{ padding: '.8rem', marginBottom: '1rem' }}>
-        <div className="section-label" style={{ marginBottom: '.5rem' }}>Validation Loss Convergence</div>
-        <ResponsiveContainer width="100%" height={280}>
-          <LineChart data={curve} margin={{ top: 6, right: 16, bottom: 6, left: 0 }}>
+      {/* Row 1: convergence chart (full width, compact height) */}
+      <div className="card" style={{ padding: '.6rem .8rem', marginBottom: '.6rem' }}>
+        <div className="section-label" style={{ marginBottom: '.3rem' }}>Validation Loss Convergence</div>
+        <ResponsiveContainer width="100%" height={180}>
+          <LineChart data={curve} margin={{ top: 4, right: 12, bottom: 16, left: 0 }}>
             <CartesianGrid stroke="#27272a" strokeDasharray="3 3" />
-            <XAxis dataKey="ep" tick={{ fill: '#71717a', fontSize: 11 }}
-              label={{ value: 'Epoch', position: 'insideBottom', offset: -2, fill: '#71717a', fontSize: 11 }} />
-            <YAxis tick={{ fill: '#71717a', fontSize: 11 }} domain={['auto', 'auto']} />
-            <Tooltip contentStyle={{ background: '#141416', border: '1px solid #27272a', fontSize: 12 }} />
-            <Legend wrapperStyle={{ fontSize: 12 }} />
+            <XAxis dataKey="ep" tick={{ fill: '#71717a', fontSize: 10 }}
+              label={{ value: 'Epoch', position: 'insideBottom', offset: -8, fill: '#71717a', fontSize: 10 }} />
+            <YAxis tick={{ fill: '#71717a', fontSize: 10 }} domain={['auto', 'auto']} width={36} />
+            <Tooltip contentStyle={{ background: '#141416', border: '1px solid #27272a', fontSize: 11 }} />
+            <Legend wrapperStyle={{ fontSize: 11 }} />
             <Line type="monotone" dataKey="val1" name="1-GPU val" stroke="#f5a524" dot={false} strokeWidth={2} isAnimationActive={false} />
             <Line type="monotone" dataKey="val8" name="8-GPU val" stroke="#38bdf8" dot={false} strokeWidth={2} isAnimationActive={false} />
           </LineChart>
         </ResponsiveContainer>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
-        {/* Scaling: data throughput */}
-        <div className="card" style={{ padding: '.8rem' }}>
-          <div className="section-label" style={{ marginBottom: '.5rem' }}>Training Set Size (per epoch)</div>
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={speedSamples} margin={{ top: 6, right: 16, bottom: 6, left: 0 }}>
-              <CartesianGrid stroke="#27272a" strokeDasharray="3 3" />
-              <XAxis dataKey="name" tick={{ fill: '#a1a1aa', fontSize: 11 }} />
-              <YAxis tick={{ fill: '#71717a', fontSize: 11 }} />
-              <Tooltip contentStyle={{ background: '#141416', border: '1px solid #27272a', fontSize: 12 }} />
-              <Bar dataKey="v" radius={[4, 4, 0, 0]} isAnimationActive={false}>
-                {speedSamples.map((s, i) => <Cell key={i} fill={s.fill} />)}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-          {r8.throughput_it_s && (
-            <div style={{ fontSize: '.74rem', color: '#52525b', marginTop: '.3rem', textAlign: 'center' }}>
-              8-GPU throughput ≈ {r8.throughput_it_s} it/s/rank ({(r8.throughput_it_s * 8).toFixed(0)} it/s aggregate)
-            </div>
-          )}
-        </div>
+      {/* Row 2: left = bar + stats table, right = parity scatter */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '.6rem' }}>
+        {/* Left column: training size bar + comparison table */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '.6rem' }}>
+          <div className="card" style={{ padding: '.6rem .8rem' }}>
+            <div className="section-label" style={{ marginBottom: '.3rem' }}>Training Structures / Epoch</div>
+            <ResponsiveContainer width="100%" height={130}>
+              <BarChart data={speedSamples} margin={{ top: 4, right: 12, bottom: 4, left: 0 }}>
+                <CartesianGrid stroke="#27272a" strokeDasharray="3 3" />
+                <XAxis dataKey="name" tick={{ fill: '#a1a1aa', fontSize: 11 }} />
+                <YAxis tick={{ fill: '#71717a', fontSize: 10 }} width={50} />
+                <Tooltip contentStyle={{ background: '#141416', border: '1px solid #27272a', fontSize: 11 }} />
+                <Bar dataKey="v" radius={[4, 4, 0, 0]} isAnimationActive={false}>
+                  {speedSamples.map((s, i) => <Cell key={i} fill={s.fill} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+            {r8.throughput_it_s && (
+              <div style={{ fontSize: '.68rem', color: '#52525b', marginTop: '.2rem', textAlign: 'center' }}>
+                8-GPU: {r8.throughput_it_s} it/s/rank · {(r8.throughput_it_s * 8).toFixed(0)} it/s total
+              </div>
+            )}
+          </div>
 
-        {/* Parity scatter (8-GPU) */}
-        <div className="card" style={{ padding: '.8rem' }}>
-          <div className="section-label" style={{ marginBottom: '.5rem' }}>8-GPU: Predicted vs DFT (held-out)</div>
-          <ResponsiveContainer width="100%" height={200}>
-            <ScatterChart margin={{ top: 6, right: 16, bottom: 6, left: 0 }}>
+          {/* Stats comparison table (in left column) */}
+          <div className="card" style={{ padding: '.6rem .8rem' }}>
+            <div className="section-label" style={{ marginBottom: '.3rem' }}>Final Model Comparison</div>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '.78rem' }}>
+              <thead>
+                <tr style={{ color: '#71717a', textAlign: 'right' }}>
+                  <th style={{ textAlign: 'left', padding: '.25rem .4rem' }}>Metric</th>
+                  <th style={{ padding: '.25rem .4rem' }}>1-GPU</th>
+                  <th style={{ padding: '.25rem .4rem' }}>8-GPU</th>
+                  <th style={{ padding: '.25rem .4rem' }}>Δ</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map(r => {
+                  const fmt = v => v == null ? '—' : r.int ? v.toLocaleString() : (+v).toFixed(3)
+                  const win8 = r.better === 'high' ? r.b > r.a : r.b < r.a
+                  return (
+                    <tr key={r.k} style={{ borderTop: '1px solid #27272a', color: '#f5f5f7' }}>
+                      <td style={{ textAlign: 'left', padding: '.28rem .4rem', color: '#a1a1aa' }}>{r.k}</td>
+                      <td style={{ textAlign: 'right', padding: '.28rem .4rem' }}>{fmt(r.a)}</td>
+                      <td style={{ textAlign: 'right', padding: '.28rem .4rem',
+                        color: win8 ? '#21c77a' : '#f5f5f7', fontWeight: win8 ? 800 : 400 }}>{fmt(r.b)}</td>
+                      <td style={{ textAlign: 'right', padding: '.28rem .4rem',
+                        color: win8 ? '#21c77a' : '#ff8f93' }}>
+                        {r.a && r.b ? (r.better === 'high'
+                          ? `+${(((r.b - r.a) / Math.abs(r.a)) * 100).toFixed(0)}%`
+                          : `−${(((r.a - r.b) / Math.abs(r.a)) * 100).toFixed(0)}%`) : '—'}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>{/* end left column */}
+
+        {/* Right column: parity scatter */}
+        <div className="card" style={{ padding: '.6rem .8rem' }}>
+          <div className="section-label" style={{ marginBottom: '.3rem' }}>8-GPU: Predicted vs DFT</div>
+          <ResponsiveContainer width="100%" height={310}>
+            <ScatterChart margin={{ top: 4, right: 12, bottom: 16, left: 0 }}>
               <CartesianGrid stroke="#27272a" strokeDasharray="3 3" />
               <XAxis type="number" dataKey="true" name="DFT" domain={[lo, hi]}
                 tick={{ fill: '#71717a', fontSize: 10 }}
-                label={{ value: 'DFT (eV/atom)', position: 'insideBottom', offset: -2, fill: '#71717a', fontSize: 10 }} />
+                label={{ value: 'DFT (eV/atom)', position: 'insideBottom', offset: -8, fill: '#71717a', fontSize: 10 }} />
               <YAxis type="number" dataKey="pred" name="Predicted" domain={[lo, hi]}
-                tick={{ fill: '#71717a', fontSize: 10 }} />
-              <Tooltip contentStyle={{ background: '#141416', border: '1px solid #27272a', fontSize: 12 }}
+                tick={{ fill: '#71717a', fontSize: 10 }} width={40}
+                label={{ value: 'Predicted', angle: -90, position: 'insideLeft', fill: '#71717a', fontSize: 10 }} />
+              <Tooltip contentStyle={{ background: '#141416', border: '1px solid #27272a', fontSize: 11 }}
                 cursor={{ strokeDasharray: '3 3' }} />
               <ReferenceLine segment={[{ x: lo, y: lo }, { x: hi, y: hi }]} stroke="#52525b" strokeDasharray="4 4" />
               <Scatter data={parity} fill="#38bdf8" fillOpacity={0.5} isAnimationActive={false} />
             </ScatterChart>
           </ResponsiveContainer>
+          <div style={{ fontSize: '.68rem', color: '#52525b', textAlign: 'center', marginTop: '.2rem' }}>
+            Dashed line = perfect prediction · val corr {m8.corr?.toFixed(3)}
+          </div>
         </div>
-      </div>
-
-      {/* Final stats comparison table */}
-      <div className="card" style={{ padding: '.8rem' }}>
-        <div className="section-label" style={{ marginBottom: '.5rem' }}>Final Model Comparison</div>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '.85rem' }}>
-          <thead>
-            <tr style={{ color: '#71717a', textAlign: 'right' }}>
-              <th style={{ textAlign: 'left', padding: '.3rem .5rem' }}>Metric</th>
-              <th style={{ padding: '.3rem .5rem' }}>1-GPU</th>
-              <th style={{ padding: '.3rem .5rem' }}>8-GPU</th>
-              <th style={{ padding: '.3rem .5rem' }}>Δ</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map(r => {
-              const fmt = v => v == null ? '—' : r.int ? v.toLocaleString() : (+v).toFixed(3)
-              const win8 = r.better === 'high' ? r.b > r.a : r.b < r.a
-              return (
-                <tr key={r.k} style={{ borderTop: '1px solid #27272a', color: '#f5f5f7' }}>
-                  <td style={{ textAlign: 'left', padding: '.35rem .5rem', color: '#a1a1aa' }}>{r.k}</td>
-                  <td style={{ textAlign: 'right', padding: '.35rem .5rem' }}>{fmt(r.a)}</td>
-                  <td style={{ textAlign: 'right', padding: '.35rem .5rem',
-                    color: win8 ? '#21c77a' : '#f5f5f7', fontWeight: win8 ? 800 : 400 }}>{fmt(r.b)}</td>
-                  <td style={{ textAlign: 'right', padding: '.35rem .5rem',
-                    color: win8 ? '#21c77a' : '#ff8f93' }}>
-                    {r.a && r.b ? (r.better === 'high'
-                      ? `+${(((r.b - r.a) / Math.abs(r.a)) * 100).toFixed(0)}%`
-                      : `−${(((r.a - r.b) / Math.abs(r.a)) * 100).toFixed(0)}%`) : '—'}
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
+      </div>{/* end row 2 grid */}
     </div>
   )
 }
