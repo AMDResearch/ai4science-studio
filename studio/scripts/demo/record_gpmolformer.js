@@ -1,0 +1,115 @@
+'use strict'
+/* GP-MoLFormer pair-tuning demo video: generation then QED-steered fine-tuning. */
+const path = require('path')
+const { chromium } = require('/home/spannala/Projects/ai4science-studio/studio/demo/node_modules/playwright')
+const { execSync } = require('child_process')
+
+const FRONT = process.env.FRONT_URL || 'http://127.0.0.1:5299'
+const BACK  = process.env.BACK_URL  || 'http://127.0.0.1:8299'
+const OUT   = process.env.OUT_DIR   || '/home/spannala/Projects/ai4science-studio/studio/demo/demo-output'
+const FFMPEG = process.env.FFMPEG   || '/home/spannala/Projects/ai4science-studio/studio/backend/.venv/lib/python3.12/site-packages/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2'
+
+async function caption(page, text, ms = 2200) {
+  await page.evaluate(t => {
+    const el = document.createElement('div')
+    el.id='__cap__'
+    el.style.cssText='position:fixed;bottom:48px;left:50%;transform:translateX(-50%);' +
+      'background:rgba(237,28,36,.92);color:#fff;font-weight:700;font-size:22px;' +
+      'padding:14px 32px;border-radius:12px;z-index:99999;max-width:80vw;text-align:center;' +
+      'font-family:Inter,sans-serif;letter-spacing:.02em;box-shadow:0 4px 24px rgba(0,0,0,.5)'
+    el.textContent=t; document.body.appendChild(el)
+  }, text)
+  await page.waitForTimeout(ms)
+  await page.evaluate(() => document.getElementById('__cap__')?.remove())
+}
+
+async function launchDemo(page, body) {
+  return page.evaluate(async ([back, b]) => {
+    const r = await (await fetch(`${back}/api/jobs`, {
+      method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(b),
+    })).json()
+    const rid = r.run_id
+    for (let i=0; i<60; i++) {
+      const j = await (await fetch(`${back}/api/jobs/${rid}`)).json()
+      if (j.state==='completed'||j.state==='failed') return {rid, job:j}
+      await new Promise(r=>setTimeout(r,1000))
+    }
+    return {rid, job:null}
+  }, [BACK, body])
+}
+
+;(async () => {
+  const browser = await chromium.launch({
+    channel:'chromium', headless:true,
+    args:['--no-sandbox','--disable-gpu','--disable-dev-shm-usage','--use-gl=swiftshader'],
+  })
+  const ctx = await browser.newContext({viewport:{width:1280,height:900}})
+  const page = await ctx.newPage()
+  const webmPath = path.join(OUT, 'gpmolformer_finetune_demo.webm')
+  const mp4Path  = path.join(OUT, 'gpmolformer_finetune_demo.mp4')
+
+  await page.goto(FRONT, {waitUntil:'networkidle',timeout:45000})
+  await page.waitForTimeout(1200)
+
+  const rec = await ctx.newCDPSession(page)
+  await rec.send('Page.startScreencast',{format:'jpeg',quality:85,maxWidth:1280,maxHeight:900,everyNthFrame:2})
+  const frames = []
+  rec.on('Page.screencastFrame', async ({data,sessionId}) => {
+    frames.push(Buffer.from(data,'base64'))
+    await rec.send('Page.screencastFrameAck',{sessionId}).catch(()=>{})
+  })
+
+  const st = s => page.evaluate(fn => {const st=window.__studioStore.getState();fn(st)}, s)
+
+  // Act 1: Baseline generation
+  await caption(page, 'GP-MoLFormer — Drug-Like Molecule Generation (IBM Research)', 2500)
+  await st(s => {s.setDomain('healthcare'); s.setStep(1)})
+  await page.waitForTimeout(900)
+  await caption(page, 'Pre-trained generative model for SMILES molecule design', 2200)
+  await st(s => {
+    s.setModel({slug:'GP-MoLFormer',name:'GP-MoLFormer',domain:'healthcare'})
+    s.setMode('demo'); s.setTask('inference'); s.setStep(2)
+  })
+  await page.waitForTimeout(900)
+  const {rid:r1, job:j1} = await launchDemo(page, {
+    slug:'GP-MoLFormer', domain:'healthcare', task:'inference', mode:'demo',
+    prompt:'Generate 20 drug-like molecules with a benzene scaffold (SMILES: c1ccccc1) optimized for oral bioavailability.',
+    params:{},
+  })
+  await st(([rid,result]) => {
+    const s=window.__studioStore.getState(); s.setRunId(rid); s.setResult(result); s.setStep(4)
+  }, [r1, j1?.result])
+  await page.waitForTimeout(2500)
+  await caption(page, 'Baseline: diverse generation, moderate drug-likeness', 2200)
+  await page.waitForTimeout(1500)
+
+  // Act 2: Pair-tuning for QED
+  await caption(page, 'Pair-Tuning: Steer Generation Toward Higher Drug-Likeness (QED)', 2500)
+  await st(s => {s.setTask('finetune'); s.setStep(2)})
+  await page.waitForTimeout(900)
+  const {rid:r2, job:j2} = await launchDemo(page, {
+    slug:'GP-MoLFormer', domain:'healthcare', task:'finetune', mode:'demo',
+    prompt:'Pair-tune GP-MoLFormer on 1000 QED-steered molecule pairs to shift generation toward higher drug-likeness. Compare before/after QED distribution and Lipinski compliance.',
+    params:{},
+  })
+  await st(([rid,result]) => {
+    const s=window.__studioStore.getState(); s.setRunId(rid); s.setResult(result); s.setStep(4)
+  }, [r2, j2?.result])
+  await page.waitForTimeout(3000)
+  await caption(page, 'After pair-tuning: QED 0.76 → 0.80, backbone frozen (PEFT)', 2500)
+  await page.waitForTimeout(2000)
+  await caption(page, 'AMD AI4Science Studio — Healthcare AI on AMD Instinct', 2500)
+  await page.waitForTimeout(1500)
+
+  await rec.send('Page.stopScreencast')
+  const ffp = require('child_process').spawn(FFMPEG, [
+    '-y','-f','image2pipe','-r','12','-i','pipe:0',
+    '-c:v','libvpx-vp9','-b:v','1200k','-crf','33','-pix_fmt','yuv420p', webmPath,
+  ])
+  for (const f of frames) ffp.stdin.write(f)
+  ffp.stdin.end()
+  await new Promise((res,rej)=>{ffp.on('close',c=>c===0?res():rej(new Error(`ffmpeg ${c}`))); ffp.on('error',rej)})
+  execSync(`${FFMPEG} -y -i ${webmPath} -c:v libx264 -preset fast -crf 23 -pix_fmt yuv420p ${mp4Path}`, {stdio:'inherit'})
+  await browser.close()
+  console.log('[done] GP-MoLFormer video:', mp4Path)
+})().catch(e => {console.error('FAIL:', e.message); process.exit(1)})
