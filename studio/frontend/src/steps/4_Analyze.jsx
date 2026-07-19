@@ -22,7 +22,7 @@ const _CPK = {
   Hg: '#b8b8d0', Pb: '#575961', Bi: '#9e4fb5',
 }
 
-function MoleculeViewer({ atoms, height = 340 }) {
+function MoleculeViewer({ atoms, height = 340, formula, sublabel }) {
   const hostRef = useRef(null)
   const viewerRef = useRef(null)
 
@@ -69,13 +69,29 @@ function MoleculeViewer({ atoms, height = 340 }) {
     )
   }
 
-  // Composition legend (unique elements)
-  const uniq = [...new Set(atoms.map(a => a.element))]
+  // Composition legend (element → count)
+  const counts = {}
+  atoms.forEach(a => { counts[a.element] = (counts[a.element] || 0) + 1 })
+  const uniq = Object.keys(counts)
   return (
     <div>
-      <div ref={hostRef} style={{ position: 'relative', width: '100%', height,
-        borderRadius: '.5rem', overflow: 'hidden', border: '1px solid #27272a',
-        background: '#0a0a0b' }} />
+      <div style={{ position: 'relative' }}>
+        <div ref={hostRef} style={{ position: 'relative', width: '100%', height,
+          borderRadius: '.5rem', overflow: 'hidden', border: '1px solid #27272a',
+          background: '#0a0a0b' }} />
+        {/* Formula label overlay on the viewer */}
+        {formula && (
+          <div style={{ position: 'absolute', top: 8, left: 8, zIndex: 10,
+            background: 'rgba(10,10,11,0.8)', border: '1px solid #27272a',
+            borderRadius: '.4rem', padding: '.3rem .6rem', backdropFilter: 'blur(4px)',
+            pointerEvents: 'none' }}>
+            <div style={{ fontSize: '1rem', fontWeight: 800, color: '#7dd3fc', letterSpacing: '.02em' }}>
+              {formula}
+            </div>
+            {sublabel && <div style={{ fontSize: '.62rem', color: '#a1a1aa' }}>{sublabel}</div>}
+          </div>
+        )}
+      </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '.5rem', marginTop: '.5rem' }}>
         {uniq.map(el => (
           <span key={el} style={{ display: 'inline-flex', alignItems: 'center', gap: '.3rem',
@@ -83,7 +99,7 @@ function MoleculeViewer({ atoms, height = 340 }) {
             <span style={{ width: 10, height: 10, borderRadius: '50%',
               background: _CPK[el] || '#dd77ff', display: 'inline-block',
               border: '1px solid rgba(255,255,255,.2)' }} />
-            {el}
+            {el}<span style={{ color: '#52525b' }}>×{counts[el]}</span>
           </span>
         ))}
         <span style={{ fontSize: '.72rem', color: '#52525b', marginLeft: 'auto' }}>
@@ -189,7 +205,8 @@ function EnergyViz({ result }) {
         gap: '1rem', alignItems: 'start' }}>
         <div className="card" style={{ padding: '.6rem' }}>
           <div className="section-label" style={{ marginBottom: '.4rem' }}>Atomistic Structure</div>
-          <MoleculeViewer atoms={atoms} />
+          <MoleculeViewer atoms={atoms} formula={result.formula}
+            sublabel={result.n_atoms ? `${result.n_atoms} atoms · held-out DFT structure` : null} />
         </div>
 
         <div>
@@ -244,7 +261,8 @@ function MaterialsViz({ result }) {
         gap: '1rem', alignItems: 'start' }}>
         <div className="card" style={{ padding: '.6rem' }}>
           <div className="section-label" style={{ marginBottom: '.4rem' }}>Atomistic Structure</div>
-          <MoleculeViewer atoms={result.atoms || []} />
+          <MoleculeViewer atoms={result.atoms || []} formula={result.formula}
+            sublabel={result.n_atoms ? `${result.n_atoms} atoms · ${result.structure_type || 'crystal'}` : null} />
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(140px,1fr))', gap: '.75rem', alignContent: 'start' }}>
           {[

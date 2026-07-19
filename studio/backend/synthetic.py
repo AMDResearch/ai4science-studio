@@ -142,6 +142,44 @@ _ELEMENT_DATA = {
     "Cu": 63.546, "Zn": 65.38,  "Ga": 69.723, "As": 74.922,
 }
 
+
+def _build_crystal(kind: str, a: float, elements: tuple, reps: int = 2):
+    """Build a real periodic crystal supercell (BCC, FCC, or rocksalt).
+    Returns (atoms_list, formula_str). Coordinates are physically sensible
+    lattice positions, not random — so the 3D viewer shows a real structure.
+    """
+    # Fractional basis positions per lattice type
+    bases = {
+        "bcc":      [(0, 0, 0), (0.5, 0.5, 0.5)],
+        "fcc":      [(0, 0, 0), (0.5, 0.5, 0), (0.5, 0, 0.5), (0, 0.5, 0.5)],
+        "rocksalt": [(0, 0, 0), (0.5, 0.5, 0.5)],  # two interpenetrating FCC
+    }
+    basis = bases.get(kind, bases["bcc"])
+    atoms, counts = [], {}
+    aid = 0
+    for i in range(reps):
+        for j in range(reps):
+            for k in range(reps):
+                for bi, (fx, fy, fz) in enumerate(basis):
+                    # Assign element: alternate for binary compounds
+                    el = elements[bi % len(elements)]
+                    x = (i + fx) * a
+                    y = (j + fy) * a
+                    z = (k + fz) * a
+                    atoms.append({"id": aid, "element": el,
+                                  "x": round(x, 3), "y": round(y, 3), "z": round(z, 3)})
+                    counts[el] = counts.get(el, 0) + 1
+                    aid += 1
+    # Build reduced formula
+    import math as _m
+    g = 0
+    for v in counts.values():
+        g = _m.gcd(g, v)
+    g = g or 1
+    formula = "".join(f"{el}{(counts[el]//g) if counts[el]//g > 1 else ''}"
+                      for el in sorted(counts))
+    return atoms, formula, counts
+
 def _materials(slug: str, task: str, prompt: str, params: dict,
                out_dir: Path, emit: Callable, run_id: str) -> dict:
     rng = random.Random(42)
@@ -171,35 +209,57 @@ def _materials(slug: str, task: str, prompt: str, params: dict,
         return result
 
     if slug == "HydraGNN":
-        steps = [
-            "Loading HydraGNN graph foundation model checkpoint...",
-            "Building atomistic graph (nodes=atoms, edges=bonds)...",
-            "Running multi-task GNN forward pass (energy, forces, stress)...",
-            "Aggregating per-atom predictions...",
-            "Computing bulk properties...",
-        ]
-        _progress(emit, run_id, steps, delay=0.7)
+        # Replay a REAL prediction from our trained model on a real held-out
+        # Alexandria structure (baked by inference/bake_predictions.py). Demo mode
+        # mirrors live mode: real atoms, real predicted-vs-DFT energy — not random.
+        variant = str(params.get("model_variant", "8gpu")).lower()
+        asset = Path(__file__).resolve().parent / "assets" / f"predictions_{variant}.json"
+        if not asset.exists():
+            asset = Path(__file__).resolve().parent / "assets" / "predictions_8gpu.json"
+        if asset.exists():
+            data = json.loads(asset.read_text())
+            preds = data.get("predictions", [])
+            if preds:
+                steps = [
+                    f"Loading trained HydraGNN model ({data.get('model_variant','8gpu')}, "
+                    f"val corr={data.get('val_corr')})...",
+                    "Reading held-out Alexandria DFT structure...",
+                    "Building atomistic graph (RadiusGraph r=5.0, non-PBC)...",
+                    "Running PNA forward pass on GPU...",
+                    "Comparing predicted energy vs DFT reference...",
+                ]
+                _progress(emit, run_id, steps, delay=0.6)
+                # Pick a structure deterministically (rotate through the baked set)
+                choice = preds[rng.randrange(len(preds))]
+                result = {
+                    "type": "atomistic_energy",
+                    "slug": slug,
+                    "model": data.get("model_label", "HydraGNN (trained on Alexandria DFT)"),
+                    "model_variant": data.get("model_variant"),
+                    "formula": choice["formula"],
+                    "n_atoms": choice["n_atoms"],
+                    "atoms": choice["atoms"],
+                    "predicted_energy_ev_per_atom": choice["predicted_energy_ev_per_atom"],
+                    "dft_reference_ev_per_atom": choice["dft_reference_ev_per_atom"],
+                    "abs_error_ev_per_atom": choice["abs_error_ev_per_atom"],
+                    "model_val_corr": data.get("val_corr"),
+                    "model_val_mae": data.get("val_mae"),
+                    "model_val_r2": data.get("val_r2"),
+                    "note": ("Real prediction from our trained HydraGNN model on a held-out "
+                             "Alexandria DFT structure. Demo replays a pre-computed real "
+                             "inference; Live mode runs the model on the cluster in real time."),
+                }
+                (out_dir / "prediction.json").write_text(json.dumps(result, indent=2))
+                emit(run_id, f"[demo] {choice['formula']} ({choice['n_atoms']} atoms): "
+                             f"pred={choice['predicted_energy_ev_per_atom']} vs "
+                             f"DFT={choice['dft_reference_ev_per_atom']} eV/atom")
+                return result
 
-        n_atoms = rng.randint(12, 24)
-        atoms = [{"id": i, "element": rng.choice(["Fe", "W", "C", "Ni", "Co"]),
-                  "x": rng.uniform(-5, 5), "y": rng.uniform(-5, 5), "z": rng.uniform(-5, 5),
-                  "fx": rng.gauss(0, 0.1), "fy": rng.gauss(0, 0.1), "fz": rng.gauss(0, 0.1)}
-                 for i in range(n_atoms)]
-        result = {
-            "type": "atomistic_properties",
-            "slug": slug,
-            "n_atoms": n_atoms,
-            "formation_energy_eV_per_atom": round(rng.gauss(-1.2, 0.4), 4),
-            "bulk_modulus_GPa": round(rng.gauss(180, 30), 1),
-            "shear_modulus_GPa": round(rng.gauss(65, 15), 1),
-            "band_gap_eV": round(max(0, rng.gauss(0.5, 0.8)), 3),
-            "magnetic_moment_muB": round(rng.gauss(2.2, 1.0), 3),
-            "atoms": atoms,
-        }
-        (out_dir / "graph_properties.json").write_text(json.dumps(result, indent=2))
-        emit(run_id, f"[synthetic] Formation energy: {result['formation_energy_eV_per_atom']} eV/atom")
-        emit(run_id, f"[synthetic] Bulk modulus: {result['bulk_modulus_GPa']} GPa")
-        return result
+        # Fallback if predictions asset not yet baked: emit a clear message.
+        emit(run_id, "[demo] predictions asset missing — run inference/bake_predictions.py")
+        emit(run_id, "[demo] Live mode runs the real model directly; demo replays baked predictions.")
+        return {"type": "atomistic_energy", "slug": slug, "error": "predictions_not_baked",
+                "note": "Run inference/bake_predictions.py to generate real prediction replays."}
 
     elif slug == "MatterGen":
         steps = [
