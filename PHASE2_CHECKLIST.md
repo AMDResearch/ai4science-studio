@@ -134,46 +134,70 @@ Goal: run real pair-tuning (10 epochs, QED property), bake metrics to JSON.
 
 ---
 
-## Step 5 — Demo Video Recordings
+## CURRENT STATE (2026-07-19, updated live) — read this after a crash
 
-**Prerequisites:** Steps 1-4g complete; GP-MoLFormer finetune asset baked.
+### COMPLETED & COMMITTED (git tags: v0.1-phase1, v0.2-phase2 + later commits on main)
 
-### 5a. Video recorder scripts (3 scripts)
-- [ ] `studio/scripts/demo/record_hydragnn.js` written (Playwright screencast, ~90s)
-- [ ] `studio/scripts/demo/record_orbit2_dc.js` written (~60s)
-- [ ] `studio/scripts/demo/record_gpmolformer.js` written (~60s)
+**Data assets (all REAL, in studio/backend/assets/ — gitignored, regenerate via tools/):**
+- [x] `hydragnn_training.json` — real 1-GPU vs 8-GPU loss curves
+      → regen: `python3 tools/bake_training_curves.py`
+- [x] `dc_temperature.json` — REAL ERA5 (no interpolation), 20×20 coarse + 20×20 fine,
+      TWO events: july16_2024 (peak 41.4°C/106.5°F) + july4_2026 (39.5°C/103.1°F)
+      → regen: `python3 tools/fetch_dc_era5.py` (~1600 reqs, 0.5s/req pacing, ~15 min)
+- [x] `gpmolformer_finetune.json` — QED pair-tuning (0.756→0.804), real SMILES
+      → regen: `python3 tools/bake_gpmolformer_finetune.py`
+- [x] `predictions_8gpu.json` + `predictions_1gpu.json` — REAL model predictions on 8
+      held-out Alexandria structures (BrPdSb2, S8K4NiHf3, Y4CeNd2, H12Pr2TbOs3, ...)
+      → regen: `sbatch /tmp/bake_preds.sbatch` runs inference/bake_predictions.py, then
+        `cp /shared/spannala/models/HydraGNN/train_work/results/predictions_*.json studio/backend/assets/`
 
-### 5b. Combined SLURM job
-- [ ] `studio/scripts/demo/record_demos.slurm` written
-  - Starts backend (port 8299) + Vite dev (port 5299) on compute node
-  - Records all 3 videos sequentially
-  - Converts WebM → MP4 via imageio-ffmpeg
-- [ ] `sbatch studio/scripts/demo/record_demos.slurm`
+**Backend (studio/backend/, committed):**
+- [x] synthetic.py: HydraGNN inference REPLAYS REAL predictions (not random atoms);
+      ORBIT-2 → dc_downscaling (real ERA5); GP-MoLFormer finetune → molecule_finetune
+- [x] prompts.py: DC july16_2024 + july4_2026 prompts; GP-MoLFormer pair-tune prompts
+- [x] jobs.py: model_variant/STRUCT_INDEX for HydraGNN; pairtune sbatch + harvest for GP-MoLFormer
+
+**Frontend (studio/frontend/, committed, builds clean):**
+- [x] Model Catalog tab (all 15 models) + Methods & AMD Stack tab + Add Your Model
+- [x] DCDownscalingViz: Leaflet.js OpenStreetMap + temperature overlay + DC marker + colorbar
+- [x] MoleculeViewer: 3Dmol + FORMULA LABEL overlay + per-element counts legend
+- [x] MolefineTuneViz: before/after QED, loss curve, SMILES lists
+- [x] TrainingConvergenceViz: 1-GPU vs 8-GPU loss curves + parity + speedup
+- [x] Catalog spinner fix (10s timeout + .finally)
+- [x] npm deps added: 3dmol, recharts, leaflet
+
+**SLURM/compute (verified working):**
+- [x] hg_model_ddp.pk (8-GPU) + hg_model.pk (1-GPU) checkpoints in train_work/results/
+- [x] inference/bake_predictions.py — real prediction baker (element table has lanthanides)
+- [x] Live studio is RUNNING on lux-mi355x-a1: backend :8275, frontend :5275
+      (srun job; logs at /shared/spannala/studio-{backend,frontend}.log)
+
+### REMAINING (next steps)
+
+**Step 5 — RE-RECORD demo videos (IN PROGRESS):**
+Videos need re-recording because: (1) slides now 20-25s (was 2-3s), (2) real
+predictions replace random atoms, (3) Leaflet maps, (4) July 4 2026 data.
+- [ ] `sbatch studio/scripts/demo/record_demos.slurm`  (time bumped to 0:50:00)
   - JOB ID: ___________
-  - STATUS: PENDING
-  - Expected runtime: ~20 min (3 videos sequential)
+  - Recorders: record_hydragnn.js, record_orbit2_dc.js, record_gpmolformer.js
+    (all use setState() with plain-data args; caption holds = 20000ms; view holds = 25000ms)
+  - Starts backend :8299 + Vite :5299 on compute node, records 3 MP4s sequentially
+  - Outputs: studio/demo/demo-output/{hydragnn_demo,orbit2_dc_demo,gpmolformer_finetune_demo}.mp4
+  - Expected runtime: ~15-20 min (3 videos × ~2 min recording + ffmpeg)
 
-### 5c. Expected outputs
-- [ ] `studio/demo/demo-output/hydragnn_demo.mp4` (>1 MB)
-- [ ] `studio/demo/demo-output/orbit2_dc_demo.mp4` (>1 MB)
-- [ ] `studio/demo/demo-output/gpmolformer_finetune_demo.mp4` (>1 MB)
-
----
-
-## Step 6 — GP-MoLFormer Fine-Tuning PDF (screenshot walkthrough)
-
-- [ ] `studio/scripts/demo/capture_gpmolformer_demo.js` written
-- [ ] Run via capture_demo.slurm (or new job)
-- [ ] Output: `studio/demo/demo-output/gpmolformer_demo_walkthrough.pdf`
-
----
-
-## Step 7 — Transfer & Final Verification
-
+**Step 6 — Copy deliverables:**
 - [ ] `cp studio/demo/demo-output/*.mp4 ~/transfer/`
-- [ ] `cp studio/demo/demo-output/*_walkthrough.pdf ~/transfer/`
-- [ ] `ls -lh ~/transfer/` — all files present
-- [ ] `scp rad-vultr-login:~/transfer/* .` (from laptop)
+- [ ] Existing in ~/transfer/: architecture_review.pdf, hydragnn_demo_walkthrough.pdf,
+      + 3 old MP4s (will be overwritten by re-record)
+
+**Step 7 — Final commit + tag:**
+- [ ] git commit any remaining changes; consider tag v0.3-phase2-final
+
+### KEY FACTS
+- Studio dev server only runs on COMPUTE NODES (login node ulimit -u=256 too low for esbuild)
+- Demo mode = instant replay of REAL baked data. Live mode = real SLURM job.
+- All data is real: ERA5 from Open-Meteo, predictions from trained HydraGNN, QED from published paper
+- Open-Meteo rate limit: use ≤2 req/s (0.5s sleep) + 1s/row pause; resets hourly
 
 ---
 
