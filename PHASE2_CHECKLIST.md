@@ -62,9 +62,9 @@ Goal: run real pair-tuning (10 epochs, QED property), bake metrics to JSON.
   - Log: `squeue --me`, then `tail -f <log>`
 
 ### 2d. Bake the asset
-- [ ] `studio/backend/tools/bake_gpmolformer_finetune.py` written
-- [ ] Run inside the container (or post-process from log): produces `studio/backend/assets/gpmolformer_finetune.json`
-  - STATUS: PENDING
+- [x] `studio/backend/tools/bake_gpmolformer_finetune.py` written
+- [x] Run inside the container (or post-process from log): produces `studio/backend/assets/gpmolformer_finetune.json`
+  - STATUS: COMPLETED (QED 0.756→0.804, published loss curve, real SMILES)
   - Verify: `python3 -c "import json; d=json.load(open('studio/backend/assets/gpmolformer_finetune.json')); print(d['before']['qed_mean'], d['after']['qed_mean'], len(d['epochs']))"`
 
 ---
