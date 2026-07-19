@@ -532,11 +532,12 @@ export function ModelCatalog() {
 
   useEffect(() => {
     const domainIds = ['earth_science', 'material_science', 'healthcare', 'physics_simulation', 'protein_folding']
-    Promise.all(domainIds.map(d => api.domainModels(d).catch(() => [])))
-      .then(results => {
-        setAllModels(results.flat().filter(Boolean))
-        setLoading(false)
-      })
+    // Wrap each fetch with a 10-second timeout so a stalled request doesn't block the catalog.
+    const withTimeout = (promise, ms = 10000) =>
+      Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))])
+    Promise.all(domainIds.map(d => withTimeout(api.domainModels(d)).catch(() => [])))
+      .then(results => setAllModels(results.flat().filter(Boolean)))
+      .finally(() => setLoading(false))
   }, [])
 
   function selectModel(m) {

@@ -74,13 +74,13 @@ async function launchDemo(page, body) {
   })
 
   // Act 1: July 16 2024 heatwave
-  await caption(page, 'ORBIT-2 Climate Downscaling — Washington DC Heatwave', 2500)
+  await caption(page, 'ORBIT-2 Climate Downscaling — Washington DC Heatwave', 20000)
   await setState(page, { domain:'earth_science', step:1 })
   await page.waitForTimeout(900)
-  await caption(page, 'ORBIT-2 — Vision Foundation Model for Climate Downscaling', 2200)
+  await caption(page, 'ORBIT-2 — Vision Foundation Model for Climate Downscaling', 20000)
   await setState(page, { model:{slug:'ORBIT-2',name:'ORBIT-2 (Climate Downscaling)',domain:'earth_science'}, mode:'demo', task:'inference', step:2 })
   await page.waitForTimeout(900)
-  await caption(page, 'July 16 2024 — Washington DC Record 104°F / 40°C', 2500)
+  await caption(page, 'July 16 2024 — Washington DC Record 104°F / 40°C', 20000)
   await setState(page, {
     prompt:"Downscale the July 14-17 2024 Washington DC record heatwave (104F / 40C peak) from ERA5 0.25-degree to 0.1-degree resolution — show temperature field at two resolutions.",
     param: { k:'dc_event', v:'july16_2024' },
@@ -94,21 +94,21 @@ async function launchDemo(page, body) {
     params:{ dc_event:'july16_2024' },
   })
   await setState(page, { runId:r1, result:j1?.result, step:4 })
-  await page.waitForTimeout(3000)
-  await caption(page, 'Real ERA5 Data — 0.25° Coarse vs 0.1° Fine Grid — DC marked red', 2500)
-  await page.waitForTimeout(2000)
+  await page.waitForTimeout(25000)
+  await caption(page, 'Real ERA5 Data — 0.25° Coarse vs 0.1° Fine Grid — DC marked red', 20000)
+  await page.waitForTimeout(5000)
 
   // Act 2: July 4 comparison
-  await caption(page, 'Switch Dataset: Independence Day July 4 2024', 2200)
+  await caption(page, 'Switch Dataset: Independence Day July 4 2026', 20000)
   const {rid:r2, job:j2} = await launchDemo(page, {
     slug:'ORBIT-2', domain:'earth_science', task:'inference', mode:'demo',
-    prompt:"Downscale the July 4 2024 Independence Day heat in Washington DC from ERA5 0.25-degree to 0.1-degree resolution.",
-    params:{ dc_event:'july4_2024' },
+    prompt:"Downscale the July 4 2026 Independence Day heat in Washington DC from ERA5 0.25-degree to 0.1-degree resolution.",
+    params:{ dc_event:'july4_2026' },
   })
   await setState(page, { runId:r2, result:j2?.result, step:4 })
-  await page.waitForTimeout(3000)
-  await caption(page, 'Open-Meteo ERA5 Real Data — AMD Instinct MI355X Cluster', 2500)
-  await page.waitForTimeout(1500)
+  await page.waitForTimeout(25000)
+  await caption(page, 'Open-Meteo ERA5 Real Data — AMD Instinct MI355X Cluster', 20000)
+  await page.waitForTimeout(5000)
 
   await rec.send('Page.stopScreencast')
   const ffp = require('child_process').spawn(FFMPEG, [

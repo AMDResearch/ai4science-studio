@@ -528,95 +528,127 @@ function TrainingConvergenceViz({ result }) {
   )
 }
 
-// ── DC Temperature Downscaling Viz ────────────────────────────────────────────
-function DCDownscalingViz({ result }) {
-  const [activeEvent, setActiveEvent] = useState(result.event_key || 'july16_2024')
-
-  // Use the current result if no event switch; event switching requires a new job.
-  const coarse = result.coarse || {}
-  const fine = result.fine || {}
-
-  // Map temperature to CSS rgb (blue=cold 15°C → white=25°C → red=42°C)
-  function tempToRgb(t, tmin, tmax) {
-    const norm = Math.max(0, Math.min(1, (t - tmin) / (tmax - tmin || 1)))
-    if (norm < 0.5) {
-      const f = norm * 2
-      return `rgb(${Math.round(f * 255)},${Math.round(f * 255)},255)`
-    } else {
-      const f = (norm - 0.5) * 2
-      return `rgb(255,${Math.round((1 - f) * 255)},${Math.round((1 - f) * 255)})`
-    }
+// ── DC Temperature Downscaling Viz — Leaflet map with temperature overlay ────
+function tempToHex(t, tmin, tmax) {
+  const norm = Math.max(0, Math.min(1, (t - tmin) / (tmax - tmin || 1)))
+  // Blue (cold) → white (mid) → red (hot)
+  let r, g, b
+  if (norm < 0.5) {
+    const f = norm * 2
+    r = Math.round(f * 255); g = Math.round(f * 255); b = 255
+  } else {
+    const f = (norm - 0.5) * 2
+    r = 255; g = Math.round((1 - f) * 255); b = Math.round((1 - f) * 255)
   }
+  return `rgba(${r},${g},${b},0.55)`
+}
 
-  function HeatMap({ grid, lats, lons, dcLat, dcLon, height = 220 }) {
-    if (!grid || grid.length === 0) return <div style={{ color: '#52525b', padding: '1rem', textAlign: 'center' }}>No grid data</div>
-    const allTemps = grid.flat().filter(t => t !== null)
-    const tmin = Math.min(...allTemps), tmax = Math.max(...allTemps)
-    const rows = grid.length, cols = grid[0]?.length || 1
-    const cellW = 100 / cols, cellH = height / rows
+function LeafletTempMap({ gridData, dcLat, dcLon, label, height = 360 }) {
+  const mapRef = useRef(null)
+  const leafletRef = useRef(null)
 
-    // DC marker position in grid coords
-    const dcRow = dcLat !== undefined && lats ? Math.round((dcLat - lats[0]) / ((lats[lats.length-1] - lats[0]) / (rows-1))) : null
-    const dcCol = dcLon !== undefined && lons ? Math.round((dcLon - lons[0]) / ((lons[lons.length-1] - lons[0]) / (cols-1))) : null
+  useEffect(() => {
+    let L, map, cancelled = false
+    ;(async () => {
+      L = await import('leaflet')
+      if (cancelled || !mapRef.current) return
 
-    return (
-      <svg width="100%" viewBox={`0 0 100 ${height}`} preserveAspectRatio="none"
-        style={{ borderRadius: '.4rem', overflow: 'hidden', display: 'block' }}>
-        {grid.map((row, ri) =>
-          row.map((t, ci) => t !== null ? (
-            <rect key={`${ri}-${ci}`}
-              x={ci * cellW} y={ri * cellH}
-              width={cellW + 0.5} height={cellH + 0.5}
-              fill={tempToRgb(t, tmin, tmax)} />
-          ) : null)
-        )}
-        {/* DC marker */}
-        {dcRow !== null && dcCol !== null && dcRow >= 0 && dcRow < rows && dcCol >= 0 && dcCol < cols && (
-          <g>
-            <circle cx={(dcCol + 0.5) * cellW} cy={(dcRow + 0.5) * cellH} r={2}
-              fill="none" stroke="#ED1C24" strokeWidth={0.8} />
-            <circle cx={(dcCol + 0.5) * cellW} cy={(dcRow + 0.5) * cellH} r={0.8}
-              fill="#ED1C24" />
-          </g>
-        )}
-      </svg>
-    )
-  }
+      // Inject Leaflet CSS if not already present
+      if (!document.getElementById('leaflet-css')) {
+        const link = document.createElement('link')
+        link.id = 'leaflet-css'; link.rel = 'stylesheet'
+        link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'
+        document.head.appendChild(link)
+      }
 
-  function ColorBar({ tmin, tmax }) {
-    const steps = 20
-    const w = 100 / steps
-    return (
-      <div style={{ marginTop: '.5rem' }}>
-        <svg width="100%" viewBox="0 0 100 8" style={{ display: 'block' }}>
-          {Array.from({ length: steps }, (_, i) => {
-            const t = tmin + (tmax - tmin) * i / (steps - 1)
-            return <rect key={i} x={i * w} y={0} width={w + 0.5} height={8} fill={tempToRgb(t, tmin, tmax)} />
-          })}
-        </svg>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.65rem', color: '#71717a' }}>
-          <span>{tmin.toFixed(1)}°C</span>
-          <span>Temperature</span>
-          <span>{tmax.toFixed(1)}°C</span>
-        </div>
-      </div>
-    )
-  }
+      if (leafletRef.current) { leafletRef.current.remove(); leafletRef.current = null }
 
-  const allCoarse = (coarse.temp_c || []).flat().filter(t => t !== null)
-  const allFine   = (fine.temp_c   || []).flat().filter(t => t !== null)
-  const tmin = Math.min(...allCoarse, ...allFine)
-  const tmax = Math.max(...allCoarse, ...allFine)
+      const lats = gridData.lat || [], lons = gridData.lon || [], grid = gridData.temp_c || []
+      if (!lats.length) return
+
+      const centerLat = (lats[0] + lats[lats.length-1]) / 2
+      const centerLon = (lons[0] + lons[lons.length-1]) / 2
+      const zoom = gridData.resolution_deg <= 0.15 ? 9 : 7
+
+      map = L.default.map(mapRef.current, { zoomControl: true, scrollWheelZoom: false })
+      leafletRef.current = map
+
+      L.default.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors',
+        opacity: 0.85,
+      }).addTo(map)
+
+      map.setView([centerLat, centerLon], zoom)
+
+      // Temperature overlay: one rectangle per grid cell
+      const allTemps = grid.flat().filter(t => t !== null)
+      const tmin = Math.min(...allTemps), tmax = Math.max(...allTemps)
+      const stepLat = lats.length > 1 ? Math.abs(lats[1] - lats[0]) : 0.25
+      const stepLon = lons.length > 1 ? Math.abs(lons[1] - lons[0]) : 0.25
+
+      grid.forEach((row, ri) => {
+        row.forEach((t, ci) => {
+          if (t === null) return
+          const lat = lats[ri], lon = lons[ci]
+          L.default.rectangle(
+            [[lat - stepLat/2, lon - stepLon/2], [lat + stepLat/2, lon + stepLon/2]],
+            { color: 'none', fillColor: tempToHex(t, tmin, tmax), fillOpacity: 0.55,
+              weight: 0, interactive: false }
+          ).addTo(map)
+        })
+      })
+
+      // DC marker
+      if (dcLat && dcLon) {
+        L.default.circleMarker([dcLat, dcLon], {
+          radius: 8, color: '#ED1C24', weight: 3, fillColor: '#fff', fillOpacity: 0.9,
+        }).bindTooltip(`Washington DC<br>${dcLat.toFixed(2)}°N ${Math.abs(dcLon).toFixed(2)}°W`, { permanent: false })
+          .addTo(map)
+      }
+    })()
+    return () => { cancelled = true; if (leafletRef.current) { leafletRef.current.remove(); leafletRef.current = null } }
+  }, [gridData, dcLat, dcLon])
+
+  const allTemps = (gridData.temp_c || []).flat().filter(t => t !== null)
+  const tmin = allTemps.length ? Math.min(...allTemps) : 15
+  const tmax = allTemps.length ? Math.max(...allTemps) : 42
 
   return (
     <div>
-      <div style={{ marginBottom: '.75rem', fontSize: '.88rem', color: '#a1a1aa', lineHeight: 1.5 }}>
-        <strong style={{ color: '#f5f5f7' }}>{result.label || result.date}</strong>
+      <div ref={mapRef} style={{ width: '100%', height, borderRadius: '.5rem',
+        border: '1px solid #27272a', overflow: 'hidden', background: '#0a0a0b' }} />
+      {/* Color bar legend */}
+      <div style={{ marginTop: '.4rem', display: 'flex', alignItems: 'center', gap: '.5rem' }}>
+        <span style={{ fontSize: '.65rem', color: '#71717a', flexShrink: 0 }}>{tmin.toFixed(1)}°C</span>
+        <div style={{ flex: 1, height: 10, borderRadius: 4, overflow: 'hidden' }}>
+          <div style={{
+            width: '100%', height: '100%',
+            background: 'linear-gradient(to right, #0000ff, #ffffff, #ff0000)',
+          }} />
+        </div>
+        <span style={{ fontSize: '.65rem', color: '#71717a', flexShrink: 0 }}>{tmax.toFixed(1)}°C</span>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.6rem', color: '#52525b', marginTop: '.15rem' }}>
+        <span><span style={{ color: '#ED1C24' }}>●</span> Washington DC</span>
+        <span>{label} · {(gridData.temp_c || []).length}×{(gridData.temp_c?.[0] || []).length} grid · OpenStreetMap</span>
+      </div>
+    </div>
+  )
+}
+
+function DCDownscalingViz({ result }) {
+  const coarse = result.coarse || {}
+  const fine = result.fine || {}
+  const activeEvent = result.event_key || 'july16_2024'
+
+  return (
+    <div>
+      {/* Header */}
+      <div style={{ marginBottom: '.75rem', fontSize: '.95rem', color: '#f5f5f7' }}>
+        <strong>{result.label || result.date}</strong>
         {result.peak_temp_c && (
-          <span style={{ marginLeft: '.75rem' }}>
-            Peak: <span style={{ color: '#ff8f93', fontWeight: 700 }}>
-              {result.peak_temp_c}°C / {result.peak_temp_f}°F
-            </span>
+          <span style={{ marginLeft: '.75rem', color: '#ff8f93', fontWeight: 700 }}>
+            Peak {result.peak_temp_c}°C / {result.peak_temp_f}°F
           </span>
         )}
       </div>
@@ -630,16 +662,15 @@ function DCDownscalingViz({ result }) {
               marginRight: '.5rem', padding: '.2rem .55rem', borderRadius: '9999px',
               background: activeEvent === k ? '#ED1C24' : 'transparent',
               border: '1px solid', borderColor: activeEvent === k ? '#ED1C24' : '#3f3f46',
-              color: activeEvent === k ? '#fff' : '#a1a1aa', cursor: 'default',
-              fontSize: '.7rem',
+              color: activeEvent === k ? '#fff' : '#a1a1aa', fontSize: '.7rem',
             }}>{label}</span>
           ))}
-          <span style={{ color: '#52525b' }}>— run a new job to switch events</span>
+          <span style={{ color: '#52525b' }}>— re-run to switch</span>
         </div>
       )}
 
       {/* Stat cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(140px,1fr))', gap: '.65rem', marginBottom: '1rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(130px,1fr))', gap: '.65rem', marginBottom: '1rem' }}>
         {[
           { label: 'Date', value: result.date || '—' },
           { label: 'Peak Temp', value: result.peak_temp_c ? `${result.peak_temp_c}°C` : '—', color: '#ff8f93' },
@@ -655,25 +686,26 @@ function DCDownscalingViz({ result }) {
         ))}
       </div>
 
-      {/* Two heat maps side by side */}
+      {/* Two Leaflet maps side by side */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '.75rem' }}>
-        {[
-          { label: `Coarse — ${coarse.label || coarse.model || '0.25°'} (input)`,
-            grid: coarse.temp_c, lats: coarse.lat, lons: coarse.lon },
-          { label: `Fine — ${fine.label || fine.model || '0.1°'} (ORBIT-2 output)`,
-            grid: fine.temp_c, lats: fine.lat, lons: fine.lon },
-        ].map(({ label, grid, lats, lons }) => (
-          <div key={label} className="card" style={{ padding: '.6rem' }}>
-            <div className="section-label" style={{ marginBottom: '.4rem', fontSize: '.68rem' }}>{label}</div>
-            <HeatMap grid={grid} lats={lats} lons={lons}
-              dcLat={result.dc?.lat} dcLon={result.dc?.lon} />
+        <div className="card" style={{ padding: '.6rem' }}>
+          <div className="section-label" style={{ marginBottom: '.4rem', fontSize: '.68rem' }}>
+            Coarse — {coarse.label || '0.25° ERA5'} (input)
           </div>
-        ))}
+          <LeafletTempMap gridData={coarse} dcLat={result.dc?.lat} dcLon={result.dc?.lon}
+            label={coarse.label || 'ERA5 0.25°'} height={320} />
+        </div>
+        <div className="card" style={{ padding: '.6rem' }}>
+          <div className="section-label" style={{ marginBottom: '.4rem', fontSize: '.68rem' }}>
+            Fine — {fine.label || '0.1° ERA5-Land'} (ORBIT-2 output)
+          </div>
+          <LeafletTempMap gridData={fine} dcLat={result.dc?.lat} dcLon={result.dc?.lon}
+            label={fine.label || 'ERA5-Land 0.1°'} height={320} />
+        </div>
       </div>
-      <ColorBar tmin={tmin} tmax={tmax} />
-      <div style={{ marginTop: '.5rem', fontSize: '.72rem', color: '#52525b' }}>
-        <span style={{ color: '#ED1C24' }}>●</span> Washington DC (38.9°N 77.0°W) ·
-        Source: {result.source || 'Open-Meteo ERA5'} · ORBIT-2 4× super-resolution
+
+      <div style={{ fontSize: '.72rem', color: '#52525b' }}>
+        Real ERA5 data · {result.source || 'Open-Meteo'} · ORBIT-2 4× super-resolution · map © OpenStreetMap contributors
       </div>
     </div>
   )

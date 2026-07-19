@@ -73,10 +73,10 @@ async function launchDemo(page, body) {
   })
 
   // Act 1: Baseline molecule generation
-  await caption(page, 'GP-MoLFormer — AI Drug Discovery (IBM Research × AMD)', 2500)
+  await caption(page, 'GP-MoLFormer — AI Drug Discovery (IBM Research × AMD)', 20000)
   await setState(page, { domain:'healthcare', step:1 })
   await page.waitForTimeout(900)
-  await caption(page, 'Pretrained generative model: SMILES molecule design', 2200)
+  await caption(page, 'Pretrained generative model: SMILES molecule design', 20000)
   await setState(page, {
     model:{slug:'GP-MoLFormer',name:'GP-MoLFormer',domain:'healthcare'},
     mode:'demo', task:'inference', step:2,
@@ -89,11 +89,11 @@ async function launchDemo(page, body) {
   })
   await setState(page, { runId:r1, result:j1?.result, step:4 })
   await page.waitForTimeout(2500)
-  await caption(page, 'Baseline generation: diverse molecules, moderate drug-likeness', 2200)
+  await caption(page, 'Baseline generation: diverse molecules, moderate drug-likeness', 20000)
   await page.waitForTimeout(1500)
 
   // Act 2: QED pair-tuning
-  await caption(page, 'Pair-Tuning: Steer Generation Toward Higher QED (Drug-Likeness)', 2500)
+  await caption(page, 'Pair-Tuning: Steer Generation Toward Higher QED (Drug-Likeness)', 20000)
   await setState(page, { task:'finetune', step:2 })
   await page.waitForTimeout(900)
   const {rid:r2, job:j2} = await launchDemo(page, {
@@ -102,11 +102,11 @@ async function launchDemo(page, body) {
     params:{},
   })
   await setState(page, { runId:r2, result:j2?.result, step:4 })
-  await page.waitForTimeout(3000)
-  await caption(page, 'After pair-tuning: QED 0.76→0.80 — backbone frozen (PEFT)', 2500)
+  await page.waitForTimeout(25000)
+  await caption(page, 'After pair-tuning: QED 0.76→0.80 — backbone frozen (PEFT)', 20000)
   await page.waitForTimeout(2000)
-  await caption(page, 'Loss curve, before/after SMILES, property shift — AMD Instinct', 2500)
-  await page.waitForTimeout(1500)
+  await caption(page, 'Loss curve, before/after SMILES, property shift — AMD Instinct', 20000)
+  await page.waitForTimeout(5000)
 
   await rec.send('Page.stopScreencast')
   const ffp = require('child_process').spawn(FFMPEG, [

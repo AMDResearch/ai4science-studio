@@ -75,13 +75,13 @@ async function launchDemo(page, body) {
   })
 
   // Act 1: Training scaling
-  await caption(page, 'AMD AI4Science Studio — HydraGNN Materials AI', 2500)
+  await caption(page, 'AMD AI4Science Studio — HydraGNN Materials AI', 20000)
   await setState(page, { domain:'material_science', step:1 })
   await page.waitForTimeout(1000)
-  await caption(page, 'HydraGNN — Graph Foundation Model for Atomistic Materials', 2200)
+  await caption(page, 'HydraGNN — Graph Foundation Model for Atomistic Materials', 20000)
   await setState(page, { model:{slug:'HydraGNN',name:'HydraGNN (Predictive GFM 2024)',domain:'material_science'}, mode:'demo', task:'train', step:2 })
   await page.waitForTimeout(1000)
-  await caption(page, 'Training-Scaling Demo: 1-GPU vs 8-GPU on Real Alexandria DFT Data', 2200)
+  await caption(page, 'Training-Scaling Demo: 1-GPU vs 8-GPU on Real Alexandria DFT Data', 20000)
   await setState(page, { prompt:'Compare HydraGNN energy-model training on 1 GPU versus 8 GPUs on Alexandria DFT data: show loss convergence, throughput speedup, and final accuracy.', step:3 })
   await page.waitForTimeout(1200)
 
@@ -91,23 +91,23 @@ async function launchDemo(page, body) {
     params:{model_variant:'8gpu'},
   })
   await setState(page, { runId:rid1, result:job1?.result, step:4 })
-  await page.waitForTimeout(3000)
-  await caption(page, '1-GPU vs 8-GPU: 6.7× more data, corr 0.75 → 0.79', 2500)
+  await page.waitForTimeout(25000)
+  await caption(page, '1-GPU vs 8-GPU: 6.7× more data, corr 0.75 → 0.79', 20000)
   await page.waitForTimeout(1500)
 
   // Act 2: Inference + 3D viewer
-  await caption(page, 'Live Inference: 3D Atomistic Structure + Predicted Energy vs DFT', 2200)
+  await caption(page, 'Live Inference: 3D Atomistic Structure + Predicted Energy vs DFT', 20000)
   const {rid:rid2, job:job2} = await launchDemo(page, {
     slug:'HydraGNN', domain:'material_science', task:'inference', mode:'demo',
     prompt:'Predict formation energy, atomic forces, and bulk modulus for an iron-carbon alloy with 5 atomic percent carbon using HydraGNN.',
     params:{model_variant:'8gpu'},
   })
   await setState(page, { runId:rid2, result:job2?.result, step:4 })
-  await page.waitForTimeout(3500)
-  await caption(page, '3D Ball-and-Stick Viewer — Rotate, Zoom, Element Colors', 2500)
+  await page.waitForTimeout(25000)
+  await caption(page, '3D Ball-and-Stick Viewer — Rotate, Zoom, Element Colors', 20000)
   await page.waitForTimeout(2000)
-  await caption(page, 'Predicted Energy vs DFT Reference — AMD MI355X', 2500)
-  await page.waitForTimeout(1500)
+  await caption(page, 'Predicted Energy vs DFT Reference — AMD MI355X', 20000)
+  await page.waitForTimeout(5000)
 
   await rec.send('Page.stopScreencast')
 

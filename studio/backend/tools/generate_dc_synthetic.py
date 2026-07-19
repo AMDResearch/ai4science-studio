@@ -40,15 +40,15 @@ EVENTS = {
             "the first four consecutive triple-digit days since 2012."
         ),
     },
-    "july4_2024": {
-        "label": "July 4 2024 — Independence Day Heat",
-        "date": "2024-07-04",
-        "window_start": "2024-07-03",
-        "window_end": "2024-07-05",
+    "july4_2026": {
+        "label": "July 4 2026 — Independence Day Heat",
+        "date": "2026-07-04",
+        "window_start": "2026-07-03",
+        "window_end": "2026-07-05",
         "note": (
-            "Independence Day 2024 in DC was significantly above average, "
-            "with temperatures in the mid-to-upper 90s F (~36-37 C). "
-            "This illustrates typical mid-summer DC urban heat."
+            "Independence Day 2026 was a major heatwave in DC: peak 39.6 C (103.3 F) "
+            "at Reagan National Airport — the second triple-digit Independence Day "
+            "in recorded history."
         ),
     },
 }
@@ -142,7 +142,7 @@ def fetch_event(key, ev):
     print(f"  DC center: coarse={dc_coarse}°C, fine={dc_fine}°C")
 
     # Fallback: use documented peak temps if API still rate-limited
-    fallback = {"july16_2024": 40.0, "july4_2024": 37.5}
+    fallback = {"july16_2024": 40.0, "july4_2026": 37.5}
     if dc_coarse is None:
         dc_coarse = fallback.get(key, 36.0)
         print(f"  (using documented fallback: {dc_coarse}°C)")
