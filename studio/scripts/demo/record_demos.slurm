@@ -6,7 +6,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=16G
-#SBATCH --time=0:40:00
+#SBATCH --time=0:50:00
 #SBATCH --output=/home/spannala/Projects/ai4science-studio/studio/scripts/demo/record_demos_%j.log
 
 set -e

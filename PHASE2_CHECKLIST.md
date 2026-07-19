@@ -177,8 +177,8 @@ Goal: run real pair-tuning (10 epochs, QED property), bake metrics to JSON.
 **Step 5 — RE-RECORD demo videos (IN PROGRESS):**
 Videos need re-recording because: (1) slides now 20-25s (was 2-3s), (2) real
 predictions replace random atoms, (3) Leaflet maps, (4) July 4 2026 data.
-- [ ] `sbatch studio/scripts/demo/record_demos.slurm`  (time bumped to 0:50:00)
-  - JOB ID: ___________
+- [x] `sbatch studio/scripts/demo/record_demos.slurm`  (time 0:50:00)
+  - JOB ID: 17457 (running)
   - Recorders: record_hydragnn.js, record_orbit2_dc.js, record_gpmolformer.js
     (all use setState() with plain-data args; caption holds = 20000ms; view holds = 25000ms)
   - Starts backend :8299 + Vite :5299 on compute node, records 3 MP4s sequentially
