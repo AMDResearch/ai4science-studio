@@ -103,6 +103,13 @@ studio/demo/node_modules/
 # Baked data assets (large, regenerable via tools/bake_*.py — see assets/README.md)
 studio/backend/assets/*.json
 
+# GHSL global built-up GeoTIFF cache (129 MB, re-downloadable via fetch_dc_urban_density.py)
+studio/backend/assets/_ghsl_builtup_dc.tif
+
+# Stray demo capture logs
+studio/demo/demo-output/*.log
+studio/scripts/demo/*.log
+
 # ── LaTeX documentation ───────────────────────────────────────────────────────
 # Keep .tex source, .bib, Makefile; ignore compiled artifacts and binaries
 docs/*.pdf

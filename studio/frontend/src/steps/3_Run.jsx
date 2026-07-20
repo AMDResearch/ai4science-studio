@@ -12,6 +12,7 @@ export function StepRun() {
   const [partitions, setPartitions] = useState([])
   const logRef = useRef(null)
   const esRef = useRef(null)
+  const pollRef = useRef(null)
 
   const activePrompt = customPrompt || prompt
 
@@ -27,7 +28,10 @@ export function StepRun() {
   }, [log])
 
   // Cleanup SSE on unmount
-  useEffect(() => () => esRef.current?.close(), [])
+  useEffect(() => () => {
+    try { esRef.current?.close() } catch { /* noop */ }
+    if (pollRef.current) clearInterval(pollRef.current)
+  }, [])
 
   async function launch() {
     setLaunching(true)
@@ -45,23 +49,34 @@ export function StepRun() {
       })
       setRunId(run_id)
       setRunState('running')
-      // Start SSE stream
+
+      // Finalize once — whichever path (SSE 'done' or polling) sees completion first.
+      let finalized = false
+      const finalize = async () => {
+        if (finalized) return
+        const job = await api.job(run_id)
+        if (job.state !== 'completed' && job.state !== 'failed') return
+        finalized = true
+        try { esRef.current?.close() } catch { /* noop */ }
+        if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
+        setRunState(job.state)
+        if (job.result) setResult(job.result)
+        if (job.state === 'completed') setStep(4)
+      }
+
+      // Primary: SSE stream for live logs + completion.
       const es = new EventSource(`/api/jobs/${run_id}/stream`)
       esRef.current = es
       es.onmessage = (e) => {
         const data = JSON.parse(e.data)
         if (data.line) setLog(l => [...l, data.line])
-        if (data.done) {
-          es.close()
-          // Fetch final state
-          api.job(run_id).then(job => {
-            setRunState(job.state)
-            if (job.result) setResult(job.result)
-            if (job.state === 'completed') setStep(4)
-          })
-        }
+        if (data.done) finalize()
       }
-      es.onerror = () => es.close()
+      es.onerror = () => { try { es.close() } catch { /* noop */ } }
+
+      // Fallback: poll job status every 2s. Zscaler Browser Isolation often kills
+      // long-lived SSE streams, so this guarantees results still load.
+      pollRef.current = setInterval(() => { finalize().catch(() => {}) }, 2000)
     } catch (e) {
       setLog(l => [...l, `[error] ${e.message}`])
       setRunState('failed')
@@ -74,7 +89,10 @@ export function StepRun() {
     <div>
       <StepHeader
         title="Run"
-        sub={`${model?.name || model?.slug} — ${mode === 'demo' ? 'Demo (synthetic)' : 'Live SLURM'} mode`}
+        sub={`${model?.name || model?.slug} — ${
+          mode === 'demo'
+            ? (model?.slug === 'ORBIT-2' && task === 'story' ? 'Demo (replay of real runs)' : 'Demo (synthetic)')
+            : 'Live SLURM'} mode`}
       />
       <button className="btn btn-ghost" style={{ marginBottom: '1.2rem', fontSize: '.8rem' }}
         onClick={() => setStep(2)}>← Back</button>

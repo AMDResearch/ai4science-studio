@@ -57,10 +57,18 @@ def _update_state(run_id: str, state: str, slurm_job_id: str | None = None):
 def _run_synthetic(run_id: str, slug: str, domain: str, task: str, prompt: str, params: dict):
     """Runs in a thread. Calls the synthetic generator and streams fake log lines."""
     import synthetic as syn
-    _emit(run_id, f"[studio] Demo mode — generating synthetic output for {slug}...")
-    _emit(run_id, f"[studio] Task: {task} | Domain: {domain}")
-    _emit(run_id, f"[studio] Prompt: {prompt[:120]}{'...' if len(prompt) > 120 else ''}")
-    _emit(run_id, "[studio] Initializing synthetic data generator...")
+    # The ORBIT-2 story task replays REAL measured GPU-run results (not synthetic).
+    _is_replay = (slug == "ORBIT-2" and task == "story")
+    if _is_replay:
+        _emit(run_id, f"[studio] Demo mode — replaying real ORBIT-2 GPU-run results for {slug}...")
+        _emit(run_id, f"[studio] Task: {task} | Domain: {domain}")
+        _emit(run_id, f"[studio] Prompt: {prompt[:120]}{'...' if len(prompt) > 120 else ''}")
+        _emit(run_id, "[studio] Loading measured results (real PRISM data, real finetunes on MI355X)...")
+    else:
+        _emit(run_id, f"[studio] Demo mode — generating synthetic output for {slug}...")
+        _emit(run_id, f"[studio] Task: {task} | Domain: {domain}")
+        _emit(run_id, f"[studio] Prompt: {prompt[:120]}{'...' if len(prompt) > 120 else ''}")
+        _emit(run_id, "[studio] Initializing synthetic data generator...")
     time.sleep(0.5)
     _update_state(run_id, "running")
 
@@ -88,6 +96,7 @@ def _run_synthetic(run_id: str, slug: str, domain: str, task: str, prompt: str, 
 # ── SLURM (live) runner ───────────────────────────────────────────────────────
 
 _AI4S_SHARED_DIR = "/shared/spannala"
+_BACKEND_DIR     = Path(__file__).resolve().parent
 _SLURM_ACCOUNT   = "vultr_lux"
 _SIF_PATH        = f"{_AI4S_SHARED_DIR}/images/pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif"
 
@@ -172,7 +181,34 @@ def _build_slurm_script(run_id: str, slug: str, domain: str, task: str,
     # code clone lives in aaji's tree, and synthetic mode auto-generates data +
     # auto-downloads the checkpoint from HF. Single-GPU config avoids the 16-way
     # FSDP default. UI params below can override any of these.
-    if slug == "ORBIT-2":
+    if slug == "ORBIT-2" and task == "story":
+        # Real 4-act robustness/finetuning story: PRISM-trained ORBIT-2 applied to
+        # INDEPENDENT Open-Meteo DC heatwave data (true out-of-distribution test).
+        # Static channels come from the PRISM DC crop; dynamic (tmax/tmin/precip)
+        # from the baked real Open-Meteo fields. DC event selectable via dc_event.
+        _O2 = f"{_AI4S_SHARED_DIR}/orbit2_sr"
+        _OOD = str(_BACKEND_DIR / "assets" / "dc_ood_fields.json")
+        _dc_event = str(params.get("dc_event", "july16_2024"))
+        script_lines += [
+            f"export OUT_JSON={str(_run_dir(run_id) / 'orbit2_story.json')}",
+            "_U=(); while IFS= read -r v; do _U+=(-u \"$v\"); done "
+            "< <(env | grep -oE '^(PMIX_|PMI_|OMPI_)[A-Za-z0-9_]+')",
+            "srun --mpi=pmix --ntasks=1 --gpus-per-node=1 --cpu-bind=none "
+            f"env \"${{_U[@]}}\" apptainer exec --rocm --overlay {overlay}:ro "
+            "--bind /shared/aaji/models/ORBIT-2:/shared/aaji/models/ORBIT-2:ro "
+            "--bind /home/spannala/.cache/huggingface/orbit2:/home/spannala/.cache/huggingface/orbit2:ro "
+            f"--bind {_AI4S_SHARED_DIR}:{_AI4S_SHARED_DIR} "
+            f"--bind {_BACKEND_DIR}:{_BACKEND_DIR}:ro "
+            f"--bind {_run_dir(run_id)}:{_run_dir(run_id)} "
+            "--env PYTHONPATH=/opt/orbit2-pkgs:/shared/aaji/models/ORBIT-2/code/ORBIT-2/src "
+            "--env PYTHONNOUSERSITE=1 --env HSA_NO_SCRATCH_RECLAIM=1 --env MIOPEN_DISABLE_CACHE=1 "
+            f"--env OOD_FIELDS={_OOD} --env DC_EVENT={_dc_event} "
+            f"--env OUT_JSON={str(_run_dir(run_id) / 'orbit2_story.json')} "
+            f"{_SIF_PATH} bash -lc "
+            f"'source /opt/venv/bin/activate 2>/dev/null; python3 {_O2}/orbit2_ood_dc.py'",
+            "",
+        ]
+    elif slug == "ORBIT-2":
         script_lines += [
             f"export ORBIT2_ROOT=/shared/aaji/models/ORBIT-2/code/ORBIT-2",
             f"export ORBIT2_USE_SYNTHETIC=1",
@@ -184,15 +220,36 @@ def _build_slurm_script(run_id: str, slug: str, domain: str, task: str,
     # HydraGNN: predict energy with OUR trained PNA model on a real held-out material.
     _HG_WORK = f"{_AI4S_SHARED_DIR}/models/HydraGNN/train_work"
     if slug == "HydraGNN":
-        # Pick checkpoint by variant: 8gpu (hg_model_ddp.pk) or 1gpu (hg_model.pk).
+        # Pick checkpoint by variant. Both models now use the SAME stored-PBC-edge
+        # pipeline and identical config, so the 1-GPU vs 8-GPU comparison isolates
+        # data scale + GPU count (the honest scaling story): 8gpu = v3 (600k
+        # structures, MAE 0.24 / corr 0.89); 1gpu = hg_model_1gpu_pbc (40k, MAE
+        # 0.29 / corr 0.82). Both need HG_USE_PBC_EDGES=1.
         variant = str(params.get("model_variant", "8gpu")).lower()
-        ckpt = "hg_model_ddp.pk" if variant == "8gpu" else "hg_model.pk"
+        ckpt = "hg_model_ddp_v3.pk" if variant == "8gpu" else "hg_model_1gpu_pbc.pk"
         struct_index = params.get("struct_index", params.get("STRUCT_INDEX", 4))
+        # Map element symbols in the prompt to atomic numbers so the held-out
+        # structure shown matches what the user asked about (e.g. "iron-carbon"
+        # -> require Fe(26) + C(6)). Falls back to STRUCT_INDEX if none match.
+        _ELEM = {"iron": 26, "fe": 26, "carbon": 6, "oxygen": 8, "lithium": 3, "li": 3,
+                 "cobalt": 27, "nickel": 28, "manganese": 25, "titanium": 22, "silicon": 14}
+        pl = prompt.lower()
+        req = params.get("require_elements")
+        if not req:
+            hits = sorted({z for name, z in _ELEM.items() if name in pl})
+            req = ",".join(str(z) for z in hits) if hits else ""
         script_lines += [
             f"export HG_INFER_REPO={_AI4S_SHARED_DIR}/models/HydraGNN/outputs/HydraGNN-infer",
             f"export HG_MODEL_PATH={_HG_WORK}/results/{ckpt}",
             f"export HG_MODEL_VARIANT={variant!r}",
+            f"export HG_USE_PBC_EDGES=1",
             f"export STRUCT_INDEX={int(struct_index)}",
+            f"export REQUIRE_ELEMENTS={req!r}",
+            # Curated small demo materials (FeS2, FeNi3, NaFeO2, Fe2H6) + their
+            # name/application labels. studio_infer.py falls back to these when no
+            # element filter is requested, and enforces a size cap when one is.
+            f"export CURATED_INDICES='2816,3372,29321,1349'",
+            f"export MATERIAL_LABELS_FILE={_HG_WORK}/inference/demo_material_labels.json",
             f"export HG_STUDIO_INFER={_HG_WORK}/inference/studio_infer.py",
             f"export STUDIO_RESULT_OUT={str(_run_dir(run_id) / 'hg_result.json')}",
             "",
@@ -219,13 +276,19 @@ def _build_slurm_script(run_id: str, slug: str, domain: str, task: str,
             script_lines.append(f"export {k.upper()}={v!r}")
     script_lines.append("")
 
-    if upstream_script:
+    # The ORBIT-2 story task runs its own inline srun harness above — do not also
+    # delegate to the upstream (synthetic) sbatch.
+    _story_run = (slug == "ORBIT-2" and task == "story")
+
+    if upstream_script and not _story_run:
         # Upstream scripts resolve their own dir via `scontrol show job`, which returns
         # THIS generated job.sh (not the examples dir) when we bash-call them. Pass the
         # real examples dir explicitly so their /examples bind-mount points at the scripts.
         script_lines.append(f"export STUDIO_EXAMPLES_DIR={str(upstream_script.parent)!r}")
         script_lines.append(f"echo '[studio] Delegating to upstream script: {upstream_script.name}'")
         script_lines.append(f"bash {upstream_script} 2>&1")
+    elif _story_run:
+        script_lines.append("echo '[studio] ORBIT-2 story harness complete'")
     else:
         script_lines.append(f"echo '[studio] No upstream sbatch script found for {slug}'")
         script_lines.append("echo '[studio] Model output would appear here in a real run'")
@@ -263,6 +326,16 @@ def _harvest_results(run_id: str):
     slug = job.get("slug", "")
     log = _run_dir(run_id) / "output.log"
     text = log.read_text() if log.exists() else ""
+
+    if slug == "ORBIT-2" and (_run_dir(run_id) / "orbit2_story.json").exists():
+        # Story task: the harness wrote a complete 3-act JSON — read it verbatim.
+        try:
+            job["result"] = json.loads((_run_dir(run_id) / "orbit2_story.json").read_text())
+            _jobs[run_id] = job
+            _emit(run_id, "[studio] ORBIT-2 story results harvested.")
+        except Exception as e:
+            _emit(run_id, f"[studio] Could not parse ORBIT-2 story: {e}")
+        return
 
     if slug == "ORBIT-2":
         out_dir = f"{_AI4S_SHARED_DIR}/models/ORBIT-2/outputs/{run_id}"

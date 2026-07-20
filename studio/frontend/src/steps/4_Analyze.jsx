@@ -22,43 +22,156 @@ const _CPK = {
   Hg: '#b8b8d0', Pb: '#575961', Bi: '#9e4fb5',
 }
 
+// Covalent radii (Angstrom) used to determine atom-atom bonds.
+const _COV_R = {
+  H:0.31, He:0.28, Li:1.28, Be:0.96, B:0.84, C:0.76, N:0.71, O:0.66, F:0.57,
+  Ne:0.58, Na:1.66, Mg:1.41, Al:1.21, Si:1.11, P:1.07, S:1.05, Cl:1.02, Ar:1.06,
+  K:2.03, Ca:1.76, Sc:1.70, Ti:1.60, V:1.53, Cr:1.39, Mn:1.61, Fe:1.32, Co:1.26,
+  Ni:1.24, Cu:1.32, Zn:1.22, Ga:1.22, Ge:1.20, As:1.19, Se:1.20, Br:1.20, Kr:1.16,
+  Rb:2.20, Sr:1.95, Y:1.90, Zr:1.75, Nb:1.64, Mo:1.54, Ru:1.44, Rh:1.42, Pd:1.39,
+  Ag:1.45, Cd:1.44, In:1.42, Sn:1.39, Sb:1.39, Te:1.38, I:1.39, Xe:1.40,
+  Cs:2.44, Ba:2.15, La:2.07, Hf:1.75, Ta:1.70, W:1.62, Re:1.51, Os:1.44,
+  Ir:1.41, Pt:1.36, Au:1.36, Hg:1.32, Pb:1.46, Bi:1.48,
+}
+function _bonded(a, b) {
+  const ra = _COV_R[a.element] ?? 1.5, rb = _COV_R[b.element] ?? 1.5
+  const dx = a.x-b.x, dy = a.y-b.y, dz = a.z-b.z
+  return (dx*dx + dy*dy + dz*dz) < (ra + rb + 0.4) ** 2
+}
+function _computeBonds(atoms) {
+  const bonds = []
+  for (let i = 0; i < atoms.length; i++)
+    for (let j = i+1; j < atoms.length; j++)
+      if (_bonded(atoms[i], atoms[j])) bonds.push([i, j])
+  return bonds
+}
+
+// Detect usable WebGL. Zscaler Browser Isolation (and some remote/headless
+// contexts) render HTML/CSS fine but strip WebGL, which leaves 3Dmol's canvas
+// blank. In that case we fall back to a 2D SVG projection so the structure is
+// always visible.
+function hasWebGL() {
+  try {
+    const c = document.createElement('canvas')
+    const gl = c.getContext('webgl') || c.getContext('experimental-webgl')
+    if (!gl) return false
+    // A context object alone is not enough: Zscaler Browser Isolation returns a
+    // stub context that has no real renderer, so 3Dmol draws nothing. Require a
+    // working shader compile + a real (non-empty) renderer string.
+    const dbg = gl.getExtension('WEBGL_debug_renderer_info')
+    const renderer = dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER)
+    if (!renderer) return false
+    const sh = gl.createShader(gl.VERTEX_SHADER)
+    gl.shaderSource(sh, 'void main(){gl_Position=vec4(0.0);}')
+    gl.compileShader(sh)
+    const ok = gl.getShaderParameter(sh, gl.COMPILE_STATUS)
+    return !!ok
+  } catch { return false }
+}
+
+// 2D fallback: orthographic projection onto the two highest-variance axes.
+function Molecule2D({ atoms, height }) {
+  const W = 600, H = height
+  const pad = 36
+  const xs = atoms.map(a => a.x), ys = atoms.map(a => a.y), zs = atoms.map(a => a.z)
+  // Pick the two axes with the largest spread for the most informative view.
+  const spread = arr => Math.max(...arr) - Math.min(...arr)
+  const axes = [['x', spread(xs)], ['y', spread(ys)], ['z', spread(zs)]]
+    .sort((a, b) => b[1] - a[1]).slice(0, 2).map(a => a[0])
+  const ax = axes[0], ay = axes[1]
+  const av = (a, k) => a[k]
+  const aX = atoms.map(a => av(a, ax)), aY = atoms.map(a => av(a, ay))
+  const minX = Math.min(...aX), maxX = Math.max(...aX)
+  const minY = Math.min(...aY), maxY = Math.max(...aY)
+  const rangeX = (maxX - minX) || 1, rangeY = (maxY - minY) || 1
+  const sx = v => pad + ((v - minX) / rangeX) * (W - 2 * pad)
+  const sy = v => pad + ((maxY - v) / rangeY) * (H - 2 * pad)
+  // Depth (third axis) drives radius so nearer atoms look larger.
+  const az = ['x', 'y', 'z'].find(k => k !== ax && k !== ay)
+  const aZ = atoms.map(a => av(a, az))
+  const minZ = Math.min(...aZ), maxZ = Math.max(...aZ), rangeZ = (maxZ - minZ) || 1
+  const drawn = atoms.map((a, i) => ({ a, i, depth: (av(a, az) - minZ) / rangeZ }))
+    .sort((p, q) => p.depth - q.depth)   // far first, near last (painter's order)
+  const bonds = _computeBonds(atoms)
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H}
+      style={{ borderRadius: '.5rem', border: '1px solid #27272a', background: '#0a0a0b' }}>
+      {/* Bonds drawn first (behind atoms) */}
+      {bonds.map(([i, j]) => (
+        <line key={`b${i}-${j}`}
+          x1={sx(av(atoms[i], ax))} y1={sy(av(atoms[i], ay))}
+          x2={sx(av(atoms[j], ax))} y2={sy(av(atoms[j], ay))}
+          stroke="#4a4a52" strokeWidth="2.5" strokeLinecap="round" />
+      ))}
+      {drawn.map(({ a, i, depth }) => {
+        const r = 12 + depth * 12
+        const col = _CPK[a.element] || '#dd77ff'
+        return (
+          <g key={i}>
+            <circle cx={sx(av(a, ax))} cy={sy(av(a, ay))} r={r}
+              fill={col} stroke="rgba(0,0,0,.5)" strokeWidth="1" opacity={0.55 + depth * 0.45} />
+            <text x={sx(av(a, ax))} y={sy(av(a, ay)) + 4} textAnchor="middle"
+              fontSize="11" fontWeight="700"
+              fill={['#ffffff', '#ffff30', '#8aff00', '#3dff00', '#90e050'].includes(col) ? '#000' : '#fff'}>
+              {a.element}
+            </text>
+          </g>
+        )
+      })}
+    </svg>
+  )
+}
+
 function MoleculeViewer({ atoms, height = 340, formula, sublabel }) {
   const hostRef = useRef(null)
   const viewerRef = useRef(null)
+  // Default to the 2D SVG view: it renders everywhere, including inside Zscaler
+  // Browser Isolation which serves a stub WebGL context that passes feature
+  // detection but draws nothing. Users can opt into 3D via the toggle when WebGL
+  // genuinely works (e.g. VSCode local port-forward, direct browser).
+  const [use2D, setUse2D] = useState(true)
 
   useEffect(() => {
     let cancelled = false
-    if (!atoms || atoms.length === 0 || !hostRef.current) return
+    if (use2D) return               // 2D mode: skip 3Dmol entirely
+    if (!atoms || atoms.length === 0) return
+    // No WebGL (e.g. Zscaler isolation) -> use the 2D SVG fallback.
+    if (!hasWebGL()) { setUse2D(true); return }
+    if (!hostRef.current) return
     ;(async () => {
-      const mod = await import('3dmol')
-      const $3Dmol = mod.default || mod
-      if (cancelled || !hostRef.current) return
-      hostRef.current.innerHTML = ''
-      const viewer = $3Dmol.createViewer(hostRef.current, {
-        backgroundColor: '#0a0a0b',
-      })
-      viewerRef.current = viewer
-      const model = viewer.addModel()
-      model.addAtoms(atoms.map((a, i) => ({
-        elem: a.element, x: a.x, y: a.y, z: a.z, serial: i,
-      })))
-      // Use sphere-only rendering for inorganic/metallic structures.
-      // Bond connectivity in multi-component DFT crystals is ambiguous (mixed
-      // ionics, metals, covalents) and partial bonds look worse than no bonds.
-      // CPK spheres with element colors give a clean, universally correct view.
-      viewer.setStyle({}, {
-        sphere: { scale: 0.38, colorscheme: 'Jmol' },
-      })
-      viewer.zoomTo()
-      viewer.render()
-      viewer.zoom(1.2, 600)
-      viewer.spin('y', 0.5)
+      try {
+        const mod = await import('3dmol')
+        const $3Dmol = mod.default || mod
+        if (cancelled || !hostRef.current) return
+        hostRef.current.innerHTML = ''
+        const viewer = $3Dmol.createViewer(hostRef.current, {
+          backgroundColor: '#0a0a0b',
+        })
+        viewerRef.current = viewer
+        const model = viewer.addModel()
+        model.addAtoms(atoms.map((a, i) => ({
+          elem: a.element, x: a.x, y: a.y, z: a.z, serial: i,
+        })))
+        // Stick+sphere (ball-and-stick): bonds are computed from covalent radii
+        // so connected atoms in DFT crystals are shown with bonds.
+        viewer.setStyle({}, {
+          stick: { radius: 0.12, colorscheme: 'Jmol' },
+          sphere: { scale: 0.28, colorscheme: 'Jmol' },
+        })
+        viewer.zoomTo()
+        viewer.render()
+        viewer.zoom(1.2, 600)
+        viewer.spin('y', 0.5)
+      } catch (e) {
+        // 3Dmol/WebGL failed at runtime -> fall back to 2D.
+        if (!cancelled) setUse2D(true)
+      }
     })()
     return () => {
       cancelled = true
       try { viewerRef.current?.clear?.() } catch { /* noop */ }
     }
-  }, [atoms])
+  }, [atoms, use2D])
 
   if (!atoms || atoms.length === 0) {
     return (
@@ -76,9 +189,13 @@ function MoleculeViewer({ atoms, height = 340, formula, sublabel }) {
   return (
     <div>
       <div style={{ position: 'relative' }}>
-        <div ref={hostRef} style={{ position: 'relative', width: '100%', height,
-          borderRadius: '.5rem', overflow: 'hidden', border: '1px solid #27272a',
-          background: '#0a0a0b' }} />
+        {use2D ? (
+          <Molecule2D atoms={atoms} height={height} />
+        ) : (
+          <div ref={hostRef} style={{ position: 'relative', width: '100%', height,
+            borderRadius: '.5rem', overflow: 'hidden', border: '1px solid #27272a',
+            background: '#0a0a0b' }} />
+        )}
         {/* Formula label overlay on the viewer */}
         {formula && (
           <div style={{ position: 'absolute', top: 8, left: 8, zIndex: 10,
@@ -91,6 +208,16 @@ function MoleculeViewer({ atoms, height = 340, formula, sublabel }) {
             {sublabel && <div style={{ fontSize: '.62rem', color: '#a1a1aa' }}>{sublabel}</div>}
           </div>
         )}
+        {/* Manual 2D/3D toggle — guarantees a visible structure even if WebGL
+            detection misjudges the environment (e.g. Zscaler isolation). */}
+        <button
+          onClick={() => setUse2D(v => !v)}
+          style={{ position: 'absolute', top: 8, right: 8, zIndex: 10,
+            background: 'rgba(10,10,11,0.85)', border: '1px solid #3f3f46',
+            borderRadius: '.4rem', padding: '.25rem .6rem', cursor: 'pointer',
+            fontSize: '.68rem', fontWeight: 700, color: '#a1a1aa' }}>
+          {use2D ? '3D view' : '2D view'}
+        </button>
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '.5rem', marginTop: '.5rem' }}>
         {uniq.map(el => (
@@ -193,12 +320,17 @@ function EnergyViz({ result }) {
   return (
     <div>
       <div style={{ marginBottom: '.9rem', fontSize: '.95rem', color: '#f5f5f7' }}>
-        Material: <span style={{ fontWeight: 800, color: '#7dd3fc' }}>{result.formula}</span>
-        <span style={{ color: '#71717a' }}> · {result.n_atoms} atoms</span>
+        Material: <span style={{ fontWeight: 800, color: '#7dd3fc' }}>{result.material_name || result.formula}</span>
+        <span style={{ color: '#71717a' }}> · {result.formula} · {result.n_atoms} atoms</span>
         {result.model_variant && (
           <span className="badge badge-amd" style={{ marginLeft: '.5rem' }}>{result.model_variant} model</span>
         )}
       </div>
+      {result.application && (
+        <div style={{ marginBottom: '.9rem', fontSize: '.82rem', color: '#a1a1aa', lineHeight: 1.5 }}>
+          {result.application}
+        </div>
+      )}
 
       {/* Two columns: 3D structure | prediction stats */}
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(280px,1fr) minmax(260px,1fr)',
@@ -214,7 +346,7 @@ function EnergyViz({ result }) {
             {result.predicted_energy_ev_per_atom !== undefined &&
               <Stat label="Predicted Energy" value={`${result.predicted_energy_ev_per_atom}`} sub="eV/atom" color="#21c77a" />}
             {result.dft_reference_ev_per_atom !== undefined &&
-              <Stat label="DFT Reference" value={`${result.dft_reference_ev_per_atom}`} sub="eV/atom (experiment)" />}
+              <Stat label="DFT Reference" value={`${result.dft_reference_ev_per_atom}`} sub="eV/atom (DFT label)" />}
             {err !== undefined &&
               <Stat label="Abs Error" value={`${err}`} sub="eV/atom" color={errColor} />}
           </StatGrid>
@@ -588,6 +720,88 @@ function tempToHex(t, tmin, tmax) {
   return `rgba(${r},${g},${b},0.55)`
 }
 
+// Self-contained SVG temperature-grid heatmap. No external tiles/CSS, so it
+// renders inside Zscaler Browser Isolation where Leaflet (unpkg CSS +
+// OpenStreetMap tiles) is blocked. Shows the real temperature field with a DC
+// marker and lat/lon extent labels.
+function SVGTempMap({ gridData, dcLat, dcLon, label, height = 360, landMask = null }) {
+  const lats = gridData.lat || [], lons = gridData.lon || [], grid = gridData.temp_c || []
+  const mask = landMask || gridData.land_sea_mask || null
+  const allTemps = grid.flat().filter(t => t !== null)
+  const tmin = allTemps.length ? Math.min(...allTemps) : 15
+  const tmax = allTemps.length ? Math.max(...allTemps) : 42
+  const rows = grid.length, cols = grid[0]?.length || 0
+  const W = 600, H = height, pad = 4
+  const cw = (W - 2 * pad) / (cols || 1), ch = (H - 2 * pad) / (rows || 1)
+  // lat[0] may be min or max; map so north (higher lat) is on top.
+  const latAsc = lats.length > 1 && lats[1] > lats[0]
+  const lonToX = lon => pad + ((lon - lons[0]) / ((lons[cols-1] - lons[0]) || 1)) * (W - 2*pad)
+  const latToY = lat => {
+    const f = (lat - lats[0]) / ((lats[rows-1] - lats[0]) || 1)
+    return pad + (latAsc ? (1 - f) : f) * (H - 2*pad)
+  }
+  // Row index -> y (top of cell), honoring N-up orientation.
+  const rowY = ri => (latAsc ? (rows - 1 - ri) : ri) * ch + pad
+  const isLand = (ri, ci) => !mask || (mask[ri]?.[ci] ?? 1) >= 0.5
+  // Coastline segments: boundary between a land cell and a sea neighbor (right/below).
+  const coast = []
+  if (mask) {
+    for (let ri = 0; ri < rows; ri++) {
+      for (let ci = 0; ci < cols; ci++) {
+        const here = isLand(ri, ci)
+        const x0 = pad + ci*cw, y0 = rowY(ri)
+        if (ci + 1 < cols && here !== isLand(ri, ci+1))
+          coast.push({ x1: x0+cw, y1: y0, x2: x0+cw, y2: y0+ch })
+        if (ri + 1 < rows && here !== isLand(ri+1, ci)) {
+          // shared horizontal edge between row ri and ri+1
+          const yb = latAsc ? rowY(ri) : rowY(ri)+ch
+          coast.push({ x1: x0, y1: yb, x2: x0+cw, y2: yb })
+        }
+      }
+    }
+  }
+  return (
+    <div>
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H}
+        style={{ borderRadius: '.5rem', border: '1px solid #27272a', background: '#0a0a0b', display: 'block' }}>
+        {/* Water underlay from the model's own land-sea mask (self-contained, no tiles). */}
+        {mask && grid.map((row, ri) => row.map((t, ci) => {
+          if (isLand(ri, ci)) return null
+          return <rect key={`w-${ri}-${ci}`} x={pad + ci*cw} y={rowY(ri)} width={cw+0.5} height={ch+0.5}
+            fill="#0f2540" />
+        }))}
+        {grid.map((row, ri) => row.map((t, ci) => {
+          if (t === null) return null
+          return <rect key={`${ri}-${ci}`} x={pad + ci*cw} y={rowY(ri)} width={cw+0.5} height={ch+0.5}
+            fill={tempToHex(t, tmin, tmax)} />
+        }))}
+        {/* Coastline strokes along land/sea boundaries. */}
+        {coast.map((s, i) => (
+          <line key={`c-${i}`} x1={s.x1} y1={s.y1} x2={s.x2} y2={s.y2}
+            stroke="rgba(226,232,240,.7)" strokeWidth="1.2" />
+        ))}
+        {dcLat && dcLon && lats.length > 1 && (
+          <g>
+            <circle cx={lonToX(dcLon)} cy={latToY(dcLat)} r="7" fill="#fff" stroke="#ED1C24" strokeWidth="3" />
+            <text x={lonToX(dcLon) + 12} y={latToY(dcLat) + 4} fill="#fff" fontSize="12" fontWeight="700"
+              style={{ paintOrder: 'stroke', stroke: '#000', strokeWidth: 3 }}>Washington DC</text>
+          </g>
+        )}
+      </svg>
+      <div style={{ marginTop: '.4rem', display: 'flex', alignItems: 'center', gap: '.5rem' }}>
+        <span style={{ fontSize: '.65rem', color: '#71717a', flexShrink: 0 }}>{tmin.toFixed(1)}°C</span>
+        <div style={{ flex: 1, height: 10, borderRadius: 4,
+          background: 'linear-gradient(to right, #0000ff, #ffffff, #ff0000)' }} />
+        <span style={{ fontSize: '.65rem', color: '#71717a', flexShrink: 0 }}>{tmax.toFixed(1)}°C</span>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.6rem', color: '#52525b', marginTop: '.15rem' }}>
+        <span><span style={{ color: '#ED1C24' }}>●</span> Washington DC</span>
+        <span>{label} · {rows}×{cols} grid · real ERA5 temperature</span>
+      </div>
+    </div>
+  )
+}
+
 function LeafletTempMap({ gridData, dcLat, dcLon, label, height = 360 }) {
   const mapRef = useRef(null)
   const leafletRef = useRef(null)
@@ -681,6 +895,159 @@ function LeafletTempMap({ gridData, dcLat, dcLon, label, height = 360 }) {
   )
 }
 
+// ── ORBIT-2 four-act story, daisy-chained: pretrained -> OOD gap -> ───────────
+//    first finetune (broad) -> second finetune (DC-targeted). Acts reveal one
+//    at a time (auto-play), each with its own DC map vs the PRISM truth.
+function ORBIT2StoryViz({ result }) {
+  const m = result.metrics || {}
+  const dc = m.dc_tmax_mae_c || {}
+  const conus = m.conus_tmax_mae_c || {}
+  const maps = result.maps || {}
+  const acts = result.acts || []
+  const dcLat = 38.89, dcLon = -77.04
+
+  // Sequential reveal: `shown` = how many acts are visible; `active` = focused act.
+  const [shown, setShown] = useState(1)
+  const [active, setActive] = useState(0)
+  const [playing, setPlaying] = useState(true)
+
+  // Auto-advance one act at a time while playing.
+  useEffect(() => {
+    if (!playing) return
+    if (shown >= acts.length) { setPlaying(false); return }
+    const t = setTimeout(() => {
+      setShown(s => Math.min(s + 1, acts.length))
+      setActive(a => Math.min(a + 1, acts.length - 1))
+    }, 3200)
+    return () => clearTimeout(t)
+  }, [playing, shown, acts.length])
+
+  const replay = () => { setShown(1); setActive(0); setPlaying(true) }
+
+  // Per-act accent color: gray (pretrained), red (OOD gap), green shades (finetunes).
+  const actColor = ['#a1a1aa', '#ff8f93', '#4ade80', '#22c55e']
+  const cur = acts[active] || {}
+  const curMapKey = cur.map_key || 'pretrained'
+  const curMae = dc[cur.stage === 'baseline' ? 'bilinear' : cur.stage] ?? dc[curMapKey]
+
+  return (
+    <div>
+      <div style={{ marginBottom: '.5rem', fontSize: '.95rem', color: '#f5f5f7' }}>
+        <strong>ORBIT-2 downscaling — a real robustness &amp; finetuning story</strong>
+        <div style={{ fontSize: '.72rem', color: '#71717a', marginTop: '.2rem' }}>
+          {result.task}
+        </div>
+        <div style={{ fontSize: '.68rem', color: '#4ade80', marginTop: '.15rem' }}>
+          {result.provenance || 'Replay of real GPU runs — measured, not synthesized.'}
+        </div>
+      </div>
+
+      {/* Progress stepper + playback controls */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '.5rem', marginBottom: '.9rem', flexWrap: 'wrap' }}>
+        {acts.map((a, i) => (
+          <button key={a.n} onClick={() => { setActive(i); setShown(Math.max(shown, i + 1)); setPlaying(false) }}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '.35rem', padding: '.28rem .6rem',
+              borderRadius: '9999px', cursor: 'pointer', fontSize: '.7rem', fontWeight: 700,
+              background: i === active ? actColor[i] : (i < shown ? 'rgba(255,255,255,.06)' : 'transparent'),
+              border: '1px solid', borderColor: i === active ? actColor[i] : '#3f3f46',
+              color: i === active ? '#0a0a0b' : (i < shown ? '#e4e4e7' : '#52525b'),
+              opacity: i < shown ? 1 : 0.5,
+            }}>
+            <span style={{
+              width: 16, height: 16, borderRadius: '50%', display: 'inline-flex',
+              alignItems: 'center', justifyContent: 'center', fontSize: '.6rem',
+              background: i === active ? '#0a0a0b' : actColor[i],
+              color: i === active ? actColor[i] : '#0a0a0b',
+            }}>{a.n}</span>
+            {a.title}
+          </button>
+        ))}
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: '.4rem' }}>
+          <button className="btn btn-ghost" style={{ fontSize: '.72rem', padding: '.25rem .6rem' }}
+            onClick={() => setPlaying(p => !p)} disabled={shown >= acts.length && !playing}>
+            {playing ? '⏸ Pause' : (shown >= acts.length ? '⏵ Play' : '▶ Continue')}
+          </button>
+          <button className="btn btn-ghost" style={{ fontSize: '.72rem', padding: '.25rem .6rem' }}
+            onClick={replay}>↺ Replay</button>
+        </div>
+      </div>
+
+      {/* Active act narration card */}
+      <div className="card" style={{ padding: '1rem', marginBottom: '1rem', borderLeft: `4px solid ${actColor[active]}` }}>
+        <div style={{ fontSize: '.62rem', color: '#71717a', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em' }}>
+          Act {cur.n} of {acts.length}
+        </div>
+        <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#f5f5f7', margin: '.25rem 0 .4rem' }}>
+          {cur.title}
+        </div>
+        <div style={{ fontSize: '.85rem', color: '#d4d4d8', lineHeight: 1.5, marginBottom: '.5rem' }}>
+          {cur.text}
+        </div>
+        {cur.detail && (
+          <div style={{ fontSize: '.78rem', color: '#a1a1aa', marginBottom: '.5rem' }}>{cur.detail}</div>
+        )}
+        <div style={{ fontSize: '.95rem', fontWeight: 800, color: actColor[active] }}>{cur.stat}</div>
+      </div>
+
+      {/* Two maps side by side: this act's prediction vs the PRISM truth */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '.75rem' }}>
+        <div className="card" style={{ padding: '.6rem' }}>
+          <div className="section-label" style={{ marginBottom: '.4rem', fontSize: '.68rem' }}>
+            {curMapKey === 'coarse' ? 'Coarse input (what the model sees)'
+              : `${maps[curMapKey]?.label || cur.title}${curMae !== undefined ? ` — MAE ${curMae}°C` : ''}`}
+          </div>
+          {maps[curMapKey] && (
+            <SVGTempMap gridData={maps[curMapKey]} dcLat={dcLat} dcLon={dcLon}
+              label={maps[curMapKey].label} height={300} />
+          )}
+        </div>
+        <div className="card" style={{ padding: '.6rem' }}>
+          <div className="section-label" style={{ marginBottom: '.4rem', fontSize: '.68rem' }}>
+            {maps.truth?.label || 'Real observations (fine grid)'}
+          </div>
+          {maps.truth && (
+            <SVGTempMap gridData={maps.truth} dcLat={dcLat} dcLon={dcLon}
+              label={maps.truth.label} height={300} />
+          )}
+        </div>
+      </div>
+
+      {/* Running scoreboard: DC tmax MAE across all revealed stages */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(140px,1fr))', gap: '.6rem', marginBottom: '1rem' }}>
+        {[
+          { label: 'Pretrained', key: 'pretrained', color: '#a1a1aa', reveal: 1 },
+          { label: 'Bilinear baseline', key: 'bilinear', color: '#71717a', reveal: 2 },
+          { label: '1st finetune (broad)', key: 'finetune1', color: '#4ade80', reveal: 3 },
+          { label: '2nd finetune (DC)', key: 'finetune2', color: '#22c55e', reveal: 4 },
+        ].map(s => (
+          <div key={s.key} className="card" style={{ padding: '.6rem', textAlign: 'center',
+            opacity: shown >= s.reveal ? 1 : 0.25, transition: 'opacity .4s' }}>
+            <div className="section-label" style={{ marginBottom: '.2rem', fontSize: '.6rem' }}>{s.label}</div>
+            <div style={{ fontSize: '1.05rem', fontWeight: 800, color: s.color }}>
+              {dc[s.key] !== undefined ? `${dc[s.key]}°C` : '—'}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {shown >= acts.length && dc.finetune2 !== undefined && dc.bilinear !== undefined && dc.finetune2 < dc.bilinear && (
+        <div style={{ fontSize: '.82rem', color: '#22c55e', marginBottom: '1rem', fontWeight: 700 }}>
+          ✓ Two finetunes take DC tmax error from {dc.pretrained}°C (worse than bilinear {dc.bilinear}°C)
+          down to {dc.finetune2}°C — less than half the baseline, on independent Open-Meteo data.
+        </div>
+      )}
+
+      <div style={{ fontSize: '.72rem', color: '#52525b' }}>
+        PRISM-trained ORBIT-2 8M ViT applied to independent Open-Meteo ERA5 DC data (never seen in
+        training) — a true out-of-distribution test. 4× super-resolution · DC tmax MAE:
+        pretrained {dc.pretrained}°C → 1st finetune {dc.finetune1}°C → 2nd finetune {dc.finetune2}°C
+        (bilinear {dc.bilinear}°C). All errors measured.
+      </div>
+    </div>
+  )
+}
+
 function DCDownscalingViz({ result }) {
   const coarse = result.coarse || {}
   const fine = result.fine || {}
@@ -737,14 +1104,14 @@ function DCDownscalingViz({ result }) {
           <div className="section-label" style={{ marginBottom: '.4rem', fontSize: '.68rem' }}>
             Coarse — {coarse.label || '0.25° ERA5'} (input)
           </div>
-          <LeafletTempMap gridData={coarse} dcLat={result.dc?.lat} dcLon={result.dc?.lon}
+          <SVGTempMap gridData={coarse} dcLat={result.dc?.lat} dcLon={result.dc?.lon}
             label={coarse.label || 'ERA5 0.25°'} height={320} />
         </div>
         <div className="card" style={{ padding: '.6rem' }}>
           <div className="section-label" style={{ marginBottom: '.4rem', fontSize: '.68rem' }}>
             Fine — {fine.label || '0.1° ERA5-Land'} (ORBIT-2 output)
           </div>
-          <LeafletTempMap gridData={fine} dcLat={result.dc?.lat} dcLon={result.dc?.lon}
+          <SVGTempMap gridData={fine} dcLat={result.dc?.lat} dcLon={result.dc?.lon}
             label={fine.label || 'ERA5-Land 0.1°'} height={320} />
         </div>
       </div>
@@ -882,6 +1249,7 @@ function ResultView({ result, runId }) {
     case 'atomistic_energy': return <EnergyViz result={result} />
     case 'training_convergence': return <TrainingConvergenceViz result={result} />
     case 'dc_downscaling': return <DCDownscalingViz result={result} />
+    case 'orbit2_story': return <ORBIT2StoryViz result={result} />
     case 'molecule_finetune': return <MolefineTuneViz result={result} />
     case 'weather_forecast': return <WeatherViz result={result} />
     case 'atomistic_properties':

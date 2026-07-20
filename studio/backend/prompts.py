@@ -14,9 +14,10 @@ _CURATED: dict[str, list[dict]] = {
         {"label": "Rapid intensification ensemble", "text": "Generate a 10-member ensemble forecast of a Category 2 hurricane for 2025-09-10T00:00 over the Atlantic, 6 forecast steps.", "task": "ensemble"},
     ],
     "ORBIT-2": [
+        {"label": "Robustness + finetuning story (DC)", "text": "Show the ORBIT-2 downscaling story over Washington DC: the pretrained model, its out-of-distribution accuracy gap, and how targeted finetuning on real PRISM data improves the fine-grid temperature prediction.", "task": "story"},
         {"label": "DC July 2024 record heatwave", "text": "Downscale the July 14-17 2024 Washington DC record heatwave (104F / 40C peak) from ERA5 0.25-degree to 0.1-degree resolution — show temperature field at two resolutions.", "task": "inference", "dc_event": "july16_2024"},
         {"label": "DC July 4 2026 Independence Day heat", "text": "Downscale the July 4 2026 Independence Day heat in Washington DC from ERA5 0.25-degree to 0.1-degree resolution.", "task": "inference", "dc_event": "july4_2026"},
-        {"label": "Western US climate downscaling", "text": "Downscale ERA5 reanalysis to 4 km over the Western US (California, Nevada, Arizona) for July 2024, focusing on temperature and precipitation.", "task": "inference"},
+        {"label": "Western US weather downscaling", "text": "Downscale ERA5 reanalysis to 4 km over the Western US (California, Nevada, Arizona) for a July 2024 day, focusing on temperature and precipitation.", "task": "inference"},
         {"label": "Pacific Northwest precipitation", "text": "Produce high-resolution precipitation maps for the Pacific Northwest for winter 2023-2024 from coarse GCM output.", "task": "inference"},
         {"label": "Heat dome event downscaling", "text": "Downscale the June 2021 Pacific Northwest heat dome event from ERA5 at hourly resolution over Washington and Oregon.", "task": "inference"},
     ],

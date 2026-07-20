@@ -58,7 +58,9 @@ export function StepConfigure() {
         color: mode === 'demo' ? '#6ee7b7' : '#ff8f93',
       }}>
         {mode === 'demo'
-          ? '🟢 Demo mode — synthetic results, runs in <60 s on login node'
+          ? (model?.slug === 'ORBIT-2' && task === 'story'
+              ? '🟢 Demo mode — replay of real ORBIT-2 GPU runs on AMD MI355X (every number and map is measured)'
+              : '🟢 Demo mode — synthetic results, runs in <60 s on login node')
           : '🔴 Live mode — real SLURM job on Vultr Lux cluster (requires GPU allocation)'}
       </div>
 
@@ -164,6 +166,10 @@ export function StepConfigure() {
               selected={!showCustom && prompt === p.text}
               onClick={() => {
                 setPrompt(p.text); setShowCustom(false); setPromptError('')
+                // Propagate the prompt's task (e.g. ORBIT-2 "story", GP-MoLFormer
+                // "finetune") so the backend routes to the right path. Without this
+                // the task stays at its default and the wrong result is produced.
+                if (p.task) setTask(p.task)
                 // Pass event-specific params from prompt metadata through to the job.
                 if (p.dc_event) setParam('dc_event', p.dc_event)
               }}

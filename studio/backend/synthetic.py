@@ -26,6 +26,35 @@ def _progress(emit: Callable, run_id: str, steps: list[str], delay: float = 0.8)
 
 def _earth_science(slug: str, task: str, prompt: str, params: dict,
                    out_dir: Path, emit: Callable, run_id: str) -> dict:
+    # ORBIT-2 robustness + finetuning story — REPLAY of real ORBIT-2 GPU runs:
+    # PRISM-trained model applied to INDEPENDENT Open-Meteo DC heatwave data (true
+    # out-of-distribution): pretrained -> OOD gap -> broad finetune -> DC finetune.
+    # Numbers/maps are baked from actual MI355X runs (orbit2_ood_dc harness), measured.
+    if slug == "ORBIT-2" and task == "story":
+        asset = Path(__file__).resolve().parent / "assets" / "orbit2_story.json"
+        if asset.exists():
+            story = json.loads(asset.read_text())
+            m = story.get("metrics", {})
+            dc = m.get("dc_tmax_mae_c", {})
+            label = story.get("task", "DC heatwave (Open-Meteo, OOD)")
+            steps = [
+                "Replaying real ORBIT-2 runs on AMD MI355X (measured, not synthetic)...",
+                "Loading independent Open-Meteo ERA5 DC heatwave data (never seen in training)...",
+                "Stage 1 — pretrained ORBIT-2 8M applied out-of-distribution to the DC field...",
+                f"Stage 1 — DC tmax MAE {dc.get('pretrained','?')}°C...",
+                f"Stage 2 — out-of-distribution gap: bilinear baseline {dc.get('bilinear','?')}°C beats the pretrained model...",
+                "Stage 3 — first finetune (broad, CONUS-wide) on real PRISM training years...",
+                f"Stage 3 — DC tmax MAE {dc.get('finetune1','?')}°C ({m.get('finetune1_improvement_pct','?')}% better, now beats bilinear)...",
+                "Stage 4 — second finetune (DC-targeted, region-weighted loss)...",
+                f"Stage 4 — DC tmax MAE {dc.get('finetune2','?')}°C ({m.get('finetune2_improvement_pct','?')}% better than pretrained)...",
+                "Rendering DC temperature maps (°C): coarse input, pretrained, 1st finetune, 2nd finetune, Open-Meteo truth...",
+            ]
+            _progress(emit, run_id, steps, delay=0.6)
+            story["slug"] = slug
+            (out_dir / "orbit2_story.json").write_text(json.dumps(story, indent=2))
+            emit(run_id, f"[demo] Real ORBIT-2 OOD replay — DC tmax MAE {dc.get('pretrained','?')}°C -> {dc.get('finetune2','?')}°C after two finetunes")
+            return story
+
     # ORBIT-2 DC temperature downscaling demo — uses REAL ERA5 data baked from Open-Meteo.
     if slug == "ORBIT-2":
         asset = Path(__file__).resolve().parent / "assets" / "dc_temperature.json"
@@ -190,11 +219,15 @@ def _materials(slug: str, task: str, prompt: str, params: dict,
             emit(run_id, "[demo] training curves asset missing; run tools/bake_training_curves.py")
             return {"type": "training_convergence", "error": "asset_missing"}
         data = json.loads(asset.read_text())
+        _n1 = data["runs"]["1gpu"]["n_samples"]
+        _n8 = data["runs"]["8gpu"]["n_samples"]
+        _e1 = len(data["runs"]["1gpu"]["epochs"])
+        _e8 = len(data["runs"]["8gpu"]["epochs"])
         steps = [
             "Loading real HydraGNN training results (Alexandria DFT)...",
-            "1-GPU run: 40k structures, 100 epochs...",
-            "8-GPU DDP run: 268k structures, 100 epochs...",
-            "Comparing convergence and final accuracy...",
+            f"1-GPU run: {_n1//1000}k structures, {_e1} epochs...",
+            f"8-GPU DDP run: {_n8//1000}k structures, {_e8} epochs...",
+            "Comparing convergence and final accuracy (same PBC-edge pipeline)...",
             "Computing scaling speedup...",
         ]
         _progress(emit, run_id, steps, delay=0.6)
@@ -237,6 +270,8 @@ def _materials(slug: str, task: str, prompt: str, params: dict,
                     "model": data.get("model_label", "HydraGNN (trained on Alexandria DFT)"),
                     "model_variant": data.get("model_variant"),
                     "formula": choice["formula"],
+                    "material_name": choice.get("material_name"),
+                    "application": choice.get("application"),
                     "n_atoms": choice["n_atoms"],
                     "atoms": choice["atoms"],
                     "predicted_energy_ev_per_atom": choice["predicted_energy_ev_per_atom"],
