@@ -7,10 +7,23 @@ const FRONT = process.env.FRONT_URL || 'http://127.0.0.1:5299'
 const BACK  = process.env.BACK_URL  || 'http://127.0.0.1:8299'
 const OUT   = process.env.OUT_DIR   || '/home/spannala/Projects/ai4science-studio/studio/demo/demo-output'
 const FFMPEG = process.env.FFMPEG || '/home/spannala/Projects/ai4science-studio/studio/backend/.venv/lib/python3.12/site-packages/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2'
-const HOLD = 30000
+const HOLD = 20000
 
+// Adaptively scale the app so the entire page (tall Analyze views: two maps,
+// story acts) fits inside the recording frame. Measures #root at natural size,
+// then applies a CSS transform-scale so nothing is cropped. The caption lives on
+// <body> (outside #root) so it stays full-size and readable.
 async function showCaption(page, text) {
   await page.evaluate(t => {
+    const root = document.getElementById('root')
+    if (root) {
+      root.style.transform = ''
+      root.style.transformOrigin = 'top center'
+      root.style.width = '100%'
+      const h = root.scrollHeight, w = root.scrollWidth
+      const s = Math.min(1, (window.innerHeight - 8) / (h || 1), window.innerWidth / (w || 1))
+      root.style.transform = `scale(${s})`
+    }
     document.getElementById('__cap__')?.remove()
     const el = document.createElement('div'); el.id = '__cap__'
     el.style.cssText = 'position:fixed;bottom:40px;left:50%;transform:translateX(-50%);' +
@@ -55,6 +68,17 @@ async function launchDemo(page, body) {
   }, [BACK, body])
 }
 
+// Click a story-act stepper button by (partial) title text. The ORBIT2StoryViz
+// stepper renders one pill per act; clicking pauses auto-play and focuses that
+// act so its maps are shown. Best-effort — wrapped by the caller in try/catch.
+async function clickAct(page, titleFragment) {
+  await page.evaluate(frag => {
+    const btns = Array.from(document.querySelectorAll('button'))
+    const b = btns.find(x => x.textContent && x.textContent.includes(frag))
+    if (b) b.click()
+  }, titleFragment)
+}
+
 ;(async () => {
   const browser = await chromium.launch({
     channel:'chromium', headless:true,
@@ -89,23 +113,79 @@ async function launchDemo(page, body) {
   // Model
   await setState(page, {
     model:{slug:'ORBIT-2',name:'ORBIT-2 (Climate Downscaling)',domain:'earth_science'},
-    mode:'demo', task:'inference', step:2
+    mode:'demo', task:'story', step:2
   })
   await page.waitForTimeout(800)
-  await showCaption(page, 'ORBIT-2: Vision Foundation Model for spatial climate downscaling')
+  await showCaption(page, 'ORBIT-2: 8M-param PRISM-trained climate ViT, 4× temperature super-resolution')
   await page.waitForTimeout(HOLD)
 
-  // Configure prompt
+  // Configure — headline robustness + physics story
   await setState(page, {
-    prompt:"Downscale the July 14-17 2024 Washington DC record heatwave (104F / 40C peak) from ERA5 0.25-degree to 0.1-degree resolution — show temperature field at two resolutions.",
-    param: { k:'dc_event', v:'july16_2024' },
+    prompt:"Show the ORBIT-2 downscaling story over Washington DC: the pretrained model, its out-of-distribution accuracy gap, and how a physics-residual head on real GHSL urban density improves the fine-grid temperature prediction.",
     step:3,
   })
   await page.waitForTimeout(800)
-  await showCaption(page, 'Dataset: July 16 2024 — hottest day in DC since 1930 (104°F / 40°C)')
+  await showCaption(page, 'Real GPU runs on MI355X — replayed, not synthesized (measured numbers)')
   await page.waitForTimeout(HOLD)
 
-  // Launch July 16 2024
+  // Launch the 4-act OOD story (real replay: type=orbit2_story -> ORBIT2StoryViz)
+  const {rid:r0, job:j0} = await launchDemo(page, {
+    slug:'ORBIT-2', domain:'earth_science', task:'story', mode:'demo',
+    prompt:"Show the ORBIT-2 downscaling story over Washington DC: the pretrained model, its out-of-distribution accuracy gap, and how a physics-residual head on real GHSL urban density improves the fine-grid temperature prediction.",
+    params:{ dc_event:'july16_2024' },
+  })
+  await setState(page, { runId:r0, result:j0?.result, step:4 })
+  await page.waitForTimeout(2000)
+
+  // ── Act-by-act narration follows the paper (docs/orbit2_dc_downscaling.tex).
+  //    The viz auto-plays; we also click each stepper pill so the focused act's
+  //    maps stay on screen for the full slide. Numbers match the re-baked asset
+  //    = paper Table 1 (16 Jul 2024, true-OOD, land-only MAE, °C). ─────────────
+  try { await clickAct(page, 'Pretrained ORBIT-2') } catch {}
+  await showCaption(page, 'True OOD test: PRISM-trained ORBIT-2 applied to independent Open-Meteo ERA5 it never saw')
+  await page.waitForTimeout(HOLD)
+
+  await showCaption(page, 'Act 1 — Pretrained ORBIT-2 fails OOD: DC tmax MAE 2.40°C, worse than trivial interpolation')
+  await page.waitForTimeout(HOLD)
+
+  try { await clickAct(page, 'Out-of-distribution gap') } catch {}
+  await showCaption(page, 'Act 2 — OOD gap: plain bilinear (0.93°C) beats the 8M-param foundation model')
+  await page.waitForTimeout(HOLD)
+
+  await showCaption(page, 'Full finetuning cannot cross it — OOD error is best at epoch 1, then diverges (2.04°C)')
+  await page.waitForTimeout(HOLD)
+
+  try { await clickAct(page, 'Physics-residual head') } catch {}
+  await showCaption(page, 'Act 3 — Move physics out of the backbone: a ~10k-param residual head on the bilinear field')
+  await page.waitForTimeout(HOLD)
+
+  await showCaption(page, 'Inputs: real GHSL built-up density + signed distance-to-water (coastal cooling)')
+  await page.waitForTimeout(HOLD)
+
+  await showCaption(page, 'Act 3 — Head beats bilinear everywhere: core 0.93→0.80°C (−13%), whole-land 0.93→0.76°C')
+  await page.waitForTimeout(HOLD)
+
+  try { await clickAct(page, 'Physics where the physics is') } catch {}
+  await showCaption(page, 'Act 4 — An explicit UHI equation on top adds nothing: the head already internalized it')
+  await page.waitForTimeout(HOLD)
+
+  await showCaption(page, 'Decisive detail: clean the PRISM ocean sentinel before coarsening, or coastal errors invert')
+  await page.waitForTimeout(HOLD)
+
+  await showCaption(page, 'Known physics, learned as a residual — measured on real MI355X GPU runs, not synthesized')
+  await page.waitForTimeout(HOLD)
+
+  // ── Second half: two-resolution DC downscaling (type=dc_downscaling) ─────────
+  await setState(page, {
+    task:'inference',
+    prompt:"Downscale the July 14-17 2024 Washington DC record heatwave (104F / 40C peak) from ERA5 0.25-degree to 0.1-degree resolution — show temperature field at two resolutions.",
+    param:{ k:'dc_event', v:'july16_2024' },
+    step:3,
+  })
+  await page.waitForTimeout(800)
+  await showCaption(page, 'Two-resolution view: July 16 2024 — DC record heatwave (peak 41.4°C / 106.5°F)')
+  await page.waitForTimeout(HOLD)
+
   const {rid:r1, job:j1} = await launchDemo(page, {
     slug:'ORBIT-2', domain:'earth_science', task:'inference', mode:'demo',
     prompt:"Downscale the July 14-17 2024 Washington DC record heatwave (104F / 40C peak) from ERA5 0.25-degree to 0.1-degree resolution — show temperature field at two resolutions.",
@@ -114,20 +194,13 @@ async function launchDemo(page, body) {
   await setState(page, { runId:r1, result:j1?.result, step:4 })
   await page.waitForTimeout(1500)
 
-  // ── Slides on Analyze: July 16 2024 ─────────────────────────────────────────
-  await showCaption(page, 'Temperature field: coarse 0.25° ERA5 input (left) vs fine 0.1° output (right)')
+  await showCaption(page, 'Coarse 0.25° ERA5 input (left) vs fine 0.1° ORBIT-2 output (right)')
   await page.waitForTimeout(HOLD)
 
-  await showCaption(page, 'All values are real — fetched from Open-Meteo ERA5 reanalysis, no interpolation')
+  await showCaption(page, 'Red dot = Washington DC · real ERA5 temperature from Open-Meteo, no interpolation')
   await page.waitForTimeout(HOLD)
 
-  await showCaption(page, 'Red dot = Washington DC · Blue→White→Red scale = cold→hot temperature')
-  await page.waitForTimeout(HOLD)
-
-  await showCaption(page, 'Peak 41.4°C / 106.5°F — Appalachian cooling visible to the west')
-  await page.waitForTimeout(HOLD)
-
-  // ── Switch to July 4 2026 ────────────────────────────────────────────────────
+  // ── Switch to July 4 2026 dataset ───────────────────────────────────────────
   const {rid:r2, job:j2} = await launchDemo(page, {
     slug:'ORBIT-2', domain:'earth_science', task:'inference', mode:'demo',
     prompt:"Downscale the July 4 2026 Independence Day heat in Washington DC from ERA5 0.25-degree to 0.1-degree resolution.",
@@ -136,7 +209,7 @@ async function launchDemo(page, body) {
   await setState(page, { runId:r2, result:j2?.result, step:4 })
   await page.waitForTimeout(1500)
 
-  await showCaption(page, 'Dataset switch: July 4 2026 — Independence Day heatwave (103°F / 39.5°C)')
+  await showCaption(page, 'Dataset switch: July 4 2026 — Independence Day heatwave (peak 39.5°C / 103.1°F)')
   await page.waitForTimeout(HOLD)
 
   await showCaption(page, 'ORBIT-2 4× spatial super-resolution: 0.25° → 0.1° (~28 km → ~11 km)')

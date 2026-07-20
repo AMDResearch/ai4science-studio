@@ -60,7 +60,9 @@ export function StepConfigure() {
         {mode === 'demo'
           ? (model?.slug === 'ORBIT-2' && task === 'story'
               ? '🟢 Demo mode — replay of real ORBIT-2 GPU runs on AMD MI355X (every number and map is measured)'
-              : '🟢 Demo mode — synthetic results, runs in <60 s on login node')
+              : model?.slug === 'HydraGNN'
+                ? '🟢 Demo mode — replay of real HydraGNN runs on Alexandria DFT, pre-computed on AMD MI355X (not synthetic)'
+                : '🟢 Demo mode — synthetic results, runs in <60 s on login node')
           : '🔴 Live mode — real SLURM job on Vultr Lux cluster (requires GPU allocation)'}
       </div>
 
@@ -172,6 +174,10 @@ export function StepConfigure() {
                 if (p.task) setTask(p.task)
                 // Pass event-specific params from prompt metadata through to the job.
                 if (p.dc_event) setParam('dc_event', p.dc_event)
+                // HydraGNN: each curated inference prompt maps to a specific
+                // held-out Alexandria structure so the demo returns that exact
+                // material (Pyrite, Permalloy, Sodium ferrite, Iron hydride).
+                if (p.struct_index !== undefined) setParam('struct_index', p.struct_index)
               }}
             />
           ))}

@@ -57,13 +57,17 @@ def _update_state(run_id: str, state: str, slurm_job_id: str | None = None):
 def _run_synthetic(run_id: str, slug: str, domain: str, task: str, prompt: str, params: dict):
     """Runs in a thread. Calls the synthetic generator and streams fake log lines."""
     import synthetic as syn
-    # The ORBIT-2 story task replays REAL measured GPU-run results (not synthetic).
-    _is_replay = (slug == "ORBIT-2" and task == "story")
+    # These demos replay REAL pre-computed results (not synthetic): the ORBIT-2
+    # story and every HydraGNN task (inference replays real predictions on
+    # held-out Alexandria DFT; training replays real 1-GPU/8-GPU run logs).
+    _is_replay = (slug == "ORBIT-2" and task == "story") or slug == "HydraGNN"
     if _is_replay:
-        _emit(run_id, f"[studio] Demo mode — replaying real ORBIT-2 GPU-run results for {slug}...")
+        _src = ("real PRISM data, real finetunes on MI355X" if slug == "ORBIT-2"
+                else "real HydraGNN runs on Alexandria DFT, pre-computed on MI355X")
+        _emit(run_id, f"[studio] Demo mode — replaying real pre-computed results for {slug} (not synthetic)...")
         _emit(run_id, f"[studio] Task: {task} | Domain: {domain}")
         _emit(run_id, f"[studio] Prompt: {prompt[:120]}{'...' if len(prompt) > 120 else ''}")
-        _emit(run_id, "[studio] Loading measured results (real PRISM data, real finetunes on MI355X)...")
+        _emit(run_id, f"[studio] Loading measured results ({_src})...")
     else:
         _emit(run_id, f"[studio] Demo mode — generating synthetic output for {slug}...")
         _emit(run_id, f"[studio] Task: {task} | Domain: {domain}")
@@ -112,7 +116,9 @@ _OVERLAYS: dict[str, str | None] = {
 def _build_slurm_script(run_id: str, slug: str, domain: str, task: str,
                          prompt: str, params: dict, partition: str) -> Path:
     """Build a minimal sbatch wrapper that echoes params and calls the model's sbatch script."""
+    import shlex
     from registry import REPO_ROOT
+    q = shlex.quote  # POSIX-safe shell quoting for any interpolated value
     model_dir = REPO_ROOT / domain / "models" / slug
     log_path = str(_run_dir(run_id) / "slurm.log")
 
@@ -151,10 +157,10 @@ def _build_slurm_script(run_id: str, slug: str, domain: str, task: str,
         f"#SBATCH --output={log_path}",
         f"#SBATCH --error={log_path}",
         "",
-        f"echo '[studio] Run ID: {run_id}'",
-        f"echo '[studio] Model: {slug} | Task: {task}'",
-        f"echo '[studio] Partition: {partition}'",
-        f"echo '[studio] Prompt: {prompt[:100]}'",
+        f"echo {q(f'[studio] Run ID: {run_id}')}",
+        f"echo {q(f'[studio] Model: {slug} | Task: {task}')}",
+        f"echo {q(f'[studio] Partition: {partition}')}",
+        f"echo {q(f'[studio] Prompt: {prompt[:100]}')}",
         "",
         # Core env vars every upstream script needs
         f"export AI4S_SHARED_DIR={_AI4S_SHARED_DIR!r}",
@@ -203,6 +209,9 @@ def _build_slurm_script(run_id: str, slug: str, domain: str, task: str,
             "--env PYTHONPATH=/opt/orbit2-pkgs:/shared/aaji/models/ORBIT-2/code/ORBIT-2/src "
             "--env PYTHONNOUSERSITE=1 --env HSA_NO_SCRATCH_RECLAIM=1 --env MIOPEN_DISABLE_CACHE=1 "
             f"--env OOD_FIELDS={_OOD} --env DC_EVENT={_dc_event} "
+            f"--env URBAN_CONUS={_O2}/urban_conus.npz "
+            f"--env FT_URBANWATER={_O2}/orbit2_8m_ft_urbanwater.pk "
+            "--env WATER_COND=1 --env WATER_L_CELLS=3.0 "
             f"--env OUT_JSON={str(_run_dir(run_id) / 'orbit2_story.json')} "
             f"{_SIF_PATH} bash -lc "
             f"'source /opt/venv/bin/activate 2>/dev/null; python3 {_O2}/orbit2_ood_dc.py'",
@@ -227,24 +236,36 @@ def _build_slurm_script(run_id: str, slug: str, domain: str, task: str,
         # 0.29 / corr 0.82). Both need HG_USE_PBC_EDGES=1.
         variant = str(params.get("model_variant", "8gpu")).lower()
         ckpt = "hg_model_ddp_v3.pk" if variant == "8gpu" else "hg_model_1gpu_pbc.pk"
-        struct_index = params.get("struct_index", params.get("STRUCT_INDEX", 4))
-        # Map element symbols in the prompt to atomic numbers so the held-out
-        # structure shown matches what the user asked about (e.g. "iron-carbon"
-        # -> require Fe(26) + C(6)). Falls back to STRUCT_INDEX if none match.
-        _ELEM = {"iron": 26, "fe": 26, "carbon": 6, "oxygen": 8, "lithium": 3, "li": 3,
-                 "cobalt": 27, "nickel": 28, "manganese": 25, "titanium": 22, "silicon": 14}
+        # The 4 suggested prompts each carry a curated slot (struct_index 0-3), which
+        # maps to a fixed valset index below. Same order as CURATED_INDICES and the
+        # demo predictions JSON: 0=FeS2, 1=FeNi3, 2=NaFeO2, 3=Fe2H6.
+        _CURATED = [2816, 3372, 29321, 1349]
+        _has_slot = ("struct_index" in params) or ("STRUCT_INDEX" in params)
+        _slot = params.get("struct_index", params.get("STRUCT_INDEX", 4))
         pl = prompt.lower()
-        req = params.get("require_elements")
-        if not req:
-            hits = sorted({z for name, z in _ELEM.items() if name in pl})
-            req = ",".join(str(z) for z in hits) if hits else ""
+        if _has_slot and isinstance(_slot, (int, float)) and 0 <= int(_slot) < len(_CURATED):
+            # User picked one of the 4 curated materials: pin its exact held-out
+            # structure and suppress element-based scanning/selection entirely, so
+            # they always get back the material they clicked (not a lookalike).
+            struct_index = _CURATED[int(_slot)]
+            req = ""
+        else:
+            # Custom prompt: derive an element filter from the prompt text so the
+            # shown structure matches what was asked (e.g. "iron-carbon" -> Fe+C).
+            struct_index = int(_slot)
+            _ELEM = {"iron": 26, "carbon": 6, "oxygen": 8, "lithium": 3, "li": 3,
+                     "cobalt": 27, "nickel": 28, "manganese": 25, "titanium": 22, "silicon": 14}
+            req = params.get("require_elements")
+            if not req:
+                hits = sorted({z for name, z in _ELEM.items() if name in pl})
+                req = ",".join(str(z) for z in hits) if hits else ""
         script_lines += [
             f"export HG_INFER_REPO={_AI4S_SHARED_DIR}/models/HydraGNN/outputs/HydraGNN-infer",
             f"export HG_MODEL_PATH={_HG_WORK}/results/{ckpt}",
             f"export HG_MODEL_VARIANT={variant!r}",
             f"export HG_USE_PBC_EDGES=1",
             f"export STRUCT_INDEX={int(struct_index)}",
-            f"export REQUIRE_ELEMENTS={req!r}",
+            f"export REQUIRE_ELEMENTS={q(str(req))}",
             # Curated small demo materials (FeS2, FeNi3, NaFeO2, Fe2H6) + their
             # name/application labels. studio_infer.py falls back to these when no
             # element filter is requested, and enforces a size cap when one is.
@@ -273,7 +294,7 @@ def _build_slurm_script(run_id: str, slug: str, domain: str, task: str,
                 "dc_event", "model_variant", "STRUCT_INDEX"}
     for k, v in params.items():
         if k.lower() not in _handled:
-            script_lines.append(f"export {k.upper()}={v!r}")
+            script_lines.append(f"export {k.upper()}={q(str(v))}")
     script_lines.append("")
 
     # The ORBIT-2 story task runs its own inline srun harness above — do not also

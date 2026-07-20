@@ -391,7 +391,7 @@ function MethodsPage() {
           </p>
           <div>
             {[
-              'HPC cluster access (Frontier, Lux, Radha)',
+              'HPC cluster access (Frontier, Lux)',
               'ROCm porting and optimization support',
               'Performance profiling (Omnistat / TraceLens)',
               'Recipe curation (this studio)',
@@ -523,6 +523,82 @@ tasks_available: [inference, finetune]` },
   )
 }
 
+// ── Usage Models overview ─────────────────────────────────────────────────────
+// The five ways this platform is used, with the key software components for each.
+const USAGE_MODELS = [
+  {
+    title: 'Surrogate Models',
+    lead: 'ML surrogate training on modsim and experimental data',
+    points: [
+      'Key software components: prebuilt ML surrogates',
+      '"HuggingFace of ML4Sci models" to support model sharing across teams',
+    ],
+  },
+  {
+    title: 'Inference',
+    lead: 'vLLM-based containers · multi-node inference of fine-tuned models',
+    points: [
+      'Key software components: RAG, API and web-server LLM access',
+      'Multi-node & elastic serving',
+    ],
+  },
+  {
+    title: 'Agentic AI',
+    lead: 'AI agents that couple computational simulation & analysis workflows',
+    points: [
+      'Key software components: Autogen, LangGraph, MCP',
+      'Langchain, CrewAI',
+    ],
+  },
+  {
+    title: 'Model Training',
+    lead: 'Primus · optimized for large-scale pre-training',
+    points: [
+      'Strong RCCL support and performance',
+    ],
+  },
+  {
+    title: 'ModSim',
+    lead: 'CCL / MPI requirements',
+    points: [
+      'Numerical routines across a range of precision datatypes',
+      'MCP tool serving of GPU executables',
+    ],
+  },
+]
+
+function UsageModels() {
+  return (
+    <div style={{ marginBottom: '2rem' }}>
+      <div className="section-label" style={{ marginBottom: '.4rem' }}>Usage Models</div>
+      <p style={{ color: '#a1a1aa', fontSize: '.82rem', lineHeight: 1.6, marginBottom: '1rem', maxWidth: 820 }}>
+        Five ways teams build on this AMD AI-for-science platform — from training fast
+        surrogates to standing up agentic workflows that drive simulation and analysis.
+      </p>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(210px,1fr))', gap: '1rem' }}>
+        {USAGE_MODELS.map(u => (
+          <div key={u.title} className="card" style={{ padding: '1rem', display: 'flex',
+            flexDirection: 'column', gap: '.6rem' }}>
+            <div style={{ fontWeight: 800, fontSize: '1rem', color: '#38bdf8',
+              borderBottom: '1px solid #38bdf833', paddingBottom: '.4rem' }}>{u.title}</div>
+            <div style={{ fontSize: '.82rem', fontWeight: 700, color: '#f5f5f7', lineHeight: 1.4 }}>
+              {u.lead}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '.35rem' }}>
+              {u.points.map((p, i) => (
+                <div key={i} style={{ display: 'flex', gap: '.4rem', fontSize: '.75rem',
+                  color: '#a1a1aa', lineHeight: 1.4 }}>
+                  <span style={{ color: '#38bdf8', flexShrink: 0 }}>▸</span>{p}
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ── Main catalog component ────────────────────────────────────────────────────
 export function ModelCatalog() {
   const { setDomain, setModel, setStep, setView, setTask } = useStore()
@@ -593,10 +669,15 @@ export function ModelCatalog() {
         <AddModelGuide />
       ) : (
         <>
+          {/* Usage-model overview shown on the full catalog (All Models) view */}
+          {tab === 'all' && <UsageModels />}
           {!loading && filtered.length === 0 && (
             <div style={{ color: '#52525b', textAlign: 'center', padding: '2rem' }}>
               No models in this domain yet.
             </div>
+          )}
+          {tab === 'all' && (
+            <div className="section-label" style={{ marginBottom: '.75rem' }}>Model Catalog</div>
           )}
           <div style={{
             display: 'grid',

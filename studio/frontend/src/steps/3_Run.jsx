@@ -91,7 +91,8 @@ export function StepRun() {
         title="Run"
         sub={`${model?.name || model?.slug} — ${
           mode === 'demo'
-            ? (model?.slug === 'ORBIT-2' && task === 'story' ? 'Demo (replay of real runs)' : 'Demo (synthetic)')
+            ? ((model?.slug === 'ORBIT-2' && task === 'story') || model?.slug === 'HydraGNN'
+                ? 'Demo (replay of real runs)' : 'Demo (synthetic)')
             : 'Live SLURM'} mode`}
       />
       <button className="btn btn-ghost" style={{ marginBottom: '1.2rem', fontSize: '.8rem' }}

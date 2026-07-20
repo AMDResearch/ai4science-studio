@@ -25,18 +25,21 @@ export const useStore = create((set, get) => ({
   modelVariant: '8gpu',
   setModelVariant: (v) => set({ modelVariant: v }),
 
-  // Prompt
+  // Prompt — changing the case/prompt invalidates any prior run so the Analyze
+  // page can't show stale results for a different case (demo-critical).
   prompt: '',
-  setPrompt: (p) => set({ prompt: p }),
+  setPrompt: (p) => set({ prompt: p, runId: null, runState: 'idle', result: null, outputFiles: [] }),
   customPrompt: '',
   setCustomPrompt: (p) => set({ customPrompt: p }),
   promptError: '',
   setPromptError: (e) => set({ promptError: e }),
 
-  // Params (from model env_vars)
+  // Params (from model env_vars). Changing a param (e.g. dc_event) also
+  // invalidates prior run results.
   params: {},
   setParams: (p) => set({ params: p }),
-  setParam: (k, v) => set((s) => ({ params: { ...s.params, [k]: v } })),
+  setParam: (k, v) => set((s) => ({ params: { ...s.params, [k]: v },
+    runId: null, runState: 'idle', result: null, outputFiles: [] })),
 
   // SLURM
   partition: 'lux',

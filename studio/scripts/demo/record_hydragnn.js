@@ -7,7 +7,7 @@ const FRONT = process.env.FRONT_URL || 'http://127.0.0.1:5299'
 const BACK  = process.env.BACK_URL  || 'http://127.0.0.1:8299'
 const OUT   = process.env.OUT_DIR   || '/home/spannala/Projects/ai4science-studio/studio/demo/demo-output'
 const FFMPEG = process.env.FFMPEG || '/home/spannala/Projects/ai4science-studio/studio/backend/.venv/lib/python3.12/site-packages/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2'
-const HOLD = 30000   // every content slide holds for 30 seconds
+const HOLD = 20000   // every content slide holds for 20 seconds
 
 // Show a caption overlay and hold for ms, then remove it
 async function caption(page, text, ms = HOLD) {
@@ -25,9 +25,21 @@ async function caption(page, text, ms = HOLD) {
   await page.evaluate(() => document.getElementById('__cap__')?.remove())
 }
 
-// Show caption immediately (no wait) — use when content is already on screen
+// Show caption immediately (no wait) — use when content is already on screen.
+// Also adaptively scales the app so the entire page (tall training/inference
+// Analyze views) fits inside the recording frame without cropping. The caption
+// lives on <body> outside #root so it stays full-size.
 async function showCaption(page, text) {
   await page.evaluate(t => {
+    const root = document.getElementById('root')
+    if (root) {
+      root.style.transform = ''
+      root.style.transformOrigin = 'top center'
+      root.style.width = '100%'
+      const h = root.scrollHeight, w = root.scrollWidth
+      const s = Math.min(1, (window.innerHeight - 8) / (h || 1), window.innerWidth / (w || 1))
+      root.style.transform = `scale(${s})`
+    }
     document.getElementById('__cap__')?.remove()
     const el = document.createElement('div'); el.id = '__cap__'
     el.style.cssText = 'position:fixed;bottom:40px;left:50%;transform:translateX(-50%);' +
@@ -130,48 +142,71 @@ async function launchDemo(page, body) {
   await page.waitForTimeout(1500)
 
   // ── Slide: Convergence chart ────────────────────────────────────────────────
-  await showCaption(page, 'Validation loss convergence — 100 epochs on real Alexandria DFT data')
+  await showCaption(page, 'Validation loss convergence — 200 epochs on real Alexandria DFT data')
   await page.waitForTimeout(HOLD)
 
-  await showCaption(page, '8-GPU trains on 6.7× more data (268k vs 40k structures) — same wall-clock')
+  await showCaption(page, '8-GPU trains on 15× more data (600k vs 40k structures) — same wall-clock')
   await page.waitForTimeout(HOLD)
 
-  await showCaption(page, 'Final accuracy: corr 0.75 → 0.79 · R² 0.56 → 0.63 · MAE 0.326 → 0.298 eV/atom')
+  await showCaption(page, 'Final accuracy: corr 0.82 → 0.89 · R² 0.67 → 0.79 · MAE 0.288 → 0.240 eV/atom')
   await page.waitForTimeout(HOLD)
 
-  // ── Act 2: Inference + 3D viewer ─────────────────────────────────────────────
+  // ── Act 2: Inference + 3D viewer (real curated held-out materials) ───────────
   await setState(page, { task:'inference', step:2 })
   await page.waitForTimeout(800)
-  await showCaption(page, 'Switch to Inference — predict energy on a real held-out Alexandria structure')
+  await showCaption(page, 'Switch to Inference — predict energy on real held-out Alexandria materials')
   await page.waitForTimeout(HOLD)
 
+  // Curated demo materials (struct_index maps to baked real predictions):
+  //   0 = pyrite FeS2, 1 = permalloy FeNi3, 2 = sodium ferrite NaFeO2.
+  // Each launch uses the 8-GPU model (val corr 0.889, MAE 0.240 eV/atom).
   await setState(page, {
-    prompt:'Predict formation energy, atomic forces, and bulk modulus for an iron-carbon alloy with 5 atomic percent carbon using HydraGNN.',
+    prompt:'Predict the per-atom DFT formation energy of pyrite FeS2 ("fool\'s gold") — an earth-abundant thin-film solar absorber and battery cathode.',
     step:3
   })
   await page.waitForTimeout(800)
-  await showCaption(page, 'Prompt: predict energy for a real DFT structure from the Alexandria dataset')
+  await showCaption(page, 'Material 1: pyrite FeS2 — earth-abundant solar absorber & battery cathode')
   await page.waitForTimeout(HOLD)
 
   const {rid:rid2, job:job2} = await launchDemo(page, {
     slug:'HydraGNN', domain:'material_science', task:'inference', mode:'demo',
-    prompt:'Predict formation energy, atomic forces, and bulk modulus for an iron-carbon alloy with 5 atomic percent carbon using HydraGNN.',
-    params:{model_variant:'8gpu'},
+    prompt:'Predict the per-atom DFT formation energy of pyrite FeS2 ("fool\'s gold") — an earth-abundant thin-film solar absorber and battery cathode.',
+    params:{model_variant:'8gpu', struct_index:0},
   })
   await setState(page, { runId:rid2, result:job2?.result, step:4 })
   await page.waitForTimeout(1500)
 
   // ── Slide: 3D molecular viewer ──────────────────────────────────────────────
-  await showCaption(page, '3D atomistic structure — real coordinates from held-out DFT valset')
+  await showCaption(page, '3D atomistic structure — real coordinates from a held-out DFT unit cell')
   await page.waitForTimeout(HOLD)
 
-  await showCaption(page, 'Ball-and-stick viewer (3Dmol.js) — drag to rotate, scroll to zoom')
+  await showCaption(page, 'Viewer (3Dmol.js / SVG fallback) — bonds resolved across periodic boundaries')
   await page.waitForTimeout(HOLD)
 
-  await showCaption(page, 'Predicted energy vs DFT reference — trained 8-GPU HydraGNN model on AMD MI355X')
+  await showCaption(page, 'FeS2 predicted energy vs DFT reference — real pred, not random (pred −0.062 vs −0.056 eV/atom)')
   await page.waitForTimeout(HOLD)
 
-  await showCaption(page, 'Model val corr 0.794 · MAE 0.298 eV/atom — production-grade materials ML')
+  // Second material: sodium ferrite NaFeO2 — Na-ion battery cathode.
+  await setState(page, {
+    prompt:'Predict the per-atom DFT formation energy of sodium ferrite NaFeO2 — a low-cost sodium-ion battery cathode for grid-scale energy storage.',
+    step:3
+  })
+  await page.waitForTimeout(800)
+  await showCaption(page, 'Material 2: sodium ferrite NaFeO2 — low-cost Na-ion cathode for grid storage')
+  await page.waitForTimeout(HOLD)
+
+  const {rid:rid3, job:job3} = await launchDemo(page, {
+    slug:'HydraGNN', domain:'material_science', task:'inference', mode:'demo',
+    prompt:'Predict the per-atom DFT formation energy of sodium ferrite NaFeO2 — a low-cost sodium-ion battery cathode for grid-scale energy storage.',
+    params:{model_variant:'8gpu', struct_index:2},
+  })
+  await setState(page, { runId:rid3, result:job3?.result, step:4 })
+  await page.waitForTimeout(1500)
+
+  await showCaption(page, 'NaFeO2 predicted vs DFT reference — trained 8-GPU HydraGNN model on AMD MI355X')
+  await page.waitForTimeout(HOLD)
+
+  await showCaption(page, 'Model val corr 0.889 · MAE 0.240 eV/atom — production-grade materials ML')
   await page.waitForTimeout(HOLD)
 
   await hideCaption(page)

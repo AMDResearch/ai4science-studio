@@ -42,10 +42,10 @@ _CURATED: dict[str, list[dict]] = {
         {"label": "Extreme cold air outbreak", "text": "Forecast the February 2021 Texas cold wave: 7-day horizon from 2021-02-07T00:00 focusing on 850 hPa temperature.", "task": "inference"},
     ],
     "HydraGNN": [
-        {"label": "Iron-carbon alloy properties", "text": "Predict formation energy, atomic forces, and bulk modulus for an iron-carbon alloy with 5 atomic percent carbon using HydraGNN.", "task": "inference"},
-        {"label": "Lithium-ion cathode screening", "text": "Screen 50 lithium manganese oxide compositions for voltage and capacity using the HydraGNN graph foundation model.", "task": "inference"},
-        {"label": "Fusion blanket material", "text": "Predict radiation damage tolerance and thermal conductivity for tungsten-rhenium alloys relevant to fusion blanket design.", "task": "inference"},
-        {"label": "Fine-tune on new dataset", "text": "Fine-tune HydraGNN on 1000 new DFT calculations of perovskite oxides for band gap prediction.", "task": "train"},
+        {"label": "Pyrite FeS2 — solar absorber & battery cathode", "text": "Predict the per-atom DFT formation energy of pyrite FeS2 (\"fool's gold\") — an earth-abundant, non-toxic semiconductor used as a thin-film solar absorber and battery cathode.", "task": "inference", "struct_index": 0},
+        {"label": "Permalloy FeNi3 — soft magnet", "text": "Predict the per-atom DFT formation energy of awaruite / permalloy FeNi3 — a soft ferromagnet used in transformer laminations, magnetic shielding, and read heads.", "task": "inference", "struct_index": 1},
+        {"label": "Sodium ferrite NaFeO2 — Na-ion cathode", "text": "Predict the per-atom DFT formation energy of sodium ferrite NaFeO2 — a low-cost sodium-ion battery cathode for grid-scale energy storage.", "task": "inference", "struct_index": 2},
+        {"label": "Iron hydride Fe2H6 — design candidate", "text": "Predict the per-atom DFT formation energy of a hypothetical iron hydride Fe2H6 — a superhydride-style hydrogen-storage design candidate, screened before synthesis.", "task": "inference", "struct_index": 3},
         {"label": "GPU scaling: 1 vs 8 GPUs", "text": "Compare HydraGNN energy-model training on 1 GPU versus 8 GPUs on Alexandria DFT data: show loss convergence, throughput speedup, and final accuracy.", "task": "train"},
     ],
     "MatterGen": [

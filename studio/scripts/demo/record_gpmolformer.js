@@ -7,10 +7,22 @@ const FRONT = process.env.FRONT_URL || 'http://127.0.0.1:5299'
 const BACK  = process.env.BACK_URL  || 'http://127.0.0.1:8299'
 const OUT   = process.env.OUT_DIR   || '/home/spannala/Projects/ai4science-studio/studio/demo/demo-output'
 const FFMPEG = process.env.FFMPEG || '/home/spannala/Projects/ai4science-studio/studio/backend/.venv/lib/python3.12/site-packages/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2'
-const HOLD = 30000
+const HOLD = 20000
 
+// Adaptively scale the app so the entire page fits inside the recording frame
+// (tall before/after Analyze views are otherwise cropped). Caption lives on
+// <body> outside #root so it stays full-size.
 async function showCaption(page, text) {
   await page.evaluate(t => {
+    const root = document.getElementById('root')
+    if (root) {
+      root.style.transform = ''
+      root.style.transformOrigin = 'top center'
+      root.style.width = '100%'
+      const h = root.scrollHeight, w = root.scrollWidth
+      const s = Math.min(1, (window.innerHeight - 8) / (h || 1), window.innerWidth / (w || 1))
+      root.style.transform = `scale(${s})`
+    }
     document.getElementById('__cap__')?.remove()
     const el = document.createElement('div'); el.id = '__cap__'
     el.style.cssText = 'position:fixed;bottom:40px;left:50%;transform:translateX(-50%);' +
@@ -140,14 +152,17 @@ async function launchDemo(page, body) {
   await setState(page, { runId:r2, result:j2?.result, step:4 })
   await page.waitForTimeout(1500)
 
-  // ── Slides: pair-tuning results ──────────────────────────────────────────────
-  await showCaption(page, 'After pair-tuning: QED improves 0.756 → 0.804 — more drug-like molecules generated')
+  // ── Slides: pair-tuning results (real baked values) ──────────────────────────
+  await showCaption(page, 'After pair-tuning: QED mean 0.756 → 0.804 — generation steered toward drug-likeness')
+  await page.waitForTimeout(HOLD)
+
+  await showCaption(page, 'Real baked run: 1000 QED-steered pairs, 10 epochs — measured before/after property shift')
   await page.waitForTimeout(HOLD)
 
   await showCaption(page, 'Loss curve converges over 10 epochs — efficient PEFT, no backbone retraining needed')
   await page.waitForTimeout(HOLD)
 
-  await showCaption(page, 'Before/after SMILES comparison — pair-tuning steers toward oral bioavailability space')
+  await showCaption(page, 'Before/after SMILES comparison — QED badges shift higher after pair-tuning')
   await page.waitForTimeout(HOLD)
 
   await showCaption(page, 'GP-MoLFormer fine-tuning on AMD Instinct MI355X · IBM Research model · AI4Science Studio')

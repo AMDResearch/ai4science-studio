@@ -14,7 +14,10 @@ export function AppShell({ children }) {
         position: 'sticky', top: 0, zIndex: 100,
         background: 'rgba(10,2,3,0.85)', backdropFilter: 'blur(12px)',
         borderBottom: '1px solid #27272a',
+        // Extra right padding keeps the Demo/Live, +Model and Record controls clear
+        // of the fixed Zscaler "Browser Isolation" overlay pinned to the top-right.
         padding: '.75rem 1.5rem',
+        paddingRight: 'clamp(1.5rem, 24vw, 360px)',
         display: 'flex', alignItems: 'center', gap: '1.2rem',
       }}>
         {/* Logo */}
@@ -86,10 +89,42 @@ export function AppShell({ children }) {
         <RecordButton />
       </header>
 
-      {/* Main */}
-      <main style={{ flex: 1, padding: '2rem 1.5rem', maxWidth: 1100, margin: '0 auto', width: '100%', boxSizing: 'border-box' }}>
-        {children}
-      </main>
+      {/* Main: persistent LUX left panel + wizard content */}
+      <div style={{ flex: 1, display: 'flex',
+        width: '100%', boxSizing: 'border-box', gap: '1.5rem', padding: '2rem 1.5rem' }}>
+        {/* Left panel — LUX supercomputer, centered in the whole left region,
+            with ~10vh of space at the top. */}
+        <aside style={{ flex: '0 0 34%', display: 'flex', flexDirection: 'column',
+          alignItems: 'center', position: 'sticky', top: '4.5rem',
+          alignSelf: 'flex-start', paddingTop: '10vh' }}>
+          {/* Inner block constrained to the image width so all text wraps within it. */}
+          <div style={{ width: '100%', maxWidth: 320, display: 'flex', flexDirection: 'column',
+            gap: '1.1rem', textAlign: 'center' }}>
+            {/* Big, bold LUX title above the image */}
+            <div style={{ fontSize: '1.35rem', fontWeight: 900, lineHeight: 1.25,
+              color: '#f5f5f7', letterSpacing: '-.01em' }}>
+              LUX — First AMD and US Sovereign AI Infrastructure
+            </div>
+            <img src="/lux.jpg" alt="LUX — First AMD and US Sovereign AI Infrastructure"
+              style={{ width: '100%', borderRadius: '.75rem', border: '1px solid #27272a',
+                objectFit: 'cover', boxShadow: '0 8px 28px rgba(0,0,0,.5)' }}
+              onError={e => { e.target.style.display = 'none' }} />
+            <div style={{ fontSize: '.82rem', fontWeight: 700, color: '#a1a1aa', letterSpacing: '.02em' }}>
+              US DOE Genesis Mission · ORNL · AMD · HPE
+            </div>
+            <div style={{ fontSize: '.9rem', fontWeight: 700, lineHeight: 1.45,
+              color: '#c8a24a', letterSpacing: '.01em' }}>
+              Reference Design for an end-to-end platform and service for building
+              open models and Agentic workflows
+            </div>
+          </div>
+        </aside>
+
+        {/* Wizard content */}
+        <main style={{ flex: 1, minWidth: 0, maxWidth: 1100 }}>
+          {children}
+        </main>
+      </div>
 
       {/* Footer */}
       <footer style={{ padding: '.75rem 1.5rem', borderTop: '1px solid #1a1a1c',

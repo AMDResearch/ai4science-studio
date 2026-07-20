@@ -38,6 +38,7 @@ env "${_MPI_UNSET[@]}" apptainer exec --rocm \
     --env MODEL_PATH="$HG_MODEL_PATH" \
     --env HG_MODEL_VARIANT="${HG_MODEL_VARIANT:-}" \
     --env STRUCT_INDEX="${STRUCT_INDEX:-4}" \
+    --env REQUIRE_ELEMENTS="${REQUIRE_ELEMENTS:-}" \
     --env STUDIO_RESULT_OUT="${STUDIO_RESULT_OUT:-}" \
     --env PYTHONPATH="${HG_INFER_REPO}:/opt/hydragnn-pkgs" \
     --env LD_LIBRARY_PATH=/opt/hydragnn-pkgs/adios2:/opt/venv/lib/python3.12/site-packages/torch/lib \
