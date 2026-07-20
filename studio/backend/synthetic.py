@@ -31,28 +31,32 @@ def _earth_science(slug: str, task: str, prompt: str, params: dict,
     # out-of-distribution): pretrained -> OOD gap -> broad finetune -> DC finetune.
     # Numbers/maps are baked from actual MI355X runs (orbit2_ood_dc harness), measured.
     if slug == "ORBIT-2" and task == "story":
-        asset = Path(__file__).resolve().parent / "assets" / "orbit2_story.json"
+        # Per-event story asset (July 16 2024 default; July 4 2026 selectable).
+        adir = Path(__file__).resolve().parent / "assets"
+        ev = params.get("dc_event", "july16_2024")
+        per_event = adir / f"orbit2_story_{ev}.json"
+        asset = per_event if per_event.exists() else adir / "orbit2_story.json"
         if asset.exists():
             story = json.loads(asset.read_text())
             m = story.get("metrics", {})
             dc = m.get("dc_tmax_mae_c", {})
-            label = story.get("task", "DC heatwave (Open-Meteo, OOD)")
+            core = m.get("dc_core_tmax_mae_c", {})
             steps = [
                 "Replaying real ORBIT-2 runs on AMD MI355X (measured, not synthetic)...",
                 "Loading independent Open-Meteo ERA5 DC heatwave data (never seen in training)...",
-                "Stage 1 — pretrained ORBIT-2 8M applied out-of-distribution to the DC field...",
-                f"Stage 1 — DC tmax MAE {dc.get('pretrained','?')}°C...",
-                f"Stage 2 — out-of-distribution gap: bilinear baseline {dc.get('bilinear','?')}°C beats the pretrained model...",
-                "Stage 3 — first finetune (broad, CONUS-wide) on real PRISM training years...",
-                f"Stage 3 — DC tmax MAE {dc.get('finetune1','?')}°C ({m.get('finetune1_improvement_pct','?')}% better, now beats bilinear)...",
-                "Stage 4 — second finetune (DC-targeted, region-weighted loss)...",
-                f"Stage 4 — DC tmax MAE {dc.get('finetune2','?')}°C ({m.get('finetune2_improvement_pct','?')}% better than pretrained)...",
-                "Rendering DC temperature maps (°C): coarse input, pretrained, 1st finetune, 2nd finetune, Open-Meteo truth...",
+                f"Act 1 — pretrained ORBIT-2 8M applied out-of-distribution: DC tmax MAE {dc.get('pretrained','?')}°C...",
+                f"Act 2 — out-of-distribution gap: bilinear baseline {dc.get('bilinear','?')}°C beats the pretrained model...",
+                f"Act 3 — finetuning on 814 real PRISM DC heatwave days plateaus: {dc.get('heatwave','?')}°C, still above bilinear...",
+                "Act 4 — conditioning on real GHSL urban density (EU JRC) injects physics finetuning could not reach...",
+                f"Act 4 — urban-core MAE {core.get('heatwave','?')}°C -> {core.get('urban','?')}°C ({m.get('urban_improvement_pct','?')}% better)...",
+                f"Act 5 — explicit UHI equation adds nothing: the model already internalized the physics ({core.get('physics','?')}°C core)...",
+                "Rendering DC temperature maps (°C): coarse, pretrained, finetune, urban-conditioned, physics, Open-Meteo truth...",
             ]
             _progress(emit, run_id, steps, delay=0.6)
             story["slug"] = slug
             (out_dir / "orbit2_story.json").write_text(json.dumps(story, indent=2))
-            emit(run_id, f"[demo] Real ORBIT-2 OOD replay — DC tmax MAE {dc.get('pretrained','?')}°C -> {dc.get('finetune2','?')}°C after two finetunes")
+            emit(run_id, f"[demo] Real ORBIT-2 OOD replay — urban-core MAE {core.get('heatwave','?')}°C -> "
+                         f"{core.get('urban','?')}°C after physics conditioning (finetuning alone plateaued)")
             return story
 
     # ORBIT-2 DC temperature downscaling demo — uses REAL ERA5 data baked from Open-Meteo.
