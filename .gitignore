@@ -113,6 +113,7 @@ studio/scripts/demo/*.log
 # ── LaTeX documentation ───────────────────────────────────────────────────────
 # Keep .tex source, .bib, Makefile; ignore compiled artifacts and binaries
 docs/*.pdf
+docs/**/*.pdf
 docs/*.aux
 docs/*.bbl
 docs/*.blg
@@ -138,3 +139,6 @@ build_*.log
 # Demo capture job logs (per-run, ephemeral)
 studio/scripts/demo/capture_demo_*.log
 studio/demo/studio_demo_*.log
+
+# Ephemeral dev-server restart logs (backend/frontend, per-session)
+studio/**/*_restart.log

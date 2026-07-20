@@ -16,9 +16,10 @@ from typing import Callable
 
 # ── Utility ───────────────────────────────────────────────────────────────────
 
-def _progress(emit: Callable, run_id: str, steps: list[str], delay: float = 0.8):
+def _progress(emit: Callable, run_id: str, steps: list[str], delay: float = 0.8,
+              tag: str = "synthetic"):
     for step in steps:
-        emit(run_id, f"[synthetic] {step}")
+        emit(run_id, f"[{tag}] {step}")
         time.sleep(delay)
 
 
@@ -46,17 +47,18 @@ def _earth_science(slug: str, task: str, prompt: str, params: dict,
                 "Loading independent Open-Meteo ERA5 DC heatwave data (never seen in training)...",
                 f"Act 1 — pretrained ORBIT-2 8M applied out-of-distribution: DC tmax MAE {dc.get('pretrained','?')}°C...",
                 f"Act 2 — out-of-distribution gap: bilinear baseline {dc.get('bilinear','?')}°C beats the pretrained model...",
-                f"Act 3 — finetuning on 814 real PRISM DC heatwave days plateaus: {dc.get('heatwave','?')}°C, still above bilinear...",
-                "Act 4 — conditioning on real GHSL urban density (EU JRC) injects physics finetuning could not reach...",
-                f"Act 4 — urban-core MAE {core.get('heatwave','?')}°C -> {core.get('urban','?')}°C ({m.get('urban_improvement_pct','?')}% better)...",
-                f"Act 5 — explicit UHI equation adds nothing: the model already internalized the physics ({core.get('physics','?')}°C core)...",
-                "Rendering DC temperature maps (°C): coarse, pretrained, finetune, urban-conditioned, physics, Open-Meteo truth...",
+                "Act 3 — a ~10k-param physics-residual head corrects the bilinear field with real "
+                "GHSL urban density (EU JRC) + a coastal distance-to-water field (ocean sentinel cleaned first)...",
+                f"Act 3 — urban-core MAE {core.get('bilinear','?')}°C (bilinear) -> {core.get('urban','?')}°C, "
+                f"and whole-land {dc.get('bilinear','?')}°C -> {dc.get('urban','?')}°C — beats bilinear everywhere...",
+                f"Act 4 — explicit UHI + coastal equations add nothing: the head already internalized the physics ({core.get('physics','?')}°C core)...",
+                "Rendering DC temperature maps (°C): coarse, pretrained, physics-residual head, +analytic UHI, Open-Meteo truth...",
             ]
             _progress(emit, run_id, steps, delay=0.6)
             story["slug"] = slug
             (out_dir / "orbit2_story.json").write_text(json.dumps(story, indent=2))
-            emit(run_id, f"[demo] Real ORBIT-2 OOD replay — urban-core MAE {core.get('heatwave','?')}°C -> "
-                         f"{core.get('urban','?')}°C after physics conditioning (finetuning alone plateaued)")
+            emit(run_id, f"[demo] Real ORBIT-2 OOD replay — urban-core MAE {core.get('bilinear','?')}°C (bilinear) -> "
+                         f"{core.get('urban','?')}°C via the physics-residual head")
             return story
 
     # ORBIT-2 DC temperature downscaling demo — uses REAL ERA5 data baked from Open-Meteo.
@@ -234,7 +236,7 @@ def _materials(slug: str, task: str, prompt: str, params: dict,
             "Comparing convergence and final accuracy (same PBC-edge pipeline)...",
             "Computing scaling speedup...",
         ]
-        _progress(emit, run_id, steps, delay=0.6)
+        _progress(emit, run_id, steps, delay=0.6, tag="demo")
         (out_dir / "training_convergence.json").write_text(json.dumps(data, indent=2))
         m1 = data["runs"]["1gpu"]["metrics"]
         m8 = data["runs"]["8gpu"]["metrics"]
@@ -261,13 +263,28 @@ def _materials(slug: str, task: str, prompt: str, params: dict,
                     f"Loading trained HydraGNN model ({data.get('model_variant','8gpu')}, "
                     f"val corr={data.get('val_corr')})...",
                     "Reading held-out Alexandria DFT structure...",
-                    "Building atomistic graph (RadiusGraph r=5.0, non-PBC)...",
+                    "Building atomistic graph (stored PBC edges)...",
                     "Running PNA forward pass on GPU...",
                     "Comparing predicted energy vs DFT reference...",
                 ]
-                _progress(emit, run_id, steps, delay=0.6)
-                # Pick a structure deterministically (rotate through the baked set)
-                choice = preds[rng.randrange(len(preds))]
+                _progress(emit, run_id, steps, delay=0.6, tag="demo")
+                # Pick a structure. An explicit struct_index (from params or the
+                # HG_DEMO_STRUCT_INDEX env) selects one baked prediction
+                # deterministically — used by the screenshot/demo tooling to step
+                # through every curated material. Otherwise pick from the fixed seed.
+                _si = params.get("struct_index")
+                if _si is None:
+                    _si = os.environ.get("HG_DEMO_STRUCT_INDEX")
+                # A control file lets external tooling (screenshot capture) rotate
+                # the demo material between UI-driven runs without a backend restart.
+                if _si is None:
+                    _sf = os.environ.get("HG_DEMO_STRUCT_INDEX_FILE")
+                    if _sf and Path(_sf).exists():
+                        _si = Path(_sf).read_text().strip()
+                if _si is not None and str(_si).strip() != "":
+                    choice = preds[int(_si) % len(preds)]
+                else:
+                    choice = preds[rng.randrange(len(preds))]
                 result = {
                     "type": "atomistic_energy",
                     "slug": slug,
@@ -278,6 +295,10 @@ def _materials(slug: str, task: str, prompt: str, params: dict,
                     "application": choice.get("application"),
                     "n_atoms": choice["n_atoms"],
                     "atoms": choice["atoms"],
+                    # Periodic unit cell (3x3 lattice, A) + PBC flags so the viewer
+                    # can bond atoms across periodic boundaries (minimum image).
+                    "cell": choice.get("cell"),
+                    "pbc": choice.get("pbc"),
                     "predicted_energy_ev_per_atom": choice["predicted_energy_ev_per_atom"],
                     "dft_reference_ev_per_atom": choice["dft_reference_ev_per_atom"],
                     "abs_error_ev_per_atom": choice["abs_error_ev_per_atom"],
