@@ -6,6 +6,6 @@ import App from './App'
 const root = ReactDOM.createRoot(document.getElementById('root'))
 root.render(<React.StrictMode><App /></React.StrictMode>)
 
-// Expose store for Playwright automation
-import { useStore } from './store'
-window.__studioStore = useStore
+// window.__studioStore is exposed from store.js itself (a single module instance
+// shared with the whole component tree) so the Playwright demo recorder drives
+// the exact store the UI renders from.

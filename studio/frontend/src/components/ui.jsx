@@ -46,17 +46,22 @@ export function Empty({ msg = 'Nothing here yet.' }) {
   )
 }
 
-export function PromptCard({ label, text, task, selected, onClick }) {
+export function PromptCard({ label, text, task, selected, onClick, disabled, disabledHint }) {
   return (
     <div
-      className={`prompt-card${selected ? ' selected' : ''}`}
-      onClick={onClick}
+      className={`prompt-card${selected ? ' selected' : ''}${disabled ? ' disabled' : ''}`}
+      onClick={disabled ? undefined : onClick}
+      aria-disabled={disabled || undefined}
+      title={disabled ? (disabledHint || 'Not available in this mode') : undefined}
+      style={disabled ? { opacity: 0.4, cursor: 'not-allowed', pointerEvents: 'auto' } : undefined}
     >
       <div style={{ display: 'flex', gap: '.5rem', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <div style={{ fontWeight: 700, fontSize: '.85rem', color: '#f5f5f7', marginBottom: '.35rem' }}>
           {label}
         </div>
-        {task && <span className="badge badge-info" style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>{task}</span>}
+        {disabled
+          ? <span className="badge" style={{ whiteSpace: 'nowrap', flexShrink: 0, background: '#3f3f46', color: '#a1a1aa' }}>not available</span>
+          : task && <span className="badge badge-info" style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>{task}</span>}
       </div>
       <div style={{ fontSize: '.78rem', color: '#94a3b8', lineHeight: 1.5 }}>{text}</div>
     </div>

@@ -113,6 +113,13 @@ _OVERLAYS: dict[str, str | None] = {
 }
 
 
+def _is_dc_run(slug: str, task: str, params: dict) -> bool:
+    """A real DC physics-residual-head run: the ORBIT-2 'story' task OR any ORBIT-2
+    prompt carrying a dc_event (the DC heatwave inference prompts). These all run the
+    orbit2_ood_dc.py harness, never the generic synthetic downscaling path."""
+    return slug == "ORBIT-2" and (task == "story" or "dc_event" in params)
+
+
 def _build_slurm_script(run_id: str, slug: str, domain: str, task: str,
                          prompt: str, params: dict, partition: str) -> Path:
     """Build a minimal sbatch wrapper that echoes params and calls the model's sbatch script."""
@@ -187,11 +194,12 @@ def _build_slurm_script(run_id: str, slug: str, domain: str, task: str,
     # code clone lives in aaji's tree, and synthetic mode auto-generates data +
     # auto-downloads the checkpoint from HF. Single-GPU config avoids the 16-way
     # FSDP default. UI params below can override any of these.
-    if slug == "ORBIT-2" and task == "story":
+    if _is_dc_run(slug, task, params):
         # Real 4-act robustness/finetuning story: PRISM-trained ORBIT-2 applied to
         # INDEPENDENT Open-Meteo DC heatwave data (true out-of-distribution test).
         # Static channels come from the PRISM DC crop; dynamic (tmax/tmin/precip)
         # from the baked real Open-Meteo fields. DC event selectable via dc_event.
+        # Runs for BOTH the 'story' task and the DC-event 'inference' prompts.
         _O2 = f"{_AI4S_SHARED_DIR}/orbit2_sr"
         _OOD = str(_BACKEND_DIR / "assets" / "dc_ood_fields.json")
         _dc_event = str(params.get("dc_event", "july16_2024"))
@@ -210,8 +218,8 @@ def _build_slurm_script(run_id: str, slug: str, domain: str, task: str,
             "--env PYTHONNOUSERSITE=1 --env HSA_NO_SCRATCH_RECLAIM=1 --env MIOPEN_DISABLE_CACHE=1 "
             f"--env OOD_FIELDS={_OOD} --env DC_EVENT={_dc_event} "
             f"--env URBAN_CONUS={_O2}/urban_conus.npz "
-            f"--env FT_URBANWATER={_O2}/orbit2_8m_ft_urbanwater.pk "
-            "--env WATER_COND=1 --env WATER_L_CELLS=3.0 "
+            f"--env RH_CKPT={_O2}/orbit2_residual_head.pk "
+            "--env WATER_L_CELLS=3.0 "
             f"--env OUT_JSON={str(_run_dir(run_id) / 'orbit2_story.json')} "
             f"{_SIF_PATH} bash -lc "
             f"'source /opt/venv/bin/activate 2>/dev/null; python3 {_O2}/orbit2_ood_dc.py'",
@@ -297,9 +305,9 @@ def _build_slurm_script(run_id: str, slug: str, domain: str, task: str,
             script_lines.append(f"export {k.upper()}={q(str(v))}")
     script_lines.append("")
 
-    # The ORBIT-2 story task runs its own inline srun harness above — do not also
-    # delegate to the upstream (synthetic) sbatch.
-    _story_run = (slug == "ORBIT-2" and task == "story")
+    # The ORBIT-2 DC runs (story + DC-event inference) run their own inline srun
+    # harness above — do not also delegate to the upstream (synthetic) sbatch.
+    _story_run = _is_dc_run(slug, task, params)
 
     if upstream_script and not _story_run:
         # Upstream scripts resolve their own dir via `scontrol show job`, which returns
@@ -349,7 +357,9 @@ def _harvest_results(run_id: str):
     text = log.read_text() if log.exists() else ""
 
     if slug == "ORBIT-2" and (_run_dir(run_id) / "orbit2_story.json").exists():
-        # Story task: the harness wrote a complete 3-act JSON — read it verbatim.
+        # Any DC run (story or DC-event inference): the harness wrote a complete
+        # 4-act story JSON — read it verbatim. Generic synthetic runs write no such
+        # file and fall through to the regex-harvest path below.
         try:
             job["result"] = json.loads((_run_dir(run_id) / "orbit2_story.json").read_text())
             _jobs[run_id] = job

@@ -68,3 +68,11 @@ export const useStore = create((set, get) => ({
   // Reset a run
   resetRun: () => set({ runId: null, runState: 'idle', result: null, outputFiles: [] }),
 }))
+
+// Expose the SAME store instance the component tree uses, for Playwright demo
+// automation (window.__studioStore). This must live here in store.js — not in a
+// separate import in main.jsx — so it can never bind to a second module copy.
+// (A query-tagged entry point, e.g. main.jsx?v=..., can cause the dev server to
+// evaluate store.js twice; exposing from within this module guarantees the demo
+// recorder drives the exact store the UI renders from.)
+if (typeof window !== 'undefined') window.__studioStore = useStore

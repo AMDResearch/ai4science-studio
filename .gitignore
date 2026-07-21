@@ -140,5 +140,16 @@ build_*.log
 studio/scripts/demo/capture_demo_*.log
 studio/demo/studio_demo_*.log
 
+# SLURM holder-allocation stdout (per-job, ephemeral — new runs write to logs/)
+studio/scripts/launch/studio-hold-*.log
+
+# Per-directory logs/ folders — ignore the log CONTENTS but KEEP the folders
+# themselves (tracked via .gitkeep). SLURM --output requires the target dir to
+# pre-exist, so the folders must survive a fresh checkout.
+logs/*
+**/logs/*
+!logs/.gitkeep
+!**/logs/.gitkeep
+
 # Ephemeral dev-server restart logs (backend/frontend, per-session)
 studio/**/*_restart.log

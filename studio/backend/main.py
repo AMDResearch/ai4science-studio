@@ -108,6 +108,10 @@ def launch_job(body: LaunchRequest):
     v = prompts.validate_prompt(body.slug, body.domain, body.prompt)
     if not v["ok"]:
         raise HTTPException(422, v["message"])
+    # Fail-closed: reject curated prompts that are grayed-out for this mode (the UI
+    # disables them; this also blocks direct API calls from running dummy paths).
+    if not prompts.prompt_allowed_in_mode(body.slug, body.prompt, body.mode):
+        raise HTTPException(422, "This prompt is not available in the selected mode.")
     run_id = jobs.launch(
         slug=body.slug,
         domain=body.domain,

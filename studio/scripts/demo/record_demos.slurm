@@ -7,19 +7,23 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=16G
 #SBATCH --time=1:15:00
-#SBATCH --output=/home/spannala/Projects/ai4science-studio/studio/scripts/demo/record_demos_%j.log
+#SBATCH --output=/home/spannala/Projects/ai4science-studio/studio/scripts/demo/logs/record_demos_%j.log
 
 set -e
 echo "[demos] Job $SLURM_JOB_ID on $(hostname) at $(date)"
 echo "[demos] ulimit -u: $(ulimit -u)"
 
 STUDIO="$HOME/Projects/ai4science-studio/studio"
-BACK_PORT=8299
+# Backend port MUST match the Vite dev proxy target in frontend/vite.config.js
+# (/api -> 127.0.0.1:8376). If they differ, the recorder's direct API calls work
+# but every rendered page's /api fetch 500s through the proxy and the UI freezes
+# on step 0 — which silently produced broken videos before. Keep these in sync.
+BACK_PORT=8376
 FRONT_PORT=5299
 export FRONT_URL="http://127.0.0.1:${FRONT_PORT}"
 export BACK_URL="http://127.0.0.1:${BACK_PORT}"
 export OUT_DIR="$STUDIO/demo/demo-output"
-mkdir -p "$OUT_DIR"
+mkdir -p "$OUT_DIR/logs"
 
 # Stage GTK/X libs Chromium needs
 DEPS="/scratch/$USER/rdemos_deps_$$"
@@ -48,13 +52,13 @@ trap cleanup EXIT
 
 # Start backend
 cd "$STUDIO/backend"
-.venv/bin/python3 -m uvicorn main:app --host 127.0.0.1 --port $BACK_PORT > "$OUT_DIR/backend_$SLURM_JOB_ID.log" 2>&1 &
+.venv/bin/python3 -m uvicorn main:app --host 127.0.0.1 --port $BACK_PORT > "$OUT_DIR/logs/backend_$SLURM_JOB_ID.log" 2>&1 &
 BACK_PID=$!
 echo "[demos] backend pid $BACK_PID"
 
 # Start Vite frontend
 cd "$STUDIO/frontend"
-npm run dev -- --host 127.0.0.1 --port $FRONT_PORT > "$OUT_DIR/frontend_$SLURM_JOB_ID.log" 2>&1 &
+npm run dev -- --host 127.0.0.1 --port $FRONT_PORT > "$OUT_DIR/logs/frontend_$SLURM_JOB_ID.log" 2>&1 &
 FRONT_PID=$!
 echo "[demos] frontend pid $FRONT_PID"
 

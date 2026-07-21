@@ -13,10 +13,14 @@ _CURATED: dict[str, list[dict]] = {
         {"label": "Severe convection — Tornado Alley", "text": "Run a 24-hour convection-allowing forecast over Kansas and Oklahoma for 2024-05-20T12:00 during a severe weather outbreak.", "task": "inference"},
         {"label": "Rapid intensification ensemble", "text": "Generate a 10-member ensemble forecast of a Category 2 hurricane for 2025-09-10T00:00 over the Atlantic, 6 forecast steps.", "task": "ensemble"},
     ],
+    # enabled_modes: which run modes this prompt is functional in. Absent = grayed
+    # out / inactive in BOTH demo and live (fail-closed). "demo" replays baked
+    # results; "live" runs a real job. Only prompts backed by a working path are
+    # whitelisted; the rest are shown grayed so no one runs dummy data expecting real.
     "ORBIT-2": [
-        {"label": "Robustness + finetuning story (DC)", "text": "Show the ORBIT-2 downscaling story over Washington DC: the pretrained model, its out-of-distribution accuracy gap, and how targeted finetuning on real PRISM data improves the fine-grid temperature prediction.", "task": "story"},
-        {"label": "DC July 2024 record heatwave", "text": "Downscale the July 14-17 2024 Washington DC record heatwave (104F / 40C peak) from ERA5 0.25-degree to 0.1-degree resolution — show temperature field at two resolutions.", "task": "inference", "dc_event": "july16_2024"},
-        {"label": "DC July 4 2026 Independence Day heat", "text": "Downscale the July 4 2026 Independence Day heat in Washington DC from ERA5 0.25-degree to 0.1-degree resolution.", "task": "inference", "dc_event": "july4_2026"},
+        {"label": "Robustness + finetuning story (DC)", "text": "Show the ORBIT-2 downscaling story over Washington DC: the pretrained model, its out-of-distribution accuracy gap, and how targeted finetuning on real PRISM data improves the fine-grid temperature prediction.", "task": "story", "enabled_modes": ["demo"]},
+        {"label": "DC July 2024 record heatwave", "text": "Downscale the July 14-17 2024 Washington DC record heatwave (104F / 40C peak) from ERA5 0.25-degree to 0.1-degree resolution — show temperature field at two resolutions.", "task": "inference", "dc_event": "july16_2024", "enabled_modes": ["demo", "live"]},
+        {"label": "DC July 4 2026 Independence Day heat", "text": "Downscale the July 4 2026 Independence Day heat in Washington DC from ERA5 0.25-degree to 0.1-degree resolution.", "task": "inference", "dc_event": "july4_2026", "enabled_modes": ["demo", "live"]},
         {"label": "Western US weather downscaling", "text": "Downscale ERA5 reanalysis to 4 km over the Western US (California, Nevada, Arizona) for a July 2024 day, focusing on temperature and precipitation.", "task": "inference"},
         {"label": "Pacific Northwest precipitation", "text": "Produce high-resolution precipitation maps for the Pacific Northwest for winter 2023-2024 from coarse GCM output.", "task": "inference"},
         {"label": "Heat dome event downscaling", "text": "Downscale the June 2021 Pacific Northwest heat dome event from ERA5 at hourly resolution over Washington and Oregon.", "task": "inference"},
@@ -42,11 +46,11 @@ _CURATED: dict[str, list[dict]] = {
         {"label": "Extreme cold air outbreak", "text": "Forecast the February 2021 Texas cold wave: 7-day horizon from 2021-02-07T00:00 focusing on 850 hPa temperature.", "task": "inference"},
     ],
     "HydraGNN": [
-        {"label": "Pyrite FeS2 — solar absorber & battery cathode", "text": "Predict the per-atom DFT formation energy of pyrite FeS2 (\"fool's gold\") — an earth-abundant, non-toxic semiconductor used as a thin-film solar absorber and battery cathode.", "task": "inference", "struct_index": 0},
-        {"label": "Permalloy FeNi3 — soft magnet", "text": "Predict the per-atom DFT formation energy of awaruite / permalloy FeNi3 — a soft ferromagnet used in transformer laminations, magnetic shielding, and read heads.", "task": "inference", "struct_index": 1},
-        {"label": "Sodium ferrite NaFeO2 — Na-ion cathode", "text": "Predict the per-atom DFT formation energy of sodium ferrite NaFeO2 — a low-cost sodium-ion battery cathode for grid-scale energy storage.", "task": "inference", "struct_index": 2},
-        {"label": "Iron hydride Fe2H6 — design candidate", "text": "Predict the per-atom DFT formation energy of a hypothetical iron hydride Fe2H6 — a superhydride-style hydrogen-storage design candidate, screened before synthesis.", "task": "inference", "struct_index": 3},
-        {"label": "GPU scaling: 1 vs 8 GPUs", "text": "Compare HydraGNN energy-model training on 1 GPU versus 8 GPUs on Alexandria DFT data: show loss convergence, throughput speedup, and final accuracy.", "task": "train"},
+        {"label": "Pyrite FeS2 — solar absorber & battery cathode", "text": "Predict the per-atom DFT formation energy of pyrite FeS2 (\"fool's gold\") — an earth-abundant, non-toxic semiconductor used as a thin-film solar absorber and battery cathode.", "task": "inference", "struct_index": 0, "enabled_modes": ["demo", "live"]},
+        {"label": "Permalloy FeNi3 — soft magnet", "text": "Predict the per-atom DFT formation energy of awaruite / permalloy FeNi3 — a soft ferromagnet used in transformer laminations, magnetic shielding, and read heads.", "task": "inference", "struct_index": 1, "enabled_modes": ["demo", "live"]},
+        {"label": "Sodium ferrite NaFeO2 — Na-ion cathode", "text": "Predict the per-atom DFT formation energy of sodium ferrite NaFeO2 — a low-cost sodium-ion battery cathode for grid-scale energy storage.", "task": "inference", "struct_index": 2, "enabled_modes": ["demo", "live"]},
+        {"label": "Iron hydride Fe2H6 — design candidate", "text": "Predict the per-atom DFT formation energy of a hypothetical iron hydride Fe2H6 — a superhydride-style hydrogen-storage design candidate, screened before synthesis.", "task": "inference", "struct_index": 3, "enabled_modes": ["demo", "live"]},
+        {"label": "GPU scaling: 1 vs 8 GPUs", "text": "Compare HydraGNN energy-model training on 1 GPU versus 8 GPUs on Alexandria DFT data: show loss convergence, throughput speedup, and final accuracy.", "task": "train", "enabled_modes": ["demo"]},
     ],
     "MatterGen": [
         {"label": "Generate stable Li-ion cathode", "text": "Generate 20 novel stable crystal structures for lithium-ion cathode materials with target volumetric energy density > 800 Wh/L.", "task": "inference"},
@@ -58,8 +62,8 @@ _CURATED: dict[str, list[dict]] = {
         {"label": "Benzene-scaffold drug molecules", "text": "Generate 20 drug-like molecules with a benzene scaffold (SMILES: c1ccccc1) optimized for oral bioavailability.", "task": "inference"},
         {"label": "Kinase inhibitor generation", "text": "Generate 50 ATP-competitive kinase inhibitor candidates with molecular weight < 500 Da and LogP < 5.", "task": "inference"},
         {"label": "Antibiotic scaffold expansion", "text": "Generate 30 novel beta-lactam antibiotic analogs from the penicillin core scaffold for gram-negative bacteria.", "task": "inference"},
-        {"label": "Pair-tune for drug-likeness (QED)", "text": "Pair-tune GP-MoLFormer on 1000 QED-steered molecule pairs to shift generation toward higher drug-likeness. Compare before/after QED distribution and Lipinski compliance.", "task": "finetune"},
-        {"label": "Pair-tune for lipophilicity (logP)", "text": "Pair-tune GP-MoLFormer on 1000 logP-steered pairs to reduce lipophilicity toward the optimal oral drug range (1 < logP < 3).", "task": "finetune"},
+        {"label": "Pair-tune for drug-likeness (QED)", "text": "Pair-tune GP-MoLFormer on 1000 QED-steered molecule pairs to shift generation toward higher drug-likeness. Compare before/after QED distribution and Lipinski compliance.", "task": "finetune", "enabled_modes": ["demo"]},
+        {"label": "Pair-tune for lipophilicity (logP)", "text": "Pair-tune GP-MoLFormer on 1000 logP-steered pairs to reduce lipophilicity toward the optimal oral drug range (1 < logP < 3).", "task": "finetune", "enabled_modes": ["demo"]},
     ],
     "SwinUNETR": [
         {"label": "Brain tumor segmentation", "text": "Segment tumor core, enhancing tumor, and peritumoral edema in a 3D brain MRI using SwinUNETR trained on BraTS.", "task": "inference"},
@@ -96,6 +100,20 @@ _DOMAIN_KEYWORDS: dict[str, list[str]] = {
                            "channel", "surrogate", "rollout", "initial condition", "autoregressive"],
     "protein_folding": ["protein", "sequence", "structure", "folding", "amino acid", "chain", "pdb"],
 }
+
+
+def prompt_allowed_in_mode(slug: str, prompt_text: str, mode: str) -> bool:
+    """Fail-closed check: is this a curated prompt not enabled for `mode`?
+
+    Returns True for custom prompts (not in the curated list) and for curated
+    prompts whose enabled_modes whitelist includes `mode`. Returns False only when
+    the exact curated prompt text is found AND its whitelist excludes this mode, so
+    a grayed-out curated prompt cannot be launched by bypassing the UI. Custom user
+    prompts are unaffected."""
+    for p in _CURATED.get(slug, []):
+        if p.get("text") == prompt_text:
+            return mode in (p.get("enabled_modes") or [])
+    return True  # custom prompt or unknown model — not gated here
 
 
 def get_curated_prompts(slug: str, domain: str | None = None) -> list[dict]:

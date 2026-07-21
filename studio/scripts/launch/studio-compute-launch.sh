@@ -1,14 +1,15 @@
 #!/bin/bash
 STUDIO=/home/spannala/Projects/ai4science-studio/studio
+LOGS="$STUDIO/logs"; mkdir -p "$LOGS"
 echo "COMPUTE_NODE: $(hostname)"
 echo "ulimit -u: $(ulimit -u)"
 
 cd "$STUDIO/backend"
-nohup .venv/bin/uvicorn main:app --host 0.0.0.0 --port 8275 > /home/spannala/studio-backend-compute.log 2>&1 &
+nohup .venv/bin/uvicorn main:app --host 0.0.0.0 --port 8275 > "$LOGS/studio-backend-compute.log" 2>&1 &
 echo "backend PID: $!"
 
 cd "$STUDIO/frontend"
-nohup npm run dev -- --host 0.0.0.0 --port 5275 > /home/spannala/studio-frontend-compute.log 2>&1 &
+nohup npm run dev -- --host 0.0.0.0 --port 5275 > "$LOGS/studio-frontend-compute.log" 2>&1 &
 echo "frontend PID: $!"
 
 sleep 10

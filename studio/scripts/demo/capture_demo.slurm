@@ -7,7 +7,7 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=16G
 #SBATCH --time=0:25:00
-#SBATCH --output=/home/spannala/Projects/ai4science-studio/studio/scripts/demo/capture_demo_%j.log
+#SBATCH --output=/home/spannala/Projects/ai4science-studio/studio/scripts/demo/logs/capture_demo_%j.log
 
 set -uo pipefail
 echo "[demo] Job $SLURM_JOB_ID on $(hostname) at $(date)"
@@ -19,7 +19,7 @@ FRONT_PORT=5299
 export FRONT_URL="http://127.0.0.1:${FRONT_PORT}"
 export BACK_URL="http://127.0.0.1:${BACK_PORT}"
 export OUT_DIR="$STUDIO/demo/demo-output"
-mkdir -p "$OUT_DIR"
+mkdir -p "$OUT_DIR/logs"
 
 # ── Stage GTK/X libs Chromium needs (no root) ───────────────────────────────
 DEPS="/scratch/$USER/hgdemo_deps_$$"
@@ -39,13 +39,13 @@ export PLAYWRIGHT_BROWSERS_PATH="$CHROME_LOCAL"
 
 # ── Start backend ───────────────────────────────────────────────────────────
 cd "$STUDIO/backend"
-.venv/bin/python3 -m uvicorn main:app --host 127.0.0.1 --port $BACK_PORT > "$OUT_DIR/backend_$SLURM_JOB_ID.log" 2>&1 &
+.venv/bin/python3 -m uvicorn main:app --host 127.0.0.1 --port $BACK_PORT > "$OUT_DIR/logs/backend_$SLURM_JOB_ID.log" 2>&1 &
 BACK_PID=$!
 echo "[demo] backend pid $BACK_PID"
 
 # ── Start Vite dev server ───────────────────────────────────────────────────
 cd "$STUDIO/frontend"
-npm run dev -- --host 127.0.0.1 --port $FRONT_PORT > "$OUT_DIR/frontend_$SLURM_JOB_ID.log" 2>&1 &
+npm run dev -- --host 127.0.0.1 --port $FRONT_PORT > "$OUT_DIR/logs/frontend_$SLURM_JOB_ID.log" 2>&1 &
 FRONT_PID=$!
 echo "[demo] frontend pid $FRONT_PID"
 
@@ -59,8 +59,8 @@ done
 for i in $(seq 1 40); do
   curl -sf "$FRONT_URL/" >/dev/null 2>&1 && echo "[demo] frontend healthy" && break || sleep 2
 done
-curl -sf "$BACK_URL/api/health" >/dev/null || { echo "[demo] backend not up"; cat "$OUT_DIR/backend_$SLURM_JOB_ID.log" | tail; exit 1; }
-curl -sf "$FRONT_URL/" >/dev/null || { echo "[demo] frontend not up"; tail -20 "$OUT_DIR/frontend_$SLURM_JOB_ID.log"; exit 1; }
+curl -sf "$BACK_URL/api/health" >/dev/null || { echo "[demo] backend not up"; cat "$OUT_DIR/logs/backend_$SLURM_JOB_ID.log" | tail; exit 1; }
+curl -sf "$FRONT_URL/" >/dev/null || { echo "[demo] frontend not up"; tail -20 "$OUT_DIR/logs/frontend_$SLURM_JOB_ID.log"; exit 1; }
 
 # Give Vite a moment to finish dep pre-bundling
 sleep 5

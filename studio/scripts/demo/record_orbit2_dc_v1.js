@@ -1,7 +1,7 @@
 'use strict'
 const path = require('path')
 const { chromium } = require('/home/spannala/Projects/ai4science-studio/studio/demo/node_modules/playwright')
-const { execSync } = require('child_process')
+const { execFileSync } = require('child_process')
 
 const FRONT = process.env.FRONT_URL || 'http://127.0.0.1:5299'
 const BACK  = process.env.BACK_URL  || 'http://127.0.0.1:8376'
@@ -9,10 +9,27 @@ const OUT   = process.env.OUT_DIR   || '/home/spannala/Projects/ai4science-studi
 const FFMPEG = process.env.FFMPEG || '/home/spannala/Projects/ai4science-studio/studio/backend/.venv/lib/python3.12/site-packages/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2'
 const HOLD = 20000
 
-// Adaptively scale the app so the entire page (tall Analyze views: two maps,
-// story acts) fits inside the recording frame. Measures #root at natural size,
-// then applies a CSS transform-scale so nothing is cropped. The caption lives on
-// <body> (outside #root) so it stays full-size and readable.
+// Inject CSS once to widen the app so content fills a 16:9 big-display frame
+// instead of sitting in a narrow centered column. Recorder-side only — does not
+// touch any app source file.
+async function applyWideLayout(page) {
+  await page.evaluate(() => {
+    document.getElementById('__wide__')?.remove()
+    const st = document.createElement('style'); st.id = '__wide__'
+    st.textContent = `
+      #root main { max-width: none !important; }
+      #root aside { flex: 0 0 22% !important; }
+      #root aside > * { max-width: none !important; }
+      #root main > * { max-width: none !important; }
+    `
+    document.head.appendChild(st)
+  })
+}
+
+// Show a caption overlay and adaptively fill the frame width. The fit is
+// width-first: scale up/down so #root spans the full frame width, then clamp
+// down only if the scaled height would overflow (nothing cropped). Caption
+// lives on <body> (outside #root) so it stays full-size and readable.
 async function showCaption(page, text) {
   await page.evaluate(t => {
     const root = document.getElementById('root')
@@ -21,16 +38,17 @@ async function showCaption(page, text) {
       root.style.transformOrigin = 'top center'
       root.style.width = '100%'
       const h = root.scrollHeight, w = root.scrollWidth
-      const s = Math.min(1, (window.innerHeight - 8) / (h || 1), window.innerWidth / (w || 1))
+      let s = window.innerWidth / (w || 1)
+      if (h * s > window.innerHeight - 8) s = (window.innerHeight - 8) / (h || 1)
       root.style.transform = `scale(${s})`
     }
     document.getElementById('__cap__')?.remove()
     const el = document.createElement('div'); el.id = '__cap__'
-    el.style.cssText = 'position:fixed;bottom:40px;left:50%;transform:translateX(-50%);' +
-      'background:rgba(10,2,3,0.88);color:#fff;font-weight:700;font-size:20px;' +
-      'padding:12px 28px;border-radius:10px;z-index:99999;max-width:88vw;text-align:center;' +
+    el.style.cssText = 'position:fixed;bottom:56px;left:50%;transform:translateX(-50%);' +
+      'background:rgba(10,2,3,0.88);color:#fff;font-weight:700;font-size:30px;' +
+      'padding:18px 42px;border-radius:14px;z-index:99999;max-width:88vw;text-align:center;' +
       'font-family:Inter,sans-serif;letter-spacing:.015em;' +
-      'border:2px solid #ED1C24;box-shadow:0 4px 24px rgba(0,0,0,.6)'
+      'border:3px solid #ED1C24;box-shadow:0 4px 24px rgba(0,0,0,.6)'
     el.textContent = t; document.body.appendChild(el)
   }, text)
 }
@@ -84,16 +102,17 @@ async function clickAct(page, titleFragment) {
     channel:'chromium', headless:true,
     args:['--no-sandbox','--disable-gpu','--disable-dev-shm-usage','--use-gl=swiftshader'],
   })
-  const ctx = await browser.newContext({ viewport:{width:1280,height:900} })
+  const ctx = await browser.newContext({ viewport:{width:1920,height:1080}, deviceScaleFactor:2 })
   const page = await ctx.newPage()
-  const webmPath = path.join(OUT, 'orbit2_dc_demo.webm')
-  const mp4Path  = path.join(OUT, 'orbit2_dc_demo.mp4')
+  const webmPath = path.join(OUT, 'orbit2_dc_demo_v1.webm')
+  const mp4Path  = path.join(OUT, 'orbit2_dc_demo_v1.mp4')
 
   await page.goto(FRONT, { waitUntil:'networkidle', timeout:45000 })
   await page.waitForTimeout(1500)
+  await applyWideLayout(page)
 
   const rec = await ctx.newCDPSession(page)
-  await rec.send('Page.startScreencast', { format:'jpeg',quality:85,maxWidth:1280,maxHeight:900,everyNthFrame:1 })
+  await rec.send('Page.startScreencast', { format:'jpeg',quality:92,maxWidth:3840,maxHeight:2160,everyNthFrame:1 })
   // CDP only emits a frame when the page visually changes, so long static holds
   // would otherwise capture almost nothing. Keep the latest frame and sample it
   // on a fixed 2 fps timer so every slide contributes ~40 frames regardless of
@@ -231,12 +250,16 @@ async function clickAct(page, titleFragment) {
 
   const ffp = require('child_process').spawn(FFMPEG, [
     '-y','-f','image2pipe','-r','2','-i','pipe:0',
-    '-c:v','libvpx-vp9','-b:v','1500k','-crf','30','-pix_fmt','yuv420p', webmPath,
+    '-c:v','libvpx-vp9','-b:v','12000k','-crf','24','-pix_fmt','yuv420p', webmPath,
   ])
   for (const f of frames) ffp.stdin.write(f)
   ffp.stdin.end()
   await new Promise((res,rej)=>{ ffp.on('close',c=>c===0?res():rej(new Error(`ffmpeg ${c}`))); ffp.on('error',rej) })
-  execSync(`${FFMPEG} -y -i ${webmPath} -c:v libx264 -preset fast -crf 20 -pix_fmt yuv420p ${mp4Path}`, { stdio:'inherit' })
+  // execFileSync (no shell) — paths/filters with brackets or spaces stay literal.
+  execFileSync(FFMPEG, [
+    '-y','-i',webmPath,'-vf','scale=3840:2160:flags=lanczos',
+    '-c:v','libx264','-preset','slow','-crf','18','-pix_fmt','yuv420p', mp4Path,
+  ], { stdio:'inherit' })
   await browser.close()
   const sz = (require('fs').statSync(mp4Path).size / 1024 / 1024).toFixed(1)
   console.log(`[done] ${mp4Path} (${sz} MB)`)

@@ -58,11 +58,13 @@ export function StepConfigure() {
         color: mode === 'demo' ? '#6ee7b7' : '#ff8f93',
       }}>
         {mode === 'demo'
-          ? (model?.slug === 'ORBIT-2' && task === 'story'
-              ? '🟢 Demo mode — replay of real ORBIT-2 GPU runs on AMD MI355X (every number and map is measured)'
+          ? (model?.slug === 'ORBIT-2'
+              ? '🟢 Demo mode — replay of real ORBIT-2 runs on AMD MI355X: PRISM-trained model on independent Open-Meteo DC data (every number and map is measured)'
               : model?.slug === 'HydraGNN'
                 ? '🟢 Demo mode — replay of real HydraGNN runs on Alexandria DFT, pre-computed on AMD MI355X (not synthetic)'
-                : '🟢 Demo mode — synthetic results, runs in <60 s on login node')
+                : model?.slug === 'GP-MoLFormer'
+                  ? '🟢 Demo mode — replay of real GP-MoLFormer pair-tuning results, pre-computed on AMD MI355X (not synthetic)'
+                  : '🟢 Demo mode — replay of pre-computed results (runs in <60 s on the login node)')
           : '🔴 Live mode — real SLURM job on Vultr Lux cluster (requires GPU allocation)'}
       </div>
 
@@ -159,28 +161,38 @@ export function StepConfigure() {
                 return task === 'finetune' ? p.task === 'finetune' : p.task !== 'finetune'
               return true
             })
-            .map((p, i) => (
-            <PromptCard
-              key={i}
-              label={p.label}
-              text={p.text}
-              task={p.task}
-              selected={!showCustom && prompt === p.text}
-              onClick={() => {
-                setPrompt(p.text); setShowCustom(false); setPromptError('')
-                // Propagate the prompt's task (e.g. ORBIT-2 "story", GP-MoLFormer
-                // "finetune") so the backend routes to the right path. Without this
-                // the task stays at its default and the wrong result is produced.
-                if (p.task) setTask(p.task)
-                // Pass event-specific params from prompt metadata through to the job.
-                if (p.dc_event) setParam('dc_event', p.dc_event)
-                // HydraGNN: each curated inference prompt maps to a specific
-                // held-out Alexandria structure so the demo returns that exact
-                // material (Pyrite, Permalloy, Sodium ferrite, Iron hydride).
-                if (p.struct_index !== undefined) setParam('struct_index', p.struct_index)
-              }}
-            />
-          ))}
+            .map((p, i) => {
+              // A prompt is active only if the current mode is in its enabled_modes
+              // whitelist. Absent/empty whitelist => grayed out in every mode
+              // (fail-closed: prompts without a working backend path stay inactive).
+              const isEnabled = Array.isArray(p.enabled_modes) && p.enabled_modes.includes(mode)
+              const hint = Array.isArray(p.enabled_modes) && p.enabled_modes.length
+                ? `Available in ${p.enabled_modes.join(' & ')} mode`
+                : 'Not available yet'
+              return (
+              <PromptCard
+                key={i}
+                label={p.label}
+                text={p.text}
+                task={p.task}
+                disabled={!isEnabled}
+                disabledHint={hint}
+                selected={!showCustom && prompt === p.text}
+                onClick={() => {
+                  setPrompt(p.text); setShowCustom(false); setPromptError('')
+                  // Propagate the prompt's task (e.g. ORBIT-2 "story", GP-MoLFormer
+                  // "finetune") so the backend routes to the right path. Without this
+                  // the task stays at its default and the wrong result is produced.
+                  if (p.task) setTask(p.task)
+                  // Pass event-specific params from prompt metadata through to the job.
+                  if (p.dc_event) setParam('dc_event', p.dc_event)
+                  // HydraGNN: each curated inference prompt maps to a specific
+                  // held-out Alexandria structure so the demo returns that exact
+                  // material (Pyrite, Permalloy, Sodium ferrite, Iron hydride).
+                  if (p.struct_index !== undefined) setParam('struct_index', p.struct_index)
+                }}
+              />
+            )})}
         </div>
       </div>
 
