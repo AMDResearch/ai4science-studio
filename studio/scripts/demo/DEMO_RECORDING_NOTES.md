@@ -136,7 +136,35 @@ new `-vf scale=` filter, SMILES-like strings) breaks the command. `_v1` uses
 `execFileSync(FFMPEG, [args...])` (no shell) so everything is passed literally.
 The VP9 `spawn` step already used an arg array and was fine.
 
-### Where to run (important)
+## HydraGNN 8-GPU training + live Omnistat telemetry demo (2026-07-21)
+
+Added `record_hydragnn_telemetry_v2.js` + runner `record_telemetry_v2.sh` →
+`~/transfer/hydragnn_training_4k_demo.mp4` (3840×2160, ~3 min). It reuses the
+proven `_v1` scaffolding (CDP screencast + 2 fps sampling + width-first fit +
+`execFileSync` encode + VP9→x264) — do NOT reinvent; copy this recorder for any
+new single-model story.
+
+**What it shows (end-to-end telemetry workflow):** Domain → Model → Configure
+(epochs slider + fp32/fp64 precision toggle) → **LIVE** 8-GPU SLURM job → Analyze
+**Performance** tab (live Omnistat telemetry "collecting" → real peaks/means after
+completion) → full **static demo** replay (200-epoch reference) → Analyze
+**Results** tab (loss convergence + accuracy). Both live and static telemetry are
+shown, ending on Results.
+
+**Case-specific notes:**
+- The Analyze page has two tabs; drive them by clicking the tab buttons by text
+  (`Performance` / `Results`), not by store state — they're local component state.
+- The live segment POSTs a real `mode:"live"` job (short: `epochs:8`), then polls
+  `/api/jobs/<id>` until `state==completed` before injecting `result` into the
+  store. Budget ~2–3 min for the live 8-GPU job to queue + run; the recorder polls
+  up to 120×2s. If the cluster is busy it falls back to the static demo gracefully.
+- `setParam` drives the epochs slider + precision toggle in Configure (params
+  `{epochs, precision}`), matching the backend's `HG_NUM_EPOCH` / `HG_PRECISION`.
+- FP64 tile is only nonzero when `precision:fp64` (a message-passing GNN does no
+  fp64 GEMM in fp32 mode — that's physics, not a bug). The demo uses fp64 so all 7
+  tiles populate, matching the reference screenshot.
+
+## Where to run (important)
 Run on the **compute node** (a4 = `lux-mi355x-a4`), not the login node
 ("login node has limits"). The studio node is held by the `studio-hold` SLURM job
 (`squeue -u $USER`). Launch:

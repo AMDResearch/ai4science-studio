@@ -218,6 +218,29 @@ def _build_crystal(kind: str, a: float, elements: tuple, reps: int = 2):
 def _materials(slug: str, task: str, prompt: str, params: dict,
                out_dir: Path, emit: Callable, run_id: str) -> dict:
     rng = random.Random(42)
+    if slug == "HydraGNN" and task == "train" and ("telemetry" in prompt.lower() or "omnistat" in prompt.lower()):
+        # Replay REAL 8-GPU training GPU telemetry (baked from an Omnistat run).
+        asset = Path(__file__).resolve().parent / "assets" / "hydragnn_telemetry_8gpu.json"
+        if not asset.exists():
+            emit(run_id, "[demo] telemetry asset missing; run studio/telemetry/bake_telemetry_asset.py")
+            return {"type": "training_telemetry", "error": "asset_missing"}
+        data = json.loads(asset.read_text())
+        steps = [
+            "Submitting 8-GPU HydraGNN training to AMD MI355X...",
+            "Starting Omnistat user-mode telemetry (interval=1s)...",
+            f"Training {data.get('epochs','?')} epochs on Alexandria DFT (8 GPUs)...",
+            "Sampling GPU util / power / temp / FP64 / HBM via rocprofiler...",
+            "Querying VictoriaMetrics for peak + time-series metrics...",
+        ]
+        _progress(emit, run_id, steps, delay=0.6, tag="demo")
+        _pk = (data.get("telemetry") or {}).get("peaks", {})
+        emit(run_id, f"[demo] peak power={_pk.get('power_w')}W util={_pk.get('gpu_util_pct')}% "
+                     f"fp64={_pk.get('fp64_tflops')}TFLOP/s energy={_pk.get('energy_kj')}kJ")
+        result = dict(data)
+        result["type"] = "training_telemetry"
+        result["slug"] = slug
+        return result
+
     if slug == "HydraGNN" and task == "train":
         # Replay REAL 1-GPU vs 8-GPU training results baked from the run logs.
         asset = Path(__file__).resolve().parent / "assets" / "hydragnn_training.json"

@@ -7,7 +7,7 @@ export function StepConfigure() {
   const { model, domain, prompt, setPrompt, customPrompt, setCustomPrompt,
           promptError, setPromptError, mode, setStep,
           task, setTask, modelVariant, setModelVariant,
-          setParam } = useStore()
+          params, setParam } = useStore()
   const [curated, setCurated] = useState([])
   const [loading, setLoading] = useState(true)
   const [showCustom, setShowCustom] = useState(false)
@@ -86,6 +86,42 @@ export function StepConfigure() {
               </div>
             ))}
           </div>
+
+          {/* Epochs slider — training runs (drives the live 8-GPU run length) */}
+          {task === 'train' && (
+            <div style={{ marginTop: '.9rem' }}>
+              <div className="section-label" style={{ marginBottom: '.4rem', display: 'flex',
+                justifyContent: 'space-between' }}>
+                <span>Training epochs</span>
+                <span style={{ color: '#ED1C24', fontWeight: 800 }}>{params.epochs ?? 200}</span>
+              </div>
+              <input type="range" min={1} max={500} step={1} value={params.epochs ?? 200}
+                onChange={e => setParam('epochs', +e.target.value)}
+                style={{ width: '100%', accentColor: '#ED1C24' }} />
+              <div style={{ fontSize: '.72rem', color: '#52525b', marginTop: '.2rem' }}>
+                {mode === 'live'
+                  ? 'Live 8-GPU run length on the AMD MI355X (200 = full production run, ~9 min).'
+                  : 'Applies to live runs; the demo replays a fixed pre-computed run.'}
+              </div>
+
+              {/* Precision toggle: fp32 = production model; fp64 = exercise MI355X FP64 units */}
+              <div className="section-label" style={{ margin: '.9rem 0 .4rem' }}>Precision</div>
+              <div style={{ display: 'flex', gap: '.5rem' }}>
+                {[
+                  { id: 'fp32', label: 'FP32 (production)', sub: 'Accuracy model · corr 0.89' },
+                  { id: 'fp64', label: 'FP64 (perf)', sub: 'Exercises MI355X FP64 units' },
+                ].map(p => (
+                  <div key={p.id}
+                    className={`card clickable${(params.precision ?? 'fp32') === p.id ? ' selected' : ''}`}
+                    onClick={() => setParam('precision', p.id)}
+                    style={{ flex: 1, padding: '.6rem .8rem', userSelect: 'none' }}>
+                    <div style={{ fontWeight: 700, fontSize: '.84rem', color: '#f5f5f7' }}>{p.label}</div>
+                    <div style={{ fontSize: '.72rem', color: '#a1a1aa', marginTop: '.12rem' }}>{p.sub}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Trained-model variant — only for live inference */}
           {task === 'inference' && mode === 'live' && (

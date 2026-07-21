@@ -4,7 +4,7 @@ import { api } from '../api'
 import { StepHeader, Spinner, Stat, StatGrid } from '../components/ui'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  ResponsiveContainer, BarChart, Bar, ScatterChart, Scatter, ReferenceLine, Cell,
+  ResponsiveContainer, BarChart, Bar, ScatterChart, Scatter, ReferenceLine, Cell, Brush,
 } from 'recharts'
 
 // ── 3D molecular viewer (3Dmol.js) ──────────────────────────────────────────
@@ -793,6 +793,169 @@ function TrainingConvergenceViz({ result }) {
   )
 }
 
+// ── System Telemetry Panel — live GPU metrics captured by AMD Omnistat ────────
+// Renders 7 peak stat tiles + 3 interactive time-series (hover tooltip, brush
+// zoom, click-legend toggle). Data comes from result.telemetry (peaks + series),
+// harvested from the per-run Omnistat VictoriaMetrics DB (live) or the baked demo
+// asset. All values are real measurements; nothing is synthesized here.
+const _TELE_TILES = [
+  { key: 'gpu_util_pct', label: 'PEAK GPU UTIL', color: '#ED1C24', fmt: v => `${v?.toFixed(0)}%` },
+  { key: 'power_w', label: 'PEAK POWER', color: '#f59e0b', fmt: v => `${v?.toFixed(0)} W` },
+  { key: 'temp_c', label: 'PEAK TEMP', color: '#38bdf8', fmt: v => `${v?.toFixed(0)} C` },
+  { key: 'vram_gb', label: 'PEAK VRAM', color: '#a78bfa', fmt: v => `${v?.toFixed(1)} GB` },
+  { key: 'energy_kj', label: 'ENERGY', color: '#21c77a', fmt: v => `${v?.toFixed(1)} kJ` },
+  { key: 'fp64_tflops', label: 'PEAK FP64', color: '#f472b6', fmt: v => `${v?.toFixed(1)} TF/s` },
+  { key: 'hbm_read_gbs', label: 'PEAK HBM READ', color: '#94a3b8', fmt: v => `${v?.toFixed(0)} GB/s` },
+]
+const _TELE_SERIES = [
+  { key: 'gpu_util_pct', label: 'GPU Utilization (%)', color: '#ED1C24', unit: '%' },
+  { key: 'power_w', label: 'GPU Power (W)', color: '#f59e0b', unit: 'W' },
+  { key: 'temp_c', label: 'GPU Temperature (C)', color: '#38bdf8', unit: 'C' },
+]
+
+function TelemetryPanel({ result }) {
+  const tel = result.telemetry || {}
+  const peaks = tel.peaks || {}
+  const means = tel.means || {}
+  const series = tel.series || {}
+  const [hidden, setHidden] = useState({})
+
+  // Zip parallel arrays (t_s + per-metric) into row objects for Recharts.
+  const rows = useMemo(() => {
+    const t = series.t_s || []
+    return t.map((tt, i) => {
+      const row = { t: tt }
+      for (const s of _TELE_SERIES) row[s.key] = series[s.key]?.[i] ?? null
+      return row
+    })
+  }, [series])
+
+  const hasSeries = rows.length > 0
+  const metrics = result.metrics || {}
+
+  return (
+    <div>
+      <div className="section-label" style={{ color: '#ED1C24', marginBottom: '.5rem' }}>
+        SYSTEM TELEMETRY — AMD INSTINCT MI355X · PEEK UNDER THE HOOD
+      </div>
+      <div style={{ fontSize: '.78rem', color: '#a1a1aa', marginBottom: '.9rem' }}>
+        Live GPU metrics captured by Omnistat during this job — {result.n_gpus || 8} GPUs
+        {result.runtime_s ? `, ${result.runtime_s}s` : ''}
+        {result.epochs ? `, ${result.epochs} epochs` : ''}.
+      </div>
+
+      {/* 7 peak stat tiles */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))',
+        gap: '.6rem', marginBottom: '1.1rem' }}>
+        {_TELE_TILES.map(t => (
+          <div key={t.key} className="card" style={{ padding: '.7rem', textAlign: 'center' }}>
+            <div className="section-label" style={{ marginBottom: '.35rem', fontSize: '.62rem' }}>{t.label}</div>
+            <div style={{ fontSize: '1.25rem', fontWeight: 900, color: t.color }}>
+              {peaks[t.key] != null ? t.fmt(peaks[t.key]) : '—'}
+            </div>
+            {/* Honest companion: mean across GPUs over time (peak alone misleads). */}
+            {t.key !== 'energy_kj' && means[t.key] != null && (
+              <div style={{ fontSize: '.6rem', color: '#71717a', marginTop: '.2rem' }}>
+                mean {t.fmt(means[t.key])}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Final accuracy (from the training's own validation.json) */}
+      {(metrics.corr != null || metrics.mae != null) && (
+        <div className="card" style={{ padding: '.6rem .9rem', marginBottom: '1.1rem',
+          fontSize: '.8rem', color: '#a1a1aa' }}>
+          Final model accuracy —
+          {metrics.corr != null && <> corr <b style={{ color: '#f5f5f7' }}>{metrics.corr?.toFixed(4)}</b></>}
+          {metrics.r2 != null && <> · R² <b style={{ color: '#f5f5f7' }}>{metrics.r2?.toFixed(4)}</b></>}
+          {metrics.mae != null && <> · MAE <b style={{ color: '#f5f5f7' }}>{metrics.mae?.toFixed(4)}</b> eV/atom</>}
+        </div>
+      )}
+
+      {/* 3 interactive time-series charts */}
+      {hasSeries ? _TELE_SERIES.map(s => (
+        <div key={s.key} className="card" style={{ padding: '.75rem', marginBottom: '.85rem' }}>
+          <div className="section-label" style={{ marginBottom: '.4rem' }}>{s.label}</div>
+          <ResponsiveContainer width="100%" height={200}>
+            <LineChart data={rows} margin={{ top: 5, right: 16, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+              <XAxis dataKey="t" tick={{ fill: '#71717a', fontSize: 10 }}
+                tickFormatter={v => `${v}s`} minTickGap={28} />
+              <YAxis tick={{ fill: '#71717a', fontSize: 10 }} width={40} />
+              <Tooltip contentStyle={{ background: '#141416', border: '1px solid #27272a', fontSize: 11 }}
+                labelFormatter={v => `t = ${v}s`}
+                formatter={val => [`${val} ${s.unit}`, s.label]} />
+              <Legend onClick={() => setHidden(h => ({ ...h, [s.key]: !h[s.key] }))}
+                wrapperStyle={{ fontSize: 11, cursor: 'pointer' }} />
+              <Line type="monotone" dataKey={s.key} name={s.label} stroke={s.color}
+                dot={false} strokeWidth={1.6} isAnimationActive={false} hide={!!hidden[s.key]} />
+              <Brush dataKey="t" height={18} stroke="#ED1C24" fill="#0a0a0b"
+                travellerWidth={8} tickFormatter={v => `${v}s`} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )) : (
+        <div style={{ color: '#52525b', fontSize: '.8rem' }}>No time-series telemetry available.</div>
+      )}
+    </div>
+  )
+}
+
+// ── Training Results — loss convergence + final accuracy (the Results tab for
+//    an 8-GPU telemetry training run; telemetry itself lives on Performance). ──
+function TrainingResultsView({ result }) {
+  const curve = result.loss_curve || []
+  const m = result.metrics || {}
+  const hasCurve = curve.length > 0
+
+  return (
+    <div>
+      {/* Final accuracy */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(120px,1fr))',
+        gap: '.6rem', marginBottom: '1.1rem' }}>
+        {[
+          { k: 'Final test corr', v: m.corr != null ? m.corr.toFixed(4) : '—', c: '#21c77a' },
+          { k: 'Final test R²', v: m.r2 != null ? m.r2.toFixed(4) : '—', c: '#38bdf8' },
+          { k: 'Final MAE (eV/atom)', v: m.mae != null ? m.mae.toFixed(4) : '—', c: '#f59e0b' },
+          { k: 'Epochs', v: result.epochs ?? '—', c: '#f5f5f7' },
+        ].map(s => (
+          <div key={s.k} className="card" style={{ padding: '.7rem', textAlign: 'center' }}>
+            <div className="section-label" style={{ marginBottom: '.3rem', fontSize: '.62rem' }}>{s.k}</div>
+            <div style={{ fontSize: '1.15rem', fontWeight: 900, color: s.c }}>{s.v}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Loss convergence */}
+      <div className="card" style={{ padding: '.75rem' }}>
+        <div className="section-label" style={{ marginBottom: '.4rem' }}>Loss convergence</div>
+        {hasCurve ? (
+          <ResponsiveContainer width="100%" height={280}>
+            <LineChart data={curve} margin={{ top: 5, right: 16, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+              <XAxis dataKey="ep" tick={{ fill: '#71717a', fontSize: 10 }}
+                label={{ value: 'Epoch', position: 'insideBottom', offset: -2, fill: '#71717a', fontSize: 10 }} />
+              <YAxis tick={{ fill: '#71717a', fontSize: 10 }} width={48} />
+              <Tooltip contentStyle={{ background: '#141416', border: '1px solid #27272a', fontSize: 11 }}
+                labelFormatter={v => `Epoch ${v}`} />
+              <Legend wrapperStyle={{ fontSize: 11 }} />
+              <Line type="monotone" dataKey="train" name="Train" stroke="#ED1C24" dot={false} strokeWidth={1.6} isAnimationActive={false} />
+              <Line type="monotone" dataKey="val" name="Validation" stroke="#38bdf8" dot={false} strokeWidth={1.6} isAnimationActive={false} />
+              <Line type="monotone" dataKey="test" name="Test" stroke="#a78bfa" dot={false} strokeWidth={1.6} isAnimationActive={false} />
+            </LineChart>
+          </ResponsiveContainer>
+        ) : (
+          <div style={{ color: '#52525b', fontSize: '.8rem' }}>
+            Loss curve appears once the run completes.
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── DC Temperature Downscaling Viz — Leaflet map with temperature overlay ────
 function tempToHex(t, tmin, tmax) {
   const norm = Math.max(0, Math.min(1, (t - tmin) / (tmax - tmin || 1)))
@@ -1402,6 +1565,7 @@ function ResultView({ result, runId }) {
     case 'downscaling': return <DownscalingViz result={result} runId={runId} />
     case 'atomistic_energy': return <EnergyViz result={result} />
     case 'training_convergence': return <TrainingConvergenceViz result={result} />
+    case 'training_telemetry': return <TelemetryPanel result={result} />
     case 'dc_downscaling': return <DCDownscalingViz result={result} />
     case 'orbit2_story': return <ORBIT2StoryViz result={result} />
     case 'molecule_finetune': return <MolefineTuneViz result={result} />
@@ -1419,59 +1583,140 @@ function ResultView({ result, runId }) {
   }
 }
 
+// Live GPU telemetry while a job runs: polls the job endpoint until result.telemetry
+// appears, then renders the panel. For demo runs the telemetry is present instantly.
+function PerformanceTab({ runId, result, runState }) {
+  const [live, setLive] = useState(null)
+  const [log, setLog] = useState([])
+
+  // Poll job + log while running so the Performance tab is useful from t=0.
+  useEffect(() => {
+    if (!runId) return
+    let stop = false
+    const tick = async () => {
+      try {
+        const job = await api.job(runId)
+        if (stop) return
+        if (job?.result?.telemetry) setLive(job.result)
+      } catch { /* ignore */ }
+      try {
+        const l = await api.jobLog(runId)
+        if (!stop && l?.lines) setLog(l.lines.slice(-14))
+      } catch { /* ignore */ }
+    }
+    tick()
+    const running = runState === 'running' || runState === 'queued' || runState === 'pending'
+    if (running && !result?.telemetry) {
+      const id = setInterval(tick, 3000)
+      return () => { stop = true; clearInterval(id) }
+    }
+    return () => { stop = true }
+  }, [runId, runState, result])
+
+  const shown = live || (result?.telemetry ? result : null)
+  if (shown) return <TelemetryPanel result={shown} />
+
+  // No telemetry yet: show a live "collecting" state with the streaming log.
+  return (
+    <div>
+      <div className="card" style={{ padding: '1rem', marginBottom: '1rem', display: 'flex',
+        alignItems: 'center', gap: '.75rem' }}>
+        <Spinner size={18} />
+        <div style={{ fontSize: '.85rem', color: '#a1a1aa' }}>
+          Omnistat is collecting GPU telemetry on the AMD MI355X node. Peaks and
+          time-series charts appear here as soon as the collector reports.
+        </div>
+      </div>
+      {log.length > 0 && (
+        <pre style={{ background: 'rgba(5,5,6,0.8)', borderRadius: '.5rem', padding: '.75rem',
+          fontSize: '.72rem', color: '#7dd3fc', overflow: 'auto', maxHeight: 260 }}>
+          {log.join('\n')}
+        </pre>
+      )}
+    </div>
+  )
+}
+
 export function StepAnalyze() {
-  const { runId, result, model, setStep } = useStore()
+  const { runId, result, model, setStep, runState } = useStore()
   const [files, setFiles] = useState([])
   const [loading, setLoading] = useState(true)
+  // Performance tab is the default and is available immediately once a run exists.
+  const [tab, setTab] = useState('performance')
 
   useEffect(() => {
     if (!runId) { setLoading(false); return }
     api.jobFiles(runId).then(setFiles).finally(() => setLoading(false))
-  }, [runId])
+  }, [runId, runState])
+
+  const tabBtn = (id, label) => (
+    <button onClick={() => setTab(id)}
+      style={{
+        padding: '.5rem 1.1rem', fontSize: '.85rem', fontWeight: 700, cursor: 'pointer',
+        background: 'none', border: 'none', borderBottom: tab === id ? '2px solid #ED1C24' : '2px solid transparent',
+        color: tab === id ? '#f5f5f7' : '#71717a',
+      }}>{label}</button>
+  )
 
   return (
     <div>
       <StepHeader
-        title="Results"
-        sub={`${model?.name || model?.slug} — output analysis`}
+        title="Analyze"
+        sub={`${model?.name || model?.slug} — performance & output`}
       />
-      <button className="btn btn-ghost" style={{ marginBottom: '1.2rem', fontSize: '.8rem' }}
+      <button className="btn btn-ghost" style={{ marginBottom: '1rem', fontSize: '.8rem' }}
         onClick={() => setStep(3)}>← Back</button>
 
-      {loading && <Spinner size={28} />}
+      {/* Tabs */}
+      <div style={{ display: 'flex', gap: '.5rem', borderBottom: '1px solid #27272a',
+        marginBottom: '1.2rem' }}>
+        {tabBtn('performance', 'Performance')}
+        {tabBtn('results', 'Results')}
+      </div>
 
-      {result && (
-        <div style={{ marginBottom: '1.5rem' }}>
-          <div className="section-label" style={{ marginBottom: '.75rem' }}>Output Summary</div>
-          <ResultView result={result} runId={runId} />
-        </div>
+      {tab === 'performance' && (
+        <PerformanceTab runId={runId} result={result} runState={runState} />
       )}
 
-      {files.length > 0 && (
+      {tab === 'results' && (
         <div>
-          <div className="section-label" style={{ marginBottom: '.6rem' }}>Output Files</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '.4rem' }}>
-            {files.map(f => (
-              <div key={f.name} className="card" style={{ padding: '.6rem 1rem', display: 'flex',
-                justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <span style={{ fontWeight: 600, fontSize: '.88rem', color: '#f5f5f7' }}>{f.name}</span>
-                  <span style={{ fontSize: '.72rem', color: '#52525b', marginLeft: '.5rem' }}>
-                    {(f.size / 1024).toFixed(1)} KB
-                  </span>
-                </div>
-                <a href={`/api/jobs/${runId}/files/${f.name}`}
-                  style={{ color: '#7dd3fc', fontSize: '.75rem' }}
-                  download={f.name}>Download</a>
+          {loading && <Spinner size={28} />}
+          {result && (
+            <div style={{ marginBottom: '1.5rem' }}>
+              <div className="section-label" style={{ marginBottom: '.75rem' }}>Output Summary</div>
+              {/* Training runs: show loss convergence + accuracy here (telemetry is on
+                  the Performance tab). Everything else uses the standard result view. */}
+              {result.type === 'training_telemetry'
+                ? <TrainingResultsView result={result} />
+                : <ResultView result={result} runId={runId} />}
+            </div>
+          )}
+          {files.length > 0 && (
+            <div>
+              <div className="section-label" style={{ marginBottom: '.6rem' }}>Output Files</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '.4rem' }}>
+                {files.map(f => (
+                  <div key={f.name} className="card" style={{ padding: '.6rem 1rem', display: 'flex',
+                    justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <span style={{ fontWeight: 600, fontSize: '.88rem', color: '#f5f5f7' }}>{f.name}</span>
+                      <span style={{ fontSize: '.72rem', color: '#52525b', marginLeft: '.5rem' }}>
+                        {(f.size / 1024).toFixed(1)} KB
+                      </span>
+                    </div>
+                    <a href={`/api/jobs/${runId}/files/${f.name}`}
+                      style={{ color: '#7dd3fc', fontSize: '.75rem' }}
+                      download={f.name}>Download</a>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {!result && !loading && (
-        <div style={{ color: '#52525b', textAlign: 'center', padding: '2rem' }}>
-          No results yet. Go back and run a job first.
+            </div>
+          )}
+          {!result && !loading && (
+            <div style={{ color: '#52525b', textAlign: 'center', padding: '2rem' }}>
+              Results appear here when the run completes.
+            </div>
+          )}
         </div>
       )}
 

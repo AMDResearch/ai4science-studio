@@ -51,6 +51,7 @@ _CURATED: dict[str, list[dict]] = {
         {"label": "Sodium ferrite NaFeO2 — Na-ion cathode", "text": "Predict the per-atom DFT formation energy of sodium ferrite NaFeO2 — a low-cost sodium-ion battery cathode for grid-scale energy storage.", "task": "inference", "struct_index": 2, "enabled_modes": ["demo", "live"]},
         {"label": "Iron hydride Fe2H6 — design candidate", "text": "Predict the per-atom DFT formation energy of a hypothetical iron hydride Fe2H6 — a superhydride-style hydrogen-storage design candidate, screened before synthesis.", "task": "inference", "struct_index": 3, "enabled_modes": ["demo", "live"]},
         {"label": "GPU scaling: 1 vs 8 GPUs", "text": "Compare HydraGNN energy-model training on 1 GPU versus 8 GPUs on Alexandria DFT data: show loss convergence, throughput speedup, and final accuracy.", "task": "train", "enabled_modes": ["demo"]},
+        {"label": "8-GPU live training + GPU telemetry", "text": "Train the HydraGNN energy model on 8 AMD MI355X GPUs over Alexandria DFT data and capture live GPU telemetry (utilization, power, temperature, FP64 throughput, HBM bandwidth, energy) with AMD Omnistat.", "task": "train", "enabled_modes": ["demo", "live"]},
     ],
     "MatterGen": [
         {"label": "Generate stable Li-ion cathode", "text": "Generate 20 novel stable crystal structures for lithium-ion cathode materials with target volumetric energy density > 800 Wh/L.", "task": "inference"},

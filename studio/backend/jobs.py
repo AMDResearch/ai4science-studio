@@ -130,7 +130,13 @@ def _build_slurm_script(run_id: str, slug: str, domain: str, task: str,
     log_path = str(_run_dir(run_id) / "slurm.log")
 
     # Pick the most specific sbatch script (prefer task-matching name).
-    if slug == "HydraGNN":
+    if slug == "HydraGNN" and task == "train":
+        # Live 8-GPU DDP training wrapped with Omnistat telemetry. Self-contained in
+        # studio/telemetry/ (writes only to a per-run dir; never touches the demo
+        # checkpoint). Not under model_dir/examples, so reference it directly.
+        _tele = _BACKEND_DIR.parent / "telemetry" / "sbatch_train_telemetry_amd.sh"
+        sbatch_candidates = [_tele] if _tele.exists() else []
+    elif slug == "HydraGNN":
         # Use our trained-model inference script; DDP scripts are for the training workflow.
         sbatch_candidates = list(model_dir.glob("examples/sbatch_studio_infer_amd.sh"))
     elif slug == "GP-MoLFormer" and task == "finetune":
@@ -149,18 +155,28 @@ def _build_slurm_script(run_id: str, slug: str, domain: str, task: str,
 
     overlay = _OVERLAYS.get(slug)
 
+    # Resource header. Default = single-GPU inference/story path. The 8-GPU HydraGNN
+    # training case (live telemetry) needs all 8 GPUs, one task per GPU, and a longer
+    # wall time. Parameterized here rather than string-literal so future multi-GPU
+    # cases don't each need a new special case.
+    _is_hydragnn_train = (slug == "HydraGNN" and task == "train")
+    if _is_hydragnn_train:
+        _gpus, _ntasks, _time = 8, 8, "01:00:00"
+    else:
+        # One task per node so models that fan out via an inner `srun --mpi=pmix`
+        # (e.g. ORBIT-2) get a bindable CPU mask. Do NOT pin --cpus-per-task: a
+        # constrained mask makes the nested srun fail "Unable to satisfy cpu bind".
+        _gpus, _ntasks, _time = 1, 1, "00:30:00"
+
     script_lines = [
         "#!/bin/bash",
         f"#SBATCH --job-name=studio-{slug[:10]}",
         f"#SBATCH --partition={partition}",
         f"#SBATCH --account={_SLURM_ACCOUNT}",
         "#SBATCH --nodes=1",
-        "#SBATCH --gres=gpu:1",
-        # One task per node so models that fan out via an inner `srun --mpi=pmix`
-        # (e.g. ORBIT-2) get a bindable CPU mask. Do NOT pin --cpus-per-task: a
-        # constrained mask makes the nested srun fail "Unable to satisfy cpu bind".
-        "#SBATCH --ntasks-per-node=1",
-        "#SBATCH --time=00:30:00",
+        f"#SBATCH --gres=gpu:{_gpus}",
+        f"#SBATCH --ntasks-per-node={_ntasks}",
+        f"#SBATCH --time={_time}",
         f"#SBATCH --output={log_path}",
         f"#SBATCH --error={log_path}",
         "",
@@ -236,7 +252,26 @@ def _build_slurm_script(run_id: str, slug: str, domain: str, task: str,
 
     # HydraGNN: predict energy with OUR trained PNA model on a real held-out material.
     _HG_WORK = f"{_AI4S_SHARED_DIR}/models/HydraGNN/train_work"
-    if slug == "HydraGNN":
+    _PERF_TOOLS_DIR = f"{_AI4S_SHARED_DIR}/perf-tools"
+    if slug == "HydraGNN" and task == "train":
+        # Live 8-GPU DDP training + Omnistat telemetry. The telemetry sbatch reads
+        # these; it writes ONLY to a per-run perf-runs/<jobid> dir (HG_OUTPUT_DIR is
+        # left as the sbatch default, keyed by SLURM_JOB_ID) so it never overwrites
+        # the production checkpoint the inference demos load. STUDIO_TELEMETRY_DIR is
+        # recorded so _harvest_telemetry can find the run's manifest.json afterward.
+        _epochs = int(params.get("epochs", 200))
+        _prec = str(params.get("precision", "fp32")).lower()
+        if _prec not in ("fp32", "fp64"):
+            _prec = "fp32"
+        script_lines += [
+            f"export PERF_TOOLS_DIR={_PERF_TOOLS_DIR!r}",
+            f"export OMNISTAT_VENV={_PERF_TOOLS_DIR}/omnistat-venv",
+            f"export HG_DATA_DIR={_AI4S_SHARED_DIR}/models/HydraGNN/weights",
+            f"export HG_NUM_EPOCH={_epochs}",
+            f"export HG_PRECISION={_prec}",
+            "",
+        ]
+    elif slug == "HydraGNN":
         # Pick checkpoint by variant. Both models now use the SAME stored-PBC-edge
         # pipeline and identical config, so the 1-GPU vs 8-GPU comparison isolates
         # data scale + GPU count (the honest scaling story): 8gpu = v3 (600k
@@ -299,7 +334,7 @@ def _build_slurm_script(run_id: str, slug: str, domain: str, task: str,
 
     # Extra params from UI (skip ones already handled above)
     _handled = {"model_variant", "struct_index", "pairtune_prop", "pairtune_epochs",
-                "dc_event", "model_variant", "STRUCT_INDEX"}
+                "dc_event", "model_variant", "STRUCT_INDEX", "epochs", "precision"}
     for k, v in params.items():
         if k.lower() not in _handled:
             script_lines.append(f"export {k.upper()}={q(str(v))}")
@@ -342,6 +377,71 @@ def _tail_slurm_log(run_id: str, slurm_log: Path):
                     _emit(run_id, line)
     except Exception:
         pass
+
+
+def _harvest_telemetry(run_id: str) -> dict | None:
+    """Build the training_telemetry result for a completed live 8-GPU HydraGNN run.
+
+    Locates the per-run perf dir (train_work/perf-runs/<slurm_job_id>), queries its
+    Omnistat VictoriaMetrics DB via telemetry.harvest(), and folds in the final
+    validation metrics (corr/mae/r2) the training wrote to validation.json.
+    """
+    import telemetry
+    job = _jobs.get(run_id, {})
+    slurm_id = job.get("slurm_job_id")
+    if not slurm_id:
+        return None
+    perf_dir = Path(f"{_AI4S_SHARED_DIR}/models/HydraGNN/train_work/perf-runs/{slurm_id}")
+    manifest = perf_dir / "manifest.json"
+    if not manifest.exists():
+        _emit(run_id, f"[studio] telemetry manifest not found: {manifest}")
+        return None
+
+    tel = telemetry.harvest(manifest)
+    result: dict = {
+        "type": "training_telemetry",
+        "slug": "HydraGNN",
+        "model": "HydraGNN (Predictive GFM 2024)",
+    }
+    if tel:
+        result.update({
+            "n_gpus": tel.get("n_gpus", 8),
+            "epochs": tel.get("epochs"),
+            "runtime_s": tel.get("runtime_s"),
+            "telemetry": {k: tel[k] for k in ("peaks", "means", "units", "series") if k in tel},
+        })
+    # Fold in final accuracy from the training's own validation.json (verbatim).
+    val_json = perf_dir / "validation.json"
+    if val_json.exists():
+        try:
+            v = json.loads(val_json.read_text())
+            m = v.get("metrics", v)  # metrics are nested under "metrics"
+            result["metrics"] = {k: m.get(k) for k in ("corr", "mae", "r2") if k in m}
+        except Exception:
+            pass
+
+    # Parse per-epoch loss curve from the training log so the Results tab can show
+    # convergence (train/val/test loss vs epoch), like the classic training view.
+    import re
+    log = Path(f"{_AI4S_SHARED_DIR}/models/HydraGNN/train_work/logs/hg_tele8_{slurm_id}.log")
+    if log.exists():
+        try:
+            epochs = []
+            pat = re.compile(
+                r"Epoch:\s*(\d+),\s*Train Loss:\s*([\d.eE+-]+),\s*"
+                r"Val Loss:\s*([\d.eE+-]+),\s*Test Loss:\s*([\d.eE+-]+)")
+            for line in log.read_text().splitlines():
+                mm = pat.search(line)
+                if mm:
+                    epochs.append({"ep": int(mm.group(1)), "train": float(mm.group(2)),
+                                   "val": float(mm.group(3)), "test": float(mm.group(4))})
+            if epochs:
+                result["loss_curve"] = epochs
+        except Exception:
+            pass
+    job["output_dir"] = str(perf_dir)
+    _jobs[run_id] = job
+    return result if (result.get("telemetry") or result.get("metrics")) else None
 
 
 def _harvest_results(run_id: str):
@@ -398,6 +498,18 @@ def _harvest_results(run_id: str):
         job["output_dir"] = out_dir
         _jobs[run_id] = job
         _emit(run_id, f"[studio] Results harvested: {json.dumps(result)}")
+
+    elif slug == "HydraGNN" and job.get("task") == "train":
+        # Live 8-GPU training run: harvest Omnistat GPU telemetry from the per-run
+        # VictoriaMetrics DB. The sbatch keyed HG_OUTPUT_DIR by SLURM_JOB_ID, so the
+        # manifest lives at train_work/perf-runs/<slurm_job_id>/manifest.json.
+        _res = _harvest_telemetry(run_id)
+        if _res:
+            job["result"] = _res
+            _jobs[run_id] = job
+            _emit(run_id, "[studio] Telemetry harvested from Omnistat.")
+        else:
+            _emit(run_id, "[studio] No telemetry harvested (run may lack Omnistat data).")
 
     elif slug == "HydraGNN":
         # studio_infer.py writes a complete result JSON; read it verbatim.
