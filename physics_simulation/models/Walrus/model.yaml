@@ -2,6 +2,7 @@ name: Walrus
 hf_id: polymathic-ai/walrus
 license: MIT
 task: Cross-domain surrogate simulation for continuum dynamics (1.3B-parameter space-time Transformer)
+summary: Cross-domain surrogate simulation for continuum dynamics
 domain: physics_simulation
 upstream_code: https://github.com/PolymathicAI/walrus
 paper: https://arxiv.org/abs/2511.15684

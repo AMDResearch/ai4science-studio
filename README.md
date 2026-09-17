@@ -133,7 +133,7 @@ Agents read these files to understand the repo:
 
 | File | Purpose |
 |------|---------|
-| [`models.yaml`](models.yaml) | Index of all 15 models across 5 domains |
+| [`models.yaml`](models.yaml) | Generated index of all models (source of truth is each `model.yaml`) |
 | `<model>/model.yaml` | Per-model manifest: HF id, license, recipes, env vars, hardware |
 | [`ACKNOWLEDGEMENTS.md`](ACKNOWLEDGEMENTS.md) | Per-model attribution: upstream authors, papers, ROCm blog credits |
 | `.cursor/skills/` | Agent skills for Cursor (run models, discover, domain conventions) |
@@ -171,8 +171,8 @@ If you prefer to do it manually:
 
 1. Fork the repo and create a branch.
 2. Copy [`_template/`](_template/) to your domain and model folder.
-3. Fill in the model README, create a `model.yaml`, and add at minimum one runnable recipe.
-4. Add the model to [`models.yaml`](models.yaml).
+3. Fill in the model README, create a `model.yaml` (see [`schemas/model.schema.json`](schemas/model.schema.json)), and add at minimum one runnable recipe.
+4. Run `make fix` to regenerate [`models.yaml`](models.yaml), then `make check`.
 5. Add an entry to [`ACKNOWLEDGEMENTS.md`](ACKNOWLEDGEMENTS.md) crediting the upstream authors, paper, and any ROCm blog post.
 6. Open a pull request.
 

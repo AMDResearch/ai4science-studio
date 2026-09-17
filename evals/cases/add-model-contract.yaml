@@ -1,0 +1,18 @@
+id: add-model-contract
+prompt: |
+  Add a fictional earth-science model called ToyCast under earth_science/models/ToyCast.
+  It has Hugging Face id example/toycast, MIT license, one inference recipe, docker_run.sh,
+  preflight_toycast.py with --dry-run, and run_inference.sh. Then update the index.
+assertions:
+  - type: file_exists
+    path: earth_science/models/ToyCast/model.yaml
+  - type: file_exists
+    path: earth_science/models/ToyCast/examples/docker_run.sh
+  - type: file_exists
+    path: earth_science/models/ToyCast/examples/preflight_toycast.py
+  - type: validate_clean
+    scope: check   # full ai4s_validate after make fix
+  - type: index_contains_slug
+    slug: ToyCast
+notes: |
+  The gold grader is tools/ai4s_validate, not a judge model.

@@ -36,23 +36,25 @@ Add a new model to this repository following all repo conventions.
    - Add `run_ensemble.py`, `run_finetune.sh`, etc. as applicable.
    - All scripts must be `chmod +x`.
 
-7. **AMD/ROCm notes** — include only what has actually been validated:
+7. **Write `model.yaml`** at `<slug>/model.yaml` following `schemas/model.schema.json`. Then run `make fix` to regenerate root `models.yaml` (do not edit the index by hand) and `make check`.
+
+8. **AMD/ROCm notes** — include only what has actually been validated:
    - Note the base Docker image and ROCm version in `docker_run.sh`.
    - If ROCm-specific packages are needed (e.g. ROCm forks of scatter/sparse), document the substitution in the script.
    - If `torch.compile` or other AMD optimizations have been tested, note results in the recipe README.
 
-8. **Domain-specific checks**:
+9. **Domain-specific checks**:
    - `earth_science/`: state spatial/temporal resolution, coordinate conventions, data sources (ERA5, satellite, etc.).
    - `material_science/`: state input representations (graphs, SMILES, crystals) and unit conventions.
    - `protein_folding/`: surface license restrictions; avoid implying clinical/diagnostic use.
    - `healthcare/` (Healthcare & Life Sciences): add research/engineering-only disclaimer; no PHI; copy intended-use and limitations from the model card.
    - `physics_simulation/`: state physical domain (fluid dynamics, plasma, etc.), dataset format (HDF5, NetCDF), and HPC/multi-node requirements.
 
-9. **Update `ACKNOWLEDGEMENTS.md`** at the repo root — add a per-model entry under the appropriate domain section following the existing format. Include paper citation, upstream repo, ROCm blog + author (if applicable), and any collaboration callout.
+10. **Update `ACKNOWLEDGEMENTS.md`** at the repo root — add a per-model entry under the appropriate domain section following the existing format. Include paper citation, upstream repo, ROCm blog + author (if applicable), and any collaboration callout.
 
-10. **Do not commit** large checkpoints, datasets, `.env` files, or tokens — document how users obtain them instead.
+11. **Do not commit** large checkpoints, datasets, `.env` files, or tokens — document how users obtain them instead.
 
-11. **Git workflow** — always branch, never commit directly to `main`:
+12. **Git workflow** — always branch, never commit directly to `main`:
     1. `git fetch origin && git checkout -b <your-username>/<model-slug> origin/main`
     2. Create all files, set scripts `chmod +x`.
     3. `git add <domain>/models/<slug>/` and commit.

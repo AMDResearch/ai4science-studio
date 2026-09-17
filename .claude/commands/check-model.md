@@ -6,6 +6,7 @@ Audit an existing model entry in AI4Science Studio and report any issues.
 
 ### Structure
 - [ ] Folder is under the correct domain (`earth_science/`, `material_science/`, `protein_folding/`, `healthcare/`, `physics_simulation/`)
+- [ ] `python -m ai4s_validate check` is clean for the model (or `make check` for the whole repo)
 - [ ] Slug follows the `org__model` naming rule, or is a public name with canonical HF id documented in `README.md`
 - [ ] `README.md` exists at `<domain>/models/<slug>/README.md`
 - [ ] `recipes/` subfolder exists with at least one task subfolder, each containing its own `README.md`

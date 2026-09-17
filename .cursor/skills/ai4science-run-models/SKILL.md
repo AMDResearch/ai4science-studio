@@ -68,7 +68,7 @@ Always confirm discovered values with the user before proceeding.
 ## Step 4: Check the environment (if possible)
 
 If the user has access to a terminal:
-1. Run the model's preflight script: `python examples/preflight_<slug>.py`
+1. Run the model's preflight script: `python examples/preflight_<slug>.py` (use `--dry-run` on CPU-only nodes)
 2. Check for the SIF file if using Apptainer
 3. Verify the overlay exists if one was specified
 

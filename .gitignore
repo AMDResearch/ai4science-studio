@@ -70,6 +70,9 @@ HANDOFF.md
 .claude/settings.local.json
 nul
 
+# Local run artifacts (SLURM stdout, ad-hoc logs). Prefer this over dumping *.out at repo root.
+runs/
+
 # IDE
 .idea/
 .vscode/

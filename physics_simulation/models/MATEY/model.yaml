@@ -2,6 +2,7 @@ name: MATEY
 hf_id: N/A
 license: MIT
 task: Spatiotemporal surrogate modeling for multiphysics systems (turbulence, plasma, fluid dynamics)
+summary: Spatiotemporal surrogate modeling for multiphysics systems
 domain: physics_simulation
 upstream_code: https://github.com/ORNL/MATEY
 paper: https://arxiv.org/abs/2412.20601

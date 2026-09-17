@@ -26,7 +26,12 @@
 
 set -euo pipefail
 
-SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+if [[ -n "${SLURM_JOB_ID:-}" ]]; then
+  _ORIG_CMD=$(scontrol show job "$SLURM_JOB_ID" | sed -n 's/.*Command=\(\S\+\).*/\1/p')
+  SCRIPT_DIR=$(cd "$(dirname "$_ORIG_CMD")" && pwd)
+else
+  SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+fi
 
 # --- Configuration (override by exporting before sbatch) ---
 MG_DATA_DIR="${MG_DATA_DIR:-./datasets}"
