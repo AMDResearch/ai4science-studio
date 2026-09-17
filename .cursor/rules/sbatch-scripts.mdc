@@ -47,7 +47,7 @@ When creating or editing `sbatch_*.sh` under any model's `examples/` directory:
    # Option B: no default — require the user to set it
    : "${HG_SIF:?Set HG_SIF to your Apptainer SIF path}"
    ```
-   Site-specific values (partition, account, shared dir, scratch paths) belong in the gitignored `.cluster-config.yaml` / `~/.config/ai4science-studio/cluster.yaml`, not in committed scripts.
+   Site-specific values (partition, account, shared dir, scratch paths) belong in the gitignored `.cluster-config.yaml` / `~/.config/ai4science-studio/cluster.yaml`, not in committed scripts. `make check` enforces this via `ai4s_validate.site_leaks`.
 
 6. **Env vars: never clobber** — Append to `LD_LIBRARY_PATH`, `PYTHONPATH`, `PATH` inside the container, not via `--env`.
 

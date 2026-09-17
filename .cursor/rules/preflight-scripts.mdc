@@ -35,6 +35,16 @@ def check(label, fn):
 4. Model-specific imports — Import the key packages the model needs
 5. Optional deps — Use try/except and report "not installed (optional)" rather than failing
 
+## `--dry-run` (required)
+
+CPU CI and `make check` invoke `python preflight_<slug>.py --dry-run`. That flag must exit 0 without importing torch or touching a GPU. Use it to confirm the script is present and parseable; full GPU checks remain the default (no flag).
+
+```python
+if "--dry-run" in sys.argv:
+    print("dry-run: skipping GPU and import checks")
+    raise SystemExit(0)
+```
+
 ## Exit code
 
 Exit with code 1 if any required check failed; 0 if all passed. Print a summary line at the end.

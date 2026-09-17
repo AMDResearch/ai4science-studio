@@ -4,8 +4,8 @@ Discover what models are available in this repository.
 
 ## How to respond
 
-1. Read `models.yaml` at the repo root.
-2. Parse the YAML and present the models in a table.
+1. Read `models.yaml` at the repo root (generated; do not edit by hand).
+2. Parse the YAML and present the models in a table. Use `summary` for the one-line task column (`task` is the longer manifest description).
 3. If the user provided filter criteria (in $ARGUMENTS), apply them.
 
 ## Default output (no filter)

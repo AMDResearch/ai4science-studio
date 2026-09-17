@@ -9,12 +9,13 @@ Use this skill when a user asks what models are available, wants to compare mode
 
 ## Quick discovery
 
-Read `models.yaml` at the repo root. It lists every model with:
+Read `models.yaml` at the repo root (generated from per-model `model.yaml` via `make fix`). It lists every model with:
 - `slug` — folder name
 - `domain` — earth_science, material_science, healthcare, physics_simulation, protein_folding
 - `hf_id` — Hugging Face model id (or N/A)
 - `license` — SPDX id
-- `task` — one-line description
+- `summary` — short one-liner for tables
+- `task` — fuller description from the manifest
 - `tasks_available` — list of recipe tasks (inference, train, finetune, ensemble)
 - `path` — relative path to model folder
 
@@ -26,6 +27,8 @@ Parse `models.yaml` and present a table:
 |-------|--------|------|-------------------|
 | StormCast | Earth science | Weather prediction | inference, ensemble |
 | ... | ... | ... | ... |
+
+Use the `summary` field for the Task column (not the longer `task` field).
 
 ## Filtering
 

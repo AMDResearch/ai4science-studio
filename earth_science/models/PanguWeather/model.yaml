@@ -2,9 +2,11 @@ name: PanguWeather
 hf_id: N/A
 license: CC-BY-NC-SA-4.0
 task: Transformer-based deterministic global weather forecasting at 0.25°
+summary: Transformer-based deterministic global weather forecasting
 domain: earth_science
 upstream_code: https://github.com/198808xc/Pangu-Weather
 paper: https://www.nature.com/articles/s41586-023-06185-3
+weight_source: Downloaded at runtime by ECMWF ai-models (not Hugging Face)
 container_image: jaxweather:latest
 vram_gb: 192
 validated_hardware:

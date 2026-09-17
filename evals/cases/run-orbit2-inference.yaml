@@ -1,0 +1,16 @@
+id: run-orbit2-inference
+prompt: |
+  Prepare an ORBIT-2 inference SLURM job from this repo's recipes.
+  Do not invent flags. Use the AMD Apptainer path.
+assertions:
+  - type: file_read
+    path: earth_science/models/ORBIT-2/model.yaml
+  - type: command_contains
+    needle: --rocm
+  - type: command_excludes
+    needle: --nv
+  - type: command_contains
+    needle: sbatch
+notes: |
+  Trace assertions (file_read) need a runner that records tool calls.
+  Command assertions grade the proposed sbatch line.

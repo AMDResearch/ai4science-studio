@@ -4,13 +4,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository purpose
 
-AI4Science Studio is an **agent-first** recipe collection for open AI-for-science models. The primary interface is an AI coding agent (Cursor, Claude Code, etc.) that reads machine-readable metadata to discover, configure, and run models. There is no build system, compiled code, or test suite—the repo is Markdown files, YAML manifests, and (optionally) scripts and notebooks in recipe folders. Upstream code lives in external GitHub repos; upstream model weights live on Hugging Face.
+AI4Science Studio is an **agent-first** recipe collection for open AI-for-science models. The primary interface is an AI coding agent (Cursor, Claude Code, etc.) that reads machine-readable metadata to discover, configure, and run models. Upstream code lives in external GitHub repos; upstream model weights live on Hugging Face.
+
+**Canonical agent instructions:** [`AGENTS.md`](AGENTS.md). This file is the Claude Code pointer into that contract.
 
 ## Agent entry points (read these first)
 
-- **`models.yaml`** (repo root) — index of all models; read this to discover what's available.
-- **`<model>/model.yaml`** — per-model manifest with HF id, license, recipes, env vars, and hardware.
+- **`AGENTS.md`** — cross-tool conventions, validation commands, layout.
+- **`models.yaml`** (repo root) — **generated** index of all models. Do not edit by hand; change the per-model manifest and run `make fix`.
+- **`<model>/model.yaml`** — source of truth (HF id, license, recipes, env vars, hardware).
 - **`.cursor/skills/`** — agent skills for Cursor; `.claude/commands/` — slash commands for Claude Code.
+- **`make check`** — schema, index drift, script/docs lint, `preflight_*.py --dry-run`. Importable as `ai4s_validate` (`PYTHONPATH=tools`).
 
 ## Directory layout
 
@@ -35,8 +39,8 @@ Hugging Face id `org/model` → directory name `org__model` (replace `/` with `_
 3. Fill in `README.md`: Hugging Face model id (or `N/A` with alternate source), task, license (SPDX id or link), upstream code/paper.
 4. Place how-to docs under `<model-slug>/recipes/`. Prefer one subfolder per task (`recipes/inference/`, `recipes/finetune/`, etc.), each with its own `README.md`.
 5. Place ready-to-run scripts under `<model-slug>/examples/`: `docker_run.sh`, `run_<task>.sh`/`.py`, `preflight_<slug>.py`, and `sbatch_<task>_amd.sh`. All scripts must be `chmod +x`. For HPC models with heavy pip deps, also add `build_overlay_amd.sh`.
-6. Create a `model.yaml` in the model folder with structured metadata (name, hf_id, license, task, recipes, env_vars).
-7. Add the model to the root `models.yaml` index.
+6. Create a `model.yaml` in the model folder with structured metadata (name, hf_id, license, task, recipes, env_vars). See `schemas/model.schema.json`.
+7. Run `make fix` to regenerate the root `models.yaml` index, then `make check`.
 8. Do not commit large checkpoints or datasets—document how to obtain them instead.
 
 ## Conventions
@@ -68,3 +72,4 @@ When you fix anything in a model's scripts, do **all** of the following in the s
 
 - **Cursor**: `.cursor/skills/` — domain conventions (earth science, healthcare, material science, protein folding, physics simulation, run-models, discover)
 - **Claude Code**: `.claude/commands/` — slash commands for add-model, add-recipe, check-model, list-models, audit-models, init-cluster, run-* for each model, and **`/run-perf-orbit2`** / **`/run-perf-hydragnn`** for perf-analysis + perf-optimizer-loop recipes
+- **Evals (future):** [`evals/`](evals/) case YAML; graders should import `ai4s_validate`, not LLM-judge the contract.

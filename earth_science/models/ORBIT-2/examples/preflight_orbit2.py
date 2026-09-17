@@ -9,6 +9,10 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+
+if "--dry-run" in sys.argv:
+    print("dry-run: skipping GPU and import checks")
+    raise SystemExit(0)
 from pathlib import Path
 
 

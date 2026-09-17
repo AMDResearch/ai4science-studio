@@ -1,0 +1,25 @@
+name: Validate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  check:
+    name: manifests, scripts, docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - name: Unit tests
+        env:
+          PYTHONPATH: tools
+        run: uv run --with-requirements tools/ai4s_validate/requirements.txt python -m unittest discover -s tools/ai4s_validate/tests -v
+      - name: Validate repo
+        env:
+          PYTHONPATH: tools
+        run: uv run --with-requirements tools/ai4s_validate/requirements.txt python -m ai4s_validate check

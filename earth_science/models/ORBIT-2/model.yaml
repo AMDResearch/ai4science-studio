@@ -2,6 +2,7 @@ name: ORBIT-2
 hf_id: jychoi-hpc/ORBIT-2
 license: See upstream model card
 task: Global weather and climate downscaling (vision foundation model)
+summary: Global weather and climate downscaling
 domain: earth_science
 upstream_code: https://github.com/XiaoWang-Github/ORBIT-2
 paper: https://arxiv.org/abs/2505.04802
@@ -80,3 +81,7 @@ env_vars:
     description: Distributed master port
     required: false
     default: "29500"
+  EXCLUDE_NODES:
+    description: Optional comma-separated SLURM node names to skip (perf / GEMM analysis jobs)
+    required: false
+    default: null

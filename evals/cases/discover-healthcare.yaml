@@ -1,0 +1,12 @@
+id: discover-healthcare
+prompt: |
+  Which healthcare models are in this repo, and which recipes does each support?
+  Answer from the machine-readable index; do not invent models.
+assertions:
+  - type: answer_contains
+    needles: [GP-MoLFormer, SwinUNETR, SemlaFlow, REINVENT4]
+  - type: answer_excludes
+    needles: [AlphaFold]
+notes: |
+  Deterministic once a runner captures the agent answer text.
+  Grade by substring; do not use an LLM judge.

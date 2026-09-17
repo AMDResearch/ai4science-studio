@@ -2,6 +2,7 @@ name: SwinUNETR
 hf_id: N/A
 license: Apache-2.0
 task: 3D medical image segmentation (lung tumor, NSCLC-Radiomics)
+summary: 3D medical image segmentation
 domain: healthcare
 upstream_code: https://github.com/silogen/ai-samples
 paper: null

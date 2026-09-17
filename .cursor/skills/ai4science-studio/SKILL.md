@@ -9,8 +9,8 @@ description: Applies when working in the AI4Science Studio repository. Describes
 
 - **Domains:** `earth_science/` (includes climate and weather), `material_science/`, `protein_folding/`, `healthcare/`, `physics_simulation/`.
 - **Models:** `<domain>/models/<model-slug>/` with a `README.md` per model and `recipes/` for that model only.
-- **Model index:** Root [`models.yaml`](../../../models.yaml) — machine-readable list of all models. Read this first for discovery.
-- **Per-model manifest:** `<domain>/models/<model-slug>/model.yaml` — structured metadata (HF id, license, recipes, env vars, hardware).
+- **Model index:** Root [`models.yaml`](../../../models.yaml) — **generated** list of all models. Read this first for discovery. Do not edit it by hand.
+- **Per-model manifest:** `<domain>/models/<model-slug>/model.yaml` — source of truth (HF id, license, recipes, env vars, hardware). Schema: [`schemas/model.schema.json`](../../../schemas/model.schema.json).
 - **Human index:** Root [`README.md`](../../../README.md).
 
 ## Model slug rule
@@ -31,17 +31,17 @@ Hugging Face id `org/model` → directory name `org__model` (replace `/` with do
 4. Place ready-to-run scripts under `models/<model-slug>/examples/`:
    - `docker_run.sh` — auto-detects AMD Container Toolkit (`docker info | grep -qi amd`) vs device passthrough (`/dev/kfd` + all `/dev/dri/renderD*`); checks for existing container and exits with attach hint; auto-clones upstream repo if absent.
    - `run_<task>.sh` / `run_<task>.py` — all key params overridable via env vars with sensible defaults; prints config summary before running; exits with clear error when required inputs are missing.
-   - `preflight_<slug>.py` — smoke-test verifying GPU access and imports.
+   - `preflight_<slug>.py` — smoke-test verifying GPU access and imports. Must accept `--dry-run` (skip GPU/imports; used by `make check` on CPU).
    - `sbatch_<task>_amd.sh` — SLURM + Apptainer batch script; use `--rocm` (not `--nv`) for AMD GPU passthrough.
    - `sbatch_<task>_docker.sh` — SLURM + Docker batch script; uses device passthrough or `--runtime=amd`.
    - `build_overlay_amd.sh` — (Apptainer only, HPC models with heavy pip deps) builds a persistent ext3 overlay. Run once per cluster; reuse with `--overlay <path>:ro`.
    - All scripts must be `chmod +x`.
-5. Create a `model.yaml` in the model folder with structured metadata (name, hf_id, license, task, recipes, env_vars). See existing `model.yaml` files for the schema.
-6. Add the model to the root `models.yaml` index.
+5. Create a `model.yaml` in the model folder with structured metadata (name, hf_id, license, task, summary, recipes, env_vars). See existing `model.yaml` files for the schema. `summary` is the short one-liner used in the generated index.
+6. Run `make fix` to regenerate root `models.yaml`, then `make check`. Do not hand-edit the index.
 7. Copy structure from [`_template/`](../../../_template/) when starting a new model folder.
-6. For **HPC-oriented** models, consider `recipes/local-cluster-amd.md` and **`data-access.md`** sections on data staging.
-7. Write recipes around **AMD Instinct** with **PyTorch ROCm** when that matches upstream supported paths.
-8. **GPU arch naming:** Scripts are named `_amd.sh` / `_docker.sh`, not `_mi300x.sh`. The same `rocm7.2.x` image covers MI250X (gfx90a), MI300X (gfx942), and MI350X (gfx950). Only the `ROCM_WHL_TAG` env var and the image tag need to change for a different ROCm generation.
+8. For **HPC-oriented** models, consider `recipes/local-cluster-amd.md` and **`data-access.md`** sections on data staging.
+9. Write recipes around **AMD Instinct** with **PyTorch ROCm** when that matches upstream supported paths.
+10. **GPU arch naming:** Scripts are named `_amd.sh` / `_docker.sh`, not `_mi300x.sh`. The same `rocm7.2.x` image covers MI250X (gfx90a), MI300X (gfx942), and MI350X (gfx950). Only the `ROCM_WHL_TAG` env var and the image tag need to change for a different ROCm generation.
 
 ---
 

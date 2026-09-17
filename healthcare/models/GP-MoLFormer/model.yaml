@@ -2,6 +2,7 @@ name: GP-MoLFormer
 hf_id: ibm-research/GP-MoLFormer-Uniq
 license: Apache-2.0
 task: SMILES molecule generation (unconditional, scaffold-constrained, pair-tuning)
+summary: SMILES molecule generation
 domain: healthcare
 upstream_code: https://github.com/IBM/gp-molformer
 paper: https://arxiv.org/abs/2302.07432
