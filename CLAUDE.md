@@ -62,8 +62,9 @@ When you fix anything in a model's scripts, do **all** of the following in the s
 2. **Propagate to sibling models.** Scan `*/models/*/examples/` for the same pattern and fix them now.
 3. **Propagate across runtimes.** If the fix was in an Apptainer script, check the Docker equivalent (and vice versa). Common cross-runtime issues: `SCRIPT_DIR` resolution, read-only FS handling, dep lists/version pins, env-var clobbering, torch protection after `pip install`.
 4. **Update the relevant skill/doc.** Add the lesson to the right file:
-   - Repo-wide patterns → `.cursor/skills/ai4science-studio/SKILL.md`
-   - Domain-specific patterns → `.cursor/skills/ai4science-<domain>/SKILL.md`
+   - Repo-wide HPC → `.cursor/skills/ai4science-studio/reference/rocm.md`
+   - Domain/model landmines → `.cursor/skills/ai4science-<domain>/reference/`
+   - Keep `SKILL.md` short; add a pointer only if a new topic needs triggering.
 5. **Create or update a rule** (`.cursor/rules/`) if the lesson is a recurring process mistake, not just a one-off technical fix.
 
 **Litmus test:** would a fresh agent session working on a different model make the same mistake? If yes, the fix is incomplete — the lesson must be discoverable in a skill, rule, or `CLAUDE.md` before the task is done.

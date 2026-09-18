@@ -26,7 +26,7 @@ Use this skill when adding or refactoring **train / fine-tune / inference / eval
 - Committing `token` values or private Hub tokens.
 - Checking in large `*.bin`, `*.safetensors`, or full datasets when `.gitignore` already excludes them—point users to Hub or documented download steps instead.
 - **Hardcoding HF repo filenames** without verifying: model repos ship different names than recipes assume (e.g. `walrus.pt` not `model.pt`). Use `list_repo_files()` to discover actual names, filter by extension, pick smallest or first match.
-- Assuming a `_mi300x.sh` SLURM script name — use `_amd.sh` (covers MI250X, MI300X, MI350X with the same `rocm7.2.x` image).
+- Assuming a `_mi300x.sh` SLURM script name — use `_amd.sh` (covers MI250X, MI300X, MI350X with the same `rocm7.2.x` image). Overlay/`--no-deps` details: [ai4science-studio/reference/rocm.md](../ai4science-studio/reference/rocm.md).
 
 ## HF checkpoint download pattern (robust)
 
