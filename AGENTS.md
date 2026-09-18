@@ -22,10 +22,12 @@ Domains: `earth_science/`, `material_science/`, `protein_folding/`, `healthcare/
 ## Validation (run this after any manifest or examples/ change)
 
 ```bash
-make check        # schema, generated index, scripts, docs, preflight --dry-run
+make check        # schema, index, scripts (bash -n + shellcheck errors), docs, preflight --dry-run
 make check-fast   # schema + index only (pre-commit)
 make fix          # regenerate models.yaml from */models/*/model.yaml
 ```
+
+`make check` does **not** pull container images. It only checks that `container_image` looks like `name:tag` or `*.sif`. Install `shellcheck` for local error-severity lint (CI installs it).
 
 Validators live in `tools/ai4s_validate/` and return structured findings (importable). Future agent evals under `evals/` should grade by calling the same library, not by scraping logs.
 

@@ -48,4 +48,27 @@ def check_preflight_dry_run(root: Path, models: list[ModelEntry]) -> Result:
                         file=rel,
                     )
                 )
+                continue
+            combined = (proc.stdout or "") + (proc.stderr or "")
+            if "dry-run" not in combined.lower():
+                result.add(
+                    Finding(
+                        "error",
+                        "preflight-dry-run-silent",
+                        "preflight --dry-run must print that it skipped GPU/import checks",
+                        model=model.slug,
+                        file=rel,
+                    )
+                )
+            body = pf.read_text(encoding="utf-8", errors="replace")
+            if len(body.strip()) < 400:
+                result.add(
+                    Finding(
+                        "error",
+                        "preflight-stub",
+                        "preflight is only a --dry-run stub; add real GPU/import checks for live use",
+                        model=model.slug,
+                        file=rel,
+                    )
+                )
     return result
