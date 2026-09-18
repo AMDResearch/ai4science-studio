@@ -14,6 +14,7 @@ ENV_ASSIGN = re.compile(
 )
 ENV_GET = re.compile(r"""os\.environ\.get\(\s*["']([A-Z][A-Z0-9_]+)["']""")
 NV_FLAG = re.compile(r"""(?:^|[\s=])--nv(?:[\s"']|$)""")
+_SHELLCHECK_MISSING = False
 
 
 def _iter_example_files(model_dir: Path) -> list[Path]:
@@ -35,6 +36,8 @@ def _has_crlf(path: Path) -> bool:
 
 
 def check_scripts(root: Path, models: list[ModelEntry]) -> Result:
+    global _SHELLCHECK_MISSING
+    _SHELLCHECK_MISSING = False
     result = Result()
     for model in models:
         model_dir = root / model.path
@@ -220,11 +223,12 @@ def _check_shell(
             )
         )
 
+    _shellcheck(model, path, rel, result)
+
     if name.startswith("run_") and declared_env:
         used = {m.group(1) for m in ENV_ASSIGN.finditer(text)}
         used |= {m.group(2) for m in ENV_ASSIGN.finditer(text)}
         extra = sorted(v for v in used if v not in declared_env and not v.startswith("SLURM"))
-        # Common noise
         ignore = {
             "PATH",
             "HOME",
@@ -248,3 +252,56 @@ def _check_shell(
                     file=rel,
                 )
             )
+
+
+def _shellcheck(model, path: Path, rel: str, result: Result) -> None:
+    """Error-severity shellcheck only (style stays out of CI). Missing binary is one warning."""
+    global _SHELLCHECK_MISSING
+    if _SHELLCHECK_MISSING:
+        return
+    try:
+        proc = subprocess.run(
+            ["shellcheck", "-S", "error", "-f", "gcc", str(path)],
+            capture_output=True,
+            text=True,
+            timeout=20,
+            check=False,
+        )
+    except FileNotFoundError:
+        _SHELLCHECK_MISSING = True
+        result.add(
+            Finding(
+                "warning",
+                "shellcheck-unavailable",
+                "shellcheck not installed; CI installs it",
+                model=model.slug,
+                file=rel,
+            )
+        )
+        return
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        result.add(
+            Finding(
+                "warning",
+                "shellcheck-unavailable",
+                f"could not run shellcheck: {exc}",
+                model=model.slug,
+                file=rel,
+            )
+        )
+        return
+    if proc.returncode == 0:
+        return
+    for line in (proc.stdout or proc.stderr or "").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        result.add(
+            Finding(
+                "error",
+                "shellcheck",
+                line,
+                model=model.slug,
+                file=rel,
+            )
+        )

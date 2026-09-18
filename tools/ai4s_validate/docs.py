@@ -80,6 +80,32 @@ def check_docs(root: Path, models: list[ModelEntry]) -> Result:
                         )
                     )
 
+        for recipe in model.data.get("recipes") or []:
+            if not isinstance(recipe, dict):
+                continue
+            runnable = bool(
+                recipe.get("script") or recipe.get("slurm") or recipe.get("sbatch_script")
+            )
+            if not runnable:
+                continue
+            recipe_path = recipe.get("recipe_path")
+            if not isinstance(recipe_path, str) or not recipe_path:
+                continue
+            readme = model_dir / recipe_path / "README.md"
+            if not readme.is_file():
+                continue
+            rtext = readme.read_text(encoding="utf-8", errors="replace")
+            if "examples" not in rtext.lower():
+                result.add(
+                    Finding(
+                        "warning",
+                        "recipe-no-examples",
+                        "runnable recipe README should link to examples/",
+                        model=model.slug,
+                        file=str(readme.relative_to(root)),
+                    )
+                )
+
         examples_readme = model_dir / "examples" / "README.md"
         if examples_readme.is_file():
             _check_md_links(

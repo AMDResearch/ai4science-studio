@@ -5,6 +5,7 @@ from pathlib import Path
 from ai4s_validate.discover import discover_models, repo_root_from
 from ai4s_validate.docs import check_docs
 from ai4s_validate.findings import Result
+from ai4s_validate.images import check_container_images
 from ai4s_validate.index import check_index, write_index
 from ai4s_validate.manifests import check_manifests
 from ai4s_validate.preflight import check_preflight_dry_run
@@ -35,6 +36,7 @@ def run_all(root: Path | None = None, *, preflight: bool = True) -> Result:
     root = _root(root)
     models = discover_models(root)
     result = run_fast(root)
+    result.extend(check_container_images(root, models).findings)
     result.extend(check_scripts(root, models).findings)
     result.extend(check_site_leaks(root, models).findings)
     result.extend(check_docs(root, models).findings)
