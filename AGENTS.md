@@ -44,9 +44,9 @@ Validators live in `tools/ai4s_validate/` and return structured findings (import
 - Hugging Face id `org/model` → directory `org__model`, unless a public name is documented in the model README.
 - **No site-specific paths, partitions, node lists, or job IDs** in committed `examples/` or `recipes/`. `make check` flags `/shared/<user>`, `/home/<user>`, `#SBATCH --partition=` that is not `YOUR_*`, and strings that look like recorded SLURM job ids. Site values belong in gitignored `.cluster-config.yaml`.
 - Healthcare content is research/engineering only — no PHI, no clinical claims.
-- Capture lessons in `.cursor/skills/` (and a rule if the mistake is procedural) in the same pass as the fix.
+- Capture lessons in `.cursor/skills/` (`SKILL.md` for triggers, `reference/` for long HPC notes) and a rule if the mistake is procedural.
 
 ## Skills and commands
 
-- Cursor: `.cursor/skills/`
+- Cursor: `.cursor/skills/` — keep `SKILL.md` short; load `reference/` when debugging HPC or a specific model.
 - Claude Code: `.claude/commands/` plus [`CLAUDE.md`](CLAUDE.md) (pointer to this file)

@@ -24,3 +24,7 @@ The `protein_folding/` domain covers **protein structure prediction**, **folding
 ## Ethics
 
 - When discussing **pathogens** or **dual-use** contexts, stay aligned with upstream policy and general biosafety norms; do not help circumvent stated restrictions.
+
+## Empty domain
+
+`protein_folding/models/` has no model yet. Keep the domain folder. Do not invent a model. Shared layout/ROCm: [ai4science-studio/SKILL.md](../ai4science-studio/SKILL.md).
