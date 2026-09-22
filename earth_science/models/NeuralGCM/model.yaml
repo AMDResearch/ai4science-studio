@@ -2,6 +2,7 @@ name: NeuralGCM
 hf_id: N/A
 license: "Code: Apache-2.0 · Weights: CC-BY-SA-4.0"
 task: Hybrid physics + ML atmospheric model for weather and climate forecasting
+summary: Hybrid physics + ML atmospheric model
 domain: earth_science
 upstream_code: https://github.com/google-research/neuralgcm
 paper: https://arxiv.org/abs/2311.07222

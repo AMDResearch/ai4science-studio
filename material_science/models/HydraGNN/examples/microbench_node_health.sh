@@ -44,7 +44,7 @@
 # NOTE: GPU tests are gated on whether SLURM allocated GPUs to the step. To
 # get GPU coverage, sbatch with `--gres=gpu:amd_instinct_mi355_oam:8`.
 
-set -u
+set -uo pipefail
 
 H=$(hostname -s)
 OUT_DIR="${OUT_DIR:-${AI4S_SHARED_DIR:-/tmp}/microbench-node-health}"

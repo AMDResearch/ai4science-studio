@@ -2,6 +2,7 @@ name: ArchesWeather
 hf_id: gcouairon/ArchesWeather
 license: See upstream repository and Hugging Face model card
 task: Global AI weather forecasting at 1.5° resolution (deterministic and generative)
+summary: Global AI weather forecasting at 1.5° resolution
 domain: earth_science
 upstream_code: https://github.com/silogen/ai-samples
 paper: https://arxiv.org/abs/2412.12971

@@ -2,6 +2,7 @@ name: SemlaFlow
 hf_id: N/A
 license: MIT
 task: 3D molecular structure generation (flow matching)
+summary: 3D molecular structure generation
 domain: healthcare
 upstream_code: https://github.com/rssrwn/semla-flow
 paper: null

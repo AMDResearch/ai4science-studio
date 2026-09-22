@@ -1,0 +1,10 @@
+# Local hooks. Install once: pip install pre-commit && pre-commit install
+repos:
+  - repo: local
+    hooks:
+      - id: ai4s-validate-fast
+        name: ai4s-validate (manifests + index)
+        language: system
+        pass_filenames: false
+        entry: env PYTHONPATH=tools uv run --with-requirements tools/ai4s_validate/requirements.txt python -m ai4s_validate check-fast
+        files: '(^models\.yaml$|/model\.yaml$|^schemas/model\.schema\.json$)'

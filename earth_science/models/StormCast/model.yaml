@@ -2,6 +2,7 @@ name: StormCast
 hf_id: nvidia/stormcast-v1-era5-hrrr
 license: Apache-2.0
 task: High-resolution convection-allowing weather prediction (3 km, 1-hour steps)
+summary: High-resolution convection-allowing weather prediction
 domain: earth_science
 upstream_code: https://github.com/NVIDIA/earth2studio
 paper: https://arxiv.org/abs/2408.10958

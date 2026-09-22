@@ -2,6 +2,7 @@ name: REINVENT4
 hf_id: N/A
 license: Apache-2.0
 task: Reinforcement learning for molecular design (transfer learning, scoring, linking)
+summary: Reinforcement learning for molecular design
 domain: healthcare
 upstream_code: https://github.com/MolecularAI/REINVENT4
 paper: null

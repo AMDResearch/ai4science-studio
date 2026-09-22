@@ -21,6 +21,10 @@ import importlib
 import subprocess
 import sys
 
+if "--dry-run" in sys.argv:
+    print("dry-run: skipping GPU and import checks")
+    raise SystemExit(0)
+
 
 def check(label: str, ok: bool, detail: str = "") -> bool:
     status = "ok" if ok else "FAIL"

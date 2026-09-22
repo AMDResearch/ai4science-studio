@@ -14,6 +14,10 @@ Run inside the Docker container before a full training or inference job:
 
 import sys
 
+if "--dry-run" in sys.argv:
+    print("dry-run: skipping GPU and import checks")
+    raise SystemExit(0)
+
 PASS = "\033[32mPASS\033[0m"
 FAIL = "\033[31mFAIL\033[0m"
 

@@ -2,6 +2,9 @@
 
 > **Research / engineering use only.** Not for clinical or diagnostic use.
 
+> **Ready-to-run scripts** live in [`../../examples/`](../../examples/).
+> Use [`run_inference.sh`](../../examples/run_inference.sh) instead of copying snippets from this doc.
+
 Optimized inference for 3D lung tumor segmentation using a trained SwinUNETR checkpoint, with AMP and `torch.compile` for maximum throughput.
 
 ## Prerequisites

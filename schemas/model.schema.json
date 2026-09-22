@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai4science-studio.local/schemas/model.schema.json",
+  "title": "AI4Science Studio model.yaml",
+  "description": "Per-model manifest. Derived from the 15 existing models so validation starts green; tighten required fields in follow-up PRs.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["name", "hf_id", "license", "task", "summary", "domain", "recipes"],
+  "properties": {
+    "name": { "type": "string", "minLength": 1 },
+    "hf_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Hugging Face id (org/model) or N/A when weights live elsewhere."
+    },
+    "license": { "type": "string", "minLength": 1 },
+    "task": { "type": "string", "minLength": 1 },
+    "summary": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Short one-liner for the generated models.yaml index and list-models table."
+    },
+    "domain": {
+      "type": "string",
+      "enum": [
+        "earth_science",
+        "material_science",
+        "protein_folding",
+        "healthcare",
+        "physics_simulation"
+      ]
+    },
+    "upstream_code": { "type": ["string", "null"] },
+    "upstream_branch": { "type": ["string", "null"] },
+    "paper": { "type": ["string", "null"] },
+    "weight_source": { "type": ["string", "null"] },
+    "container_image": {
+      "oneOf": [
+        { "type": "string", "minLength": 1 },
+        {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      ]
+    },
+    "vram_gb": { "type": ["number", "integer", "null"] },
+    "validated_hardware": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "disclaimer": { "type": "string" },
+    "data_format": { "type": "string" },
+    "data_source": { "type": "string" },
+    "model_variants": {
+      "type": "array",
+      "items": { "type": "object", "additionalProperties": true }
+    },
+    "recipes": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/recipe" }
+    },
+    "env_vars": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/env_var" }
+    }
+  },
+  "$defs": {
+    "recipe": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["task", "description", "recipe_path"],
+      "properties": {
+        "task": { "type": "string", "minLength": 1 },
+        "description": { "type": "string", "minLength": 1 },
+        "recipe_path": { "type": "string", "minLength": 1 },
+        "script": { "type": ["string", "null"] },
+        "slurm": { "type": ["string", "null"] },
+        "sbatch_script": {
+          "type": ["string", "null"],
+          "description": "Alias of slurm (HydraGNN). Prefer slurm going forward."
+        }
+      }
+    },
+    "env_var": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["description"],
+      "properties": {
+        "description": { "type": "string", "minLength": 1 },
+        "required": { "type": "boolean" },
+        "default": {}
+      }
+    }
+  }
+}

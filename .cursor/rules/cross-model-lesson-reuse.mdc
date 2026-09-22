@@ -13,9 +13,10 @@ Every bug fix, workaround, or pattern discovery is a lesson. **Do not treat skil
 2. **Propagate to sibling models.** Scan `*/models/*/examples/` for the same pattern. Fix them now, not later.
 3. **Propagate across runtimes.** If the fix was in an Apptainer script, check the Docker equivalent (and vice versa). Common cross-runtime issues:
    - SCRIPT_DIR resolution, read-only FS handling, dep lists, env var clobbering, torch protection
-4. **Update the relevant SKILL.md.** Add the lesson to the right skill file:
-   - Repo-wide → `.cursor/skills/ai4science-studio/SKILL.md`
-   - Domain-specific → `.cursor/skills/ai4science-<domain>/SKILL.md`
+4. **Update the relevant skill.** Add the lesson to the right file:
+   - Repo-wide HPC → `.cursor/skills/ai4science-studio/reference/rocm.md`
+   - Domain/model landmines → `.cursor/skills/ai4science-<domain>/reference/`
+   - Keep `SKILL.md` short; only add a pointer if a new topic needs triggering.
 5. **Update or create a rule** if the lesson is a recurring process mistake (not just a technical fix).
 
 ## The test: would a future session make the same mistake?
