@@ -196,7 +196,7 @@ if [[ "$ORBIT2_SKIP_NODE_HEALTH_PROBE" != "1" ]]; then
        --cpus-per-task=1 --gres=none --output="${_PROBE_OUT}" --error="${_PROBE_OUT}" \
     bash -c '
       H=$(hostname)
-      HM=$(test -d "/home/$USER" 2>/dev/null && echo OK || echo FAIL)
+      HM=$(test -d "/home/$USER" -o -d "/ccs/home/$USER" 2>/dev/null && echo OK || echo FAIL)
       SH=$(test -d "'"$AI4S_SHARED_DIR"'" 2>/dev/null && echo OK || echo FAIL)
       SIF_CHECK=$(test -f "'"$ORBIT2_SIF"'" 2>/dev/null && echo OK || echo FAIL)
       DATA_CHECK=$(test -d "'"$ORBIT2_DATA_ROOT"'" 2>/dev/null && echo OK || echo FAIL)

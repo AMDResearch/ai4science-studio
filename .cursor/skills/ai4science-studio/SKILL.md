@@ -249,6 +249,45 @@ When cluster-specific info is discovered during a session (new partition, differ
 
 **Critical: site-specific paths must never appear in committed scripts — including as env var defaults.** It is not enough that a path comes from an env var; the default value of that env var must also be portable. Any default that contains a username, cluster-specific mount point (`/shared/<user>`, `/scratch/...`), or node name belongs in `.cluster-config.yaml`, not in the script. Use `AI4S_SHARED_DIR` (set by the user) as the base for path defaults, or omit the default entirely and require the user to set the variable.
 
+## ORNL Lux vs Vultr Lux (do not conflate)
+
+Two different systems are both called "Lux" in conversation:
+
+| | **ORNL Lux** (OLCF) | **Vultr Lux** (commercial) |
+|---|---|---|
+| Nodes | 504 (`lux[001-504]`) | 16 max |
+| Partition | `batch` | `lux` |
+| Storage | Lustre `/lustre/orion/ven136/...`; NFS `/ccs/proj/ven136` is 50 GB | `/shared/<user>` NFS |
+| Egress | **None** — mandatory proxy `http://proxy.ccs.ornl.gov:3128` on login node | Direct or proxy |
+| Node-local scratch | `/tmp` only (`/scratch` absent) | varies |
+| Fabric | `mlx5_0`, Lustre/kfi — **undetermined for RCCL** | Pensando/ionic, ANP plugin |
+| DCSWEAP-4502 baselines | Not yet measured (in progress) | Validated 1–8 nodes (2026-05–06) |
+
+**Lessons for ORNL Lux:**
+
+1. **Pre-clone on login node** — compute nodes have no DNS/egress. Clone git repos and download HF weights on the login node (with proxy), bind-mount into the container. Do not rely on in-container `git clone` or `hf_hub_download` unless proxy env vars are passed through (`PROXY_ENVS` pattern in `sbatch_infer_amd.sh`).
+2. **Use Lustre proj-shared for artifacts** — SIF (~10 GB), overlay (4 GB), ADIOS datasets (~53 GB) do not fit NFS project quota.
+3. **`SCRATCH_LOCAL=/tmp`** — never default to `/scratch` on ORNL Lux.
+4. **Do not copy Vultr multi-node settings** — `rccl_anp_plugin`, `libionic_path`, ob1/tcp on ionic mgmt NIC are Vultr-specific. Discover ORNL Lux fabric before multi-node training.
+5. **HydraGNN inference repo** — use branch `Predictive_GFM_2024` at `$AI4S_SHARED_DIR/models/HydraGNN/code/HydraGNN-infer` (SHA `5dcc175f...`), not the training SHA in the overlay.
+6. **Single-process HydraGNN inference** — `run_inference.sh` sets `mpi4py.rc.initialize = False` before importing hydragnn. Without this, Apptainer jobs that are not launched under `srun --mpi=pmix` abort with `MPI_Init_thread` / OPAL unreachable.
+7. **HydraGNN MPI on ORNL Lux (Shelby config-bundle)** — Do **not** use spack `openmpi`/`ucx` for ADIOS2. **Gold standard:** `slockhar/config-bundle` + from-source stack at `slockhar/mpi-build-tests/opt/`. Bind Lustre MPI at **`/opt/lux-mpi/`** with **`OPAL_PREFIX`**; bind host **`/lib64/libfabric.so.1`** (+ libnl/EFA) over the SIF path. Helper: `lux_mpi_env.sh`. **Multi-node Apptainer:** ionic **verbs RC is not init-able inside the SIF** even with sysfs binds — default **`HG_LUX_MPI_NIC_MODE=tcp`** (`UCX_NET_DEVICES=ai${SLURM_LOCALID}`, `UCX_TLS=…,tcp`, per-rank `ROCR_VISIBLE_DEVICES`). Bind `/sys/class/infiniband`, `/dev/infiniband`, `/sys/class/net` only; **do not** bind host `libibverbs` in TCP mode (incomplete provider set aborts MPI). For bare-metal / no-SIF runs use `HG_LUX_MPI_NIC_MODE=verbs` + `ionic_N:1` pinning. **RCCL:** pass Pensando `NCCL_IB_HCA=ionic_0,…,ionic_7`, `NCCL_SOCKET_IFNAME=bond0` via `lux_mpi_rccl_multinode_envs`. **Two-step build:** `sbatch sbatch_build_adios2_amd.sh` then `sbatch sbatch_build_overlay_amd.sh`. **Datasets:** `weights/` symlinks into `cph161`/`lrn070` world-shared — bind roots via `hg_dataset_binds.sh` (no copy). **Orion ADIOS schema:** legacy `ANI1x-v2` on `cph161` lacks MLIP fields (`pbc`, `forces`, …); use **`lrn070/.../ANI1x-v3.bp`** (~46 GB, MLIP-ready) via symlink `weights/ANI1x-v2.bp`. `Alexandria-v3` on `lrn070` is MLIP-ready but lacks `graph_attr`. `sbatch_train_amd.sh` defaults `HG_DISABLE_GRAPH_ATTR=1` and intersects ADIOS keys. Full recipe: `HG_DATASETS=ANI1x,Alexandria`.
+8. **ADIOS datasets on Orion Lustre** — empty placeholder dirs exist under `/lustre/orion/world-shared/lrn070/HydraGNN-sc25-comm/*-v2.bp`. **Usable MLIP stores on `lrn070`:** symlink `ANI1x-v2.bp` → `.../HydraGNN-sc25-comm/ANI1x-v3.bp` (~46 GB); symlink `Alexandria-v2.bp` → `.../Alexandria-v3.bp` (~50 GB). Do **not** use `cph161/.../ANI1x-v2.bp` for GFM MLIP training (legacy `force` not `forces`, no `pbc`/`cell`).
+9. **ORBIT-2 on ORNL Lux** — same Shelby MPI path as HydraGNN (`lux_mpi_env.sh` in `sbatch_infer_amd.sh` / `sbatch_train_amd.sh`). Bind **`$AI4S_SHARED_DIR/models/ORBIT-2`** when checkpoints or outputs use Lustre absolute paths inside the container. Overlay build: **`mkdir -p "$STAGE_DIR"`** before Apptainer bind (read-only parent fails). Node-health probe: treat **`/ccs/home/$USER`** as valid home (not only `/home/$USER`). Do not copy Vultr ionic ANP RCCL env to ORNL.
+
+**Proxy passthrough pattern** (append to every `apptainer exec` when runtime pip/git/HF is possible):
+
+```bash
+PROXY_ENVS=()
+for k in https_proxy http_proxy HTTPS_PROXY HTTP_PROXY no_proxy NO_PROXY; do
+  v="${!k:-}"
+  [[ -n "$v" ]] && PROXY_ENVS+=( --env "${k}=${v}" )
+done
+# ... apptainer exec ... "${PROXY_ENVS[@]}" ...
+```
+
+Apply to HydraGNN `sbatch_infer_amd.sh` (done), and ORBIT-2 / StormCast sbatch scripts that pip-install or HF-download inside compute jobs on no-egress clusters.
+
 ## Auto-discovery: use `$HOME`, never hardcode `/home`
 
 When searching for SIF files, overlays, or repo clones, always use `$HOME` as the search root — not `/home`. Many HPC clusters mount home directories under non-standard prefixes, so `find /home ...` misses everything. The same applies to overlay and upstream-repo searches.

@@ -184,7 +184,7 @@ if [[ "$ORBIT2_SKIP_NODE_HEALTH_PROBE" != "1" ]]; then
        --cpus-per-task=1 --gres=none --output="${_PROBE_OUT}" --error="${_PROBE_OUT}" \
     bash -c '
       H=$(hostname)
-      HM=$(test -d "/home/$USER" 2>/dev/null && echo OK || echo FAIL)
+      HM=$(test -d "/home/$USER" -o -d "/ccs/home/$USER" 2>/dev/null && echo OK || echo FAIL)
       SH=$(test -d "'"$AI4S_SHARED_DIR"'" 2>/dev/null && echo OK || echo FAIL)
       SIF_CHECK=$(test -f "'"$ORBIT2_SIF"'" 2>/dev/null && echo OK || echo FAIL)
       DATA_CHECK=$(test -d "'"$ORBIT2_DATA_ROOT"'" 2>/dev/null && echo OK || echo FAIL)
@@ -221,6 +221,14 @@ set -euo pipefail
 source /opt/venv/bin/activate
 echo "[rank \$SLURM_PROCID / \$SLURM_NTASKS] GPU \$SLURM_LOCALID on \$(hostname)"
 export PYTHONPATH="/opt/orbit2-pkgs:/orbit2/src:/orbit2:\${PYTHONPATH:-}"
+OMPI="\${HG_OMPI_DIR:-/opt/lux-mpi/openmpi}"
+if [[ -n "\${HG_MPI_EXTRA_LDPATH:-}" ]]; then
+  export LD_LIBRARY_PATH="/opt/orbit2-pkgs:\${OMPI}/lib:\${HG_MPI_EXTRA_LDPATH}:/opt/venv/lib/python3.12/site-packages/torch/lib:\${LD_LIBRARY_PATH:-}"
+else
+  export LD_LIBRARY_PATH="/opt/orbit2-pkgs:\${OMPI}/lib:/opt/venv/lib/python3.12/site-packages/torch/lib:\${LD_LIBRARY_PATH:-}"
+fi
+[[ -n "\${MPI4PY_LIBMPI:-}" ]] && export MPI4PY_LIBMPI
+[[ -n "\${HG_LUX_OPAL_PREFIX:-}" ]] && export OPAL_PREFIX="\${HG_LUX_OPAL_PREFIX}"
 export OMP_NUM_THREADS="\${SLURM_CPUS_PER_TASK:-7}"
 export MIOPEN_DISABLE_CACHE=1
 export MIOPEN_USER_DB_PATH="\${TMPDIR:-/tmp}/orbit2-miopen-\${SLURM_JOB_ID:-\$\$}-\${SLURM_PROCID:-0}"
@@ -270,10 +278,28 @@ chmod +x "$RANK_SCRIPT"
 
 CONFIG_BIND="$(realpath "$JOB_CONFIG"):/config/config.yaml"
 
-# Multi-node RCCL/MPI (from .cluster-config.yaml)
+# MPI / RCCL — ORNL Lux: Shelby stack (lux_mpi_env.sh); Vultr Lux: /opt/ompi + ionic ANP (multi-node).
+LUX_MPI_SH="${SCRIPT_DIR}/../../../../material_science/models/HydraGNN/examples/lux_mpi_env.sh"
+MPI_BINDS=()
+MPI_RUNTIME_ENVS=()
+LUX_MPI_MULTINODE_BINDS=()
 RCCL_MULTINODE_ENVS=()
-MPI_MULTINODE_ENVS=()
-if [[ "$NODES" -gt 1 ]]; then
+LUX_RCCL_MULTINODE_ENVS=()
+export HG_LUX_MPI_NIC_MODE="${ORBIT2_LUX_MPI_NIC_MODE:-tcp}"
+if [[ -f "$LUX_MPI_SH" ]]; then
+  # shellcheck source=../../../../material_science/models/HydraGNN/examples/lux_mpi_env.sh
+  source "$LUX_MPI_SH"
+fi
+if lux_mpi_should_use 2>/dev/null && lux_mpi_setup_binds && lux_mpi_runtime_envs; then
+  MPI_BINDS=( "${MPI_BINDS[@]}" )
+  MPI_RUNTIME_ENVS=( "${LUX_MPI_RUNTIME_ENVS[@]}" )
+  lux_mpi_multinode_apptainer_binds
+  if lux_mpi_rccl_multinode_envs; then
+    LUX_RCCL_MULTINODE_ENVS=( "${LUX_RCCL_MULTINODE_ENVS[@]}" )
+    echo "  Multi-node RCCL: ORNL Lux Pensando (lux_mpi_rccl_multinode_envs)"
+  fi
+  echo "  MPI stack: ORNL Lux Shelby (lux_mpi_env.sh)"
+elif [[ "$NODES" -gt 1 ]]; then
   _CLUSTER_CFG="${SCRIPT_DIR}/../../../../.cluster-config.yaml"
   if [[ -f "$_CLUSTER_CFG" ]]; then
     _yaml_get() { grep "^  $1:" "$_CLUSTER_CFG" 2>/dev/null | sed 's/.*: *"\?\([^"]*\)"\?.*/\1/' | grep -v '^$'; }
@@ -287,7 +313,8 @@ if [[ "$NODES" -gt 1 ]]; then
   : "${RCCL_ANP_PLUGIN:?Set RCCL_ANP_PLUGIN or configure network.rccl_anp_plugin}"
   : "${LIBIONIC_PATH:?Set LIBIONIC_PATH or configure network.libionic_path}"
 
-  MPI_MULTINODE_ENVS=(
+  MPI_BINDS=( --bind /opt/ompi:/opt/ompi:ro )
+  MPI_RUNTIME_ENVS=(
     --env OMPI_MCA_pml=ob1
     --env OMPI_MCA_btl=tcp,self
     --env OMPI_MCA_btl_tcp_if_include="$NCCL_SOCKET_IFNAME"
@@ -316,14 +343,26 @@ if [[ "$NODES" -gt 1 ]]; then
     --env NCCL_DMABUF_ENABLE=1
     --env NCCL_DEBUG="${NCCL_DEBUG:-WARN}"
   )
-  echo "  Multi-node RCCL enabled (NCCL_IB_HCA=$NCCL_IB_HCA)"
+  echo "  Multi-node RCCL: Vultr Lux ANP (NCCL_IB_HCA=$NCCL_IB_HCA)"
+elif [[ -x /opt/ompi/bin/mpicc ]]; then
+  MPI_BINDS=( --bind /opt/ompi:/opt/ompi:ro )
+  echo "  MPI stack: /opt/ompi (single-node)"
+else
+  echo "ERROR: no OpenMPI baseline found (ORNL Lux: Shelby bundle; Vultr: /opt/ompi)" >&2
+  exit 2
 fi
+OPT_MPI_ENVS=()
+for k in MPI4PY_LIBMPI HG_MPI_EXTRA_LDPATH HG_OMPI_DIR HG_LUX_OPAL_PREFIX OPAL_PREFIX; do
+  v="${!k:-}"
+  [[ -n "$v" ]] && OPT_MPI_ENVS+=( --env "${k}=${v}" )
+done
 
 echo "--- Launching training: $TOTAL_RANKS ranks across $NODES nodes ---"
 srun --mpi=pmix apptainer exec \
     --rocm \
     --overlay "${ORBIT2_OVERLAY}:ro" \
-    --bind "/opt/ompi:/opt/ompi:ro" \
+    "${MPI_BINDS[@]}" \
+    "${LUX_MPI_MULTINODE_BINDS[@]}" \
     --bind "$ORBIT2_ROOT":/orbit2 \
     --bind "$SCRIPT_DIR":/examples \
     --bind "$(dirname "$RANK_SCRIPT"):$(dirname "$RANK_SCRIPT")" \
@@ -334,10 +373,12 @@ srun --mpi=pmix apptainer exec \
     --env MASTER_PORT="$MASTER_PORT" \
     --env PMIX_MCA_gds=hash \
     --env PMIX_MCA_psec=native \
+    --env HG_LUX_MPI_NIC_MODE="${HG_LUX_MPI_NIC_MODE:-tcp}" \
     --env PYTHONPATH="/opt/orbit2-pkgs:/orbit2/src:/orbit2" \
-    --env LD_LIBRARY_PATH=/opt/venv/lib/python3.12/site-packages/torch/lib \
-    "${MPI_MULTINODE_ENVS[@]}" \
+    "${MPI_RUNTIME_ENVS[@]}" \
+    "${OPT_MPI_ENVS[@]}" \
     "${RCCL_MULTINODE_ENVS[@]}" \
+    "${LUX_RCCL_MULTINODE_ENVS[@]}" \
     "$ORBIT2_SIF" \
     bash "$RANK_SCRIPT"
 

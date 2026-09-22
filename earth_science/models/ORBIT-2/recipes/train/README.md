@@ -37,6 +37,30 @@ The table below is a **weak-scaling** sweep of the Bayes-CAST **EDM** model on A
 
 Use `pretrain:` / `checkpoint:` in the YAML as described in the upstream "Hyperparameter Configuration" section when continuing or fine-tuning.
 
+## Studio examples on institutional AMD clusters (ORNL Lux)
+
+For **ORNL Lux** (504-node OLCF system, gfx950 MI355X), use [`../../examples/sbatch_train_amd.sh`](../../examples/sbatch_train_amd.sh) with Lustre staging — not Vultr Lux Pensando/ionic ANP settings.
+
+| Step | ORNL Lux |
+|------|----------|
+| MPI | Shelby stack via `material_science/models/HydraGNN/examples/lux_mpi_env.sh`; `srun --mpi=pmix` |
+| Overlay | `sbatch build_overlay_amd.sh` once (build on `$TMPDIR`, copy to Lustre) |
+| Synthetic smoke | `ORBIT2_CONFIG_TEMPLATE=interm_8m_synthetic_train.yaml`, `ORBIT2_SYNTH_DATA_ROOT` + `ORBIT2_DATA_ROOT` → staged `data/synthetic/` |
+| Parallelism | 1×8 GPU: `fsdp=8`, `simple_ddp=1` (auto-rendered) |
+| Caps | `ORBIT2_MAX_EPOCH=3`, `ORBIT2_MAX_BATCHES=5`, `ORBIT2_DATA_TYPE=bfloat16` |
+
+```bash
+export AI4S_SHARED_DIR=/lustre/orion/ven136/proj-shared/<user>/ai4science
+export ORBIT2_DATA_ROOT=$AI4S_SHARED_DIR/models/ORBIT-2/data/synthetic
+export ORBIT2_SYNTH_DATA_ROOT=$AI4S_SHARED_DIR/models/ORBIT-2/data/synthetic
+export ORBIT2_CONFIG_TEMPLATE=interm_8m_synthetic_train.yaml
+export ORBIT2_MAX_EPOCH=3 ORBIT2_MAX_BATCHES=5 ORBIT2_BATCH_SIZE=2
+sbatch --partition=batch --account=<account> --time=02:00:00 \
+  earth_science/models/ORBIT-2/examples/sbatch_train_amd.sh
+```
+
+**Node-health probe:** `sbatch_train_amd.sh` checks `/home/$USER` **or** `/ccs/home/$USER` (ORNL uses `/ccs/home`). Do not copy Vultr `rccl_anp_plugin` / `libionic_path` into ORNL submits.
+
 ## Disclaimer
 
 AI4Science Studio does **not** grant OLCF access, storage, or software support. For policies, queues, and project requests, use **official OLCF documentation** and the user assistance process linked from [../compute/README.md](../compute/README.md).

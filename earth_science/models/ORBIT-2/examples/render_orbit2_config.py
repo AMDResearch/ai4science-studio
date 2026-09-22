@@ -122,6 +122,10 @@ def main() -> int:
     num_workers = int(os.environ.get("ORBIT2_NUM_WORKERS", "2"))
 
     text = template.read_text(encoding="utf-8")
+    synth_data_root = os.environ.get("ORBIT2_SYNTH_DATA_ROOT")
+    if synth_data_root is None and "__SYNTH_DATA_DIR__" in text:
+        synth_data_root = str(data_path.parent if data_path.name == "low_res" else data_path)
+
     replacements = {
         "__DATA_ROOT__": str(data_path),
         "__FSDP__": str(fsdp),
@@ -132,6 +136,8 @@ def main() -> int:
         "__ERA5_1_SPATIAL_RES__": str(era5_1_spatial),
         "__NUM_WORKERS__": str(num_workers),
     }
+    if synth_data_root is not None:
+        replacements["__SYNTH_DATA_DIR__"] = str(Path(synth_data_root).resolve())
     for key, val in replacements.items():
         text = text.replace(key, val)
 
