@@ -183,13 +183,22 @@ lux_mpi_multinode_apptainer_binds() {
 # Sources (aligned 2026-09): mswu/rccl-tests-scripts/rccl-pensando-env.sh (native
 # IB, not ANP — ANP blocked on ORNL rdma-core 61); sidconde Primus env.lux.sh
 # (bond0 OOB, ionic_0..7, GID index 1). Leave NCCL_NET_PLUGIN unset.
+#
+# CRITICAL: Apptainer --env KEY=a,b,c truncates at the first comma. Comma-valued
+# fabric vars MUST be exported as APPTAINERENV_* (Sidafa Primus container_run.sh).
 lux_mpi_rccl_multinode_envs() {
   LUX_RCCL_MULTINODE_ENVS=()
-  [[ "${NODES:-1}" -gt 1 ]] || return 0
+  [[ "${NODES:-1}" -gt 1 ]] || return 1
+
+  local _hca="${NCCL_IB_HCA:-ionic_0,ionic_1,ionic_2,ionic_3,ionic_4,ionic_5,ionic_6,ionic_7}"
+  local _sock="${NCCL_SOCKET_IFNAME:-bond0}"
+
+  # Comma-safe path into the container
+  export APPTAINERENV_NCCL_IB_HCA="${_hca}"
+  export APPTAINERENV_NCCL_SOCKET_IFNAME="${_sock}"
+  export APPTAINERENV_GLOO_SOCKET_IFNAME="${GLOO_SOCKET_IFNAME:-${_sock}}"
 
   LUX_RCCL_MULTINODE_ENVS=(
-    --env NCCL_SOCKET_IFNAME="${NCCL_SOCKET_IFNAME:-bond0}"
-    --env NCCL_IB_HCA="${NCCL_IB_HCA:-ionic_0,ionic_1,ionic_2,ionic_3,ionic_4,ionic_5,ionic_6,ionic_7}"
     --env NCCL_IB_GID_INDEX="${NCCL_IB_GID_INDEX:-1}"
     --env NCCL_GDR_FLUSH_DISABLE=1
     --env RCCL_GDR_FLUSH_GPU_MEM_NO_RELAXED_ORDERING=0
@@ -204,6 +213,8 @@ lux_mpi_rccl_multinode_envs() {
     --env RCCL_LL128_FORCE_ENABLE=1
     --env IONIC_LOCKFREE=all
     --env RCCL_AINIC_ROCE=1
+    --env USING_AINIC=1
+    --env RCCL_USE_AMD_SMI_LIB="${RCCL_USE_AMD_SMI_LIB:-1}"
     --env NCCL_DEBUG="${NCCL_DEBUG:-WARN}"
   )
   return 0
