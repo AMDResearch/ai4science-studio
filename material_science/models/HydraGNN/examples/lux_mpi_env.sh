@@ -180,7 +180,9 @@ lux_mpi_multinode_apptainer_binds() {
 }
 
 # RCCL env for PyTorch DDP across nodes on ORNL Lux Pensando ionic fabric.
-# Source: slockhar/rccl-tests-scripts/rccl-pensando-env.sh (native verbs, not ANP).
+# Sources (aligned 2026-09): mswu/rccl-tests-scripts/rccl-pensando-env.sh (native
+# IB, not ANP — ANP blocked on ORNL rdma-core 61); sidconde Primus env.lux.sh
+# (bond0 OOB, ionic_0..7, GID index 1). Leave NCCL_NET_PLUGIN unset.
 lux_mpi_rccl_multinode_envs() {
   LUX_RCCL_MULTINODE_ENVS=()
   [[ "${NODES:-1}" -gt 1 ]] || return 0
