@@ -30,7 +30,8 @@
 #                        If unset, uses launch_diffusion.sh at repo root or examples/ when present.
 #   ORBIT2_OUTPUT_DIR    Job output dir (default: .../outputs/train/<jobid>)
 #   TORCH_NCCL_HIGH_PRIORITY / GPU_MAX_HW_QUEUES — RCCL tuning (default: 1 / 2)
-#   ORBIT2_SKIP_NODE_HEALTH_PROBE=1 — skip mount probe (not recommended)
+#   ORBIT2_STAGE_LOCAL   Stage SIF+overlay to node-local /tmp before srun (default 1;
+#                        Sidafa Primus pattern — avoids Lustre fuse2fs starve on ORNL Lux)
 
 #SBATCH --job-name=orbit2-train
 #SBATCH --partition=YOUR_PARTITION_HERE
@@ -50,6 +51,11 @@ if [[ -n "${SLURM_JOB_ID:-}" ]]; then
   SCRIPT_DIR=$(cd "$(dirname "$_ORIG_CMD")" && pwd)
 else
   SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+fi
+# ORNL: prefer /ccs/home over /autofs/... (same inode; avoids autofs paths in binds/logs).
+if [[ "$SCRIPT_DIR" == /autofs/nccs-svm1_home2/* ]]; then
+  _CCS_SCRIPT_DIR="/ccs/home/${SCRIPT_DIR#/autofs/nccs-svm1_home2/}"
+  [[ -d "$_CCS_SCRIPT_DIR" ]] && SCRIPT_DIR="$_CCS_SCRIPT_DIR"
 fi
 
 ORBIT2_BASE="${AI4S_SHARED_DIR:?AI4S_SHARED_DIR must be set}/models/ORBIT-2"
@@ -290,6 +296,9 @@ if [[ -f "$LUX_MPI_SH" ]]; then
   # shellcheck source=../../../../material_science/models/HydraGNN/examples/lux_mpi_env.sh
   source "$LUX_MPI_SH"
 fi
+if lux_mpi_should_use 2>/dev/null; then
+  lux_mpi_stage_local || true
+fi
 if lux_mpi_should_use 2>/dev/null && lux_mpi_setup_binds && lux_mpi_runtime_envs; then
   MPI_BINDS=( "${MPI_BINDS[@]}" )
   MPI_RUNTIME_ENVS=( "${LUX_MPI_RUNTIME_ENVS[@]}" )
@@ -357,10 +366,46 @@ for k in MPI4PY_LIBMPI HG_MPI_EXTRA_LDPATH HG_OMPI_DIR HG_LUX_OPAL_PREFIX OPAL_P
   [[ -n "$v" ]] && OPT_MPI_ENVS+=( --env "${k}=${v}" )
 done
 
+# Stage large Apptainer artifacts to node-local /tmp (Sidafa Primus pattern on
+# ORNL Lux). Concurrent fuse2fs mounts / SIF opens against Lustre from NGPU ranks
+# starve startup. Override: ORBIT2_STAGE_LOCAL=0
+ORBIT2_OVERLAY_USE="$ORBIT2_OVERLAY"
+ORBIT2_SIF_USE="$ORBIT2_SIF"
+if [[ "${ORBIT2_STAGE_LOCAL:-1}" != "0" ]]; then
+  _NODE_TMP="${ORBIT2_NODE_TMP:-/tmp/orbit2-${SLURM_JOB_ID}}"
+  echo "--- Staging SIF + overlay to ${_NODE_TMP} (1 task/node, Sidafa-style) ---"
+  srun -N "$NODES" --ntasks-per-node=1 --cpus-per-task=4 --gres=none \
+    bash -c '
+      set -euo pipefail
+      dest="'"$_NODE_TMP"'"
+      mkdir -p "$dest"
+      stage_file() {
+        local src="$1" dst="$2" label="$3"
+        local want have
+        want=$(stat -c %s "$src")
+        have=$(stat -c %s "$dst" 2>/dev/null || echo 0)
+        if [[ "$have" != "$want" ]]; then
+          echo "  $(hostname): staging $label -> $dst ($((want/1024/1024)) MB)"
+          cp -f "$src" "${dst}.partial"
+          mv -f "${dst}.partial" "$dst"
+        else
+          echo "  $(hostname): $label already staged"
+        fi
+      }
+      stage_file "'"$ORBIT2_SIF"'" "$dest/$(basename "'"$ORBIT2_SIF"'")" sif
+      stage_file "'"$ORBIT2_OVERLAY"'" "$dest/orbit2-overlay.img" overlay
+      echo "  $(hostname): stage ready"
+    '
+  ORBIT2_SIF_USE="${_NODE_TMP}/$(basename "$ORBIT2_SIF")"
+  ORBIT2_OVERLAY_USE="${_NODE_TMP}/orbit2-overlay.img"
+fi
+
 echo "--- Launching training: $TOTAL_RANKS ranks across $NODES nodes ---"
+echo "  Runtime SIF  : $ORBIT2_SIF_USE"
+echo "  Runtime OV   : $ORBIT2_OVERLAY_USE"
 srun --mpi=pmix apptainer exec \
     --rocm \
-    --overlay "${ORBIT2_OVERLAY}:ro" \
+    --overlay "${ORBIT2_OVERLAY_USE}:ro" \
     "${MPI_BINDS[@]}" \
     "${LUX_MPI_MULTINODE_BINDS[@]}" \
     --bind "$ORBIT2_ROOT":/orbit2 \
@@ -379,7 +424,7 @@ srun --mpi=pmix apptainer exec \
     "${OPT_MPI_ENVS[@]}" \
     "${RCCL_MULTINODE_ENVS[@]}" \
     "${LUX_RCCL_MULTINODE_ENVS[@]}" \
-    "$ORBIT2_SIF" \
+    "$ORBIT2_SIF_USE" \
     bash "$RANK_SCRIPT"
 
 echo ""

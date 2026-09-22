@@ -117,6 +117,9 @@ if [[ -f "$LUX_MPI_SH" ]]; then
   # shellcheck source=../../../../material_science/models/HydraGNN/examples/lux_mpi_env.sh
   source "$LUX_MPI_SH"
 fi
+if lux_mpi_should_use 2>/dev/null; then
+  lux_mpi_stage_local || true
+fi
 if lux_mpi_should_use 2>/dev/null && lux_mpi_setup_binds && lux_mpi_runtime_envs; then
   MPI_BINDS=( "${MPI_BINDS[@]}" )
   MPI_RUNTIME_ENVS=( "${LUX_MPI_RUNTIME_ENVS[@]}" )
@@ -386,6 +389,40 @@ RANKEOF
 
   echo ""
   NTASKS="${SLURM_NTASKS:-${SLURM_STEP_NUM_TASKS:-1}}"
+  # Sidafa-style: stage SIF + overlay to node-local /tmp (Lustre fuse2fs starves multi-rank).
+  ORBIT2_SIF_USE="$ORBIT2_SIF"
+  if [[ "${ORBIT2_STAGE_LOCAL:-1}" != "0" ]]; then
+    _NODE_TMP="${ORBIT2_NODE_TMP:-/tmp/orbit2-${SLURM_JOB_ID}}"
+    echo "--- Staging SIF + overlay to ${_NODE_TMP} (1 task/node) ---"
+    srun -N "${SLURM_JOB_NUM_NODES:-1}" --ntasks-per-node=1 --cpus-per-task=4 --gres=none \
+      bash -c '
+        set -euo pipefail
+        dest="'"$_NODE_TMP"'"
+        mkdir -p "$dest"
+        stage_file() {
+          local src="$1" dst="$2" label="$3"
+          local want have
+          want=$(stat -c %s "$src")
+          have=$(stat -c %s "$dst" 2>/dev/null || echo 0)
+          if [[ "$have" != "$want" ]]; then
+            echo "  $(hostname): staging $label -> $dst ($((want/1024/1024)) MB)"
+            cp -f "$src" "${dst}.partial"
+            mv -f "${dst}.partial" "$dst"
+          else
+            echo "  $(hostname): $label already staged"
+          fi
+        }
+        stage_file "'"$ORBIT2_SIF"'" "$dest/$(basename "'"$ORBIT2_SIF"'")" sif
+        if [[ -n "'"${ORBIT2_OVERLAY:-}"'" && -f "'"${ORBIT2_OVERLAY:-}"'" ]]; then
+          stage_file "'"$ORBIT2_OVERLAY"'" "$dest/orbit2-overlay.img" overlay
+        fi
+        echo "  $(hostname): stage ready"
+      '
+    ORBIT2_SIF_USE="${_NODE_TMP}/$(basename "$ORBIT2_SIF")"
+    if [[ ${#OVERLAY_ARG[@]} -gt 0 ]]; then
+      OVERLAY_ARG=(--overlay "${_NODE_TMP}/orbit2-overlay.img:ro")
+    fi
+  fi
   echo "--- Phase 2: ${NTASKS}-way distributed visualize (srun --mpi=pmix) ---"
   srun --mpi=pmix apptainer exec \
       --rocm \
@@ -406,7 +443,7 @@ RANKEOF
       "${MPI_RUNTIME_ENVS[@]}" \
       "${OPT_MPI_ENVS[@]}" \
       "${PROXY_ENVS[@]}" \
-      "$ORBIT2_SIF" \
+      "$ORBIT2_SIF_USE" \
       bash "$RANK_SCRIPT"
 
 # ---------------------------------------------------------------------------
