@@ -43,19 +43,19 @@ For **ORNL Lux** (504-node OLCF system, gfx950 MI355X), use [`../../examples/sba
 
 | Step | ORNL Lux |
 |------|----------|
-| MPI | Shelby stack via `material_science/models/HydraGNN/examples/lux_mpi_env.sh`; `srun --mpi=pmix` |
+| MPI | Lux system `openmpi/5.0.10` via `material_science/models/HydraGNN/examples/lux_mpi_env.sh`; ob1/TCP; `srun --mpi=pmix` |
 | Overlay | `sbatch build_overlay_amd.sh` once (build on `$TMPDIR`, copy to Lustre) |
 | Synthetic smoke | `ORBIT2_CONFIG_TEMPLATE=interm_8m_synthetic_train.yaml`, `ORBIT2_SYNTH_DATA_ROOT` + `ORBIT2_DATA_ROOT` → staged `data/synthetic/` |
 | Parallelism | 1×8 GPU: `fsdp=8`, `simple_ddp=1` (auto-rendered) |
 | Caps | `ORBIT2_MAX_EPOCH=3`, `ORBIT2_MAX_BATCHES=5`, `ORBIT2_DATA_TYPE=bfloat16` |
 
 ```bash
-export AI4S_SHARED_DIR=/lustre/orion/ven136/proj-shared/<user>/ai4science
+export AI4S_SHARED_DIR=/path/to/shared
 export ORBIT2_DATA_ROOT=$AI4S_SHARED_DIR/models/ORBIT-2/data/synthetic
 export ORBIT2_SYNTH_DATA_ROOT=$AI4S_SHARED_DIR/models/ORBIT-2/data/synthetic
 export ORBIT2_CONFIG_TEMPLATE=interm_8m_synthetic_train.yaml
 export ORBIT2_MAX_EPOCH=3 ORBIT2_MAX_BATCHES=5 ORBIT2_BATCH_SIZE=2
-sbatch --partition=batch --account=<account> --time=02:00:00 \
+sbatch --partition=YOUR_PARTITION --account=YOUR_ACCOUNT --time=02:00:00 \
   earth_science/models/ORBIT-2/examples/sbatch_train_amd.sh
 ```
 

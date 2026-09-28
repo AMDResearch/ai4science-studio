@@ -68,7 +68,7 @@ fi
 
 # shellcheck source=lux_mpi_env.sh
 source "${SCRIPT_DIR}/lux_mpi_env.sh"
-HG_USE_SHELBY_MPI=0
+HG_USE_SYSTEM_MPI=0
 
 # ---------------------------------------------------------------------------
 # Paths and configuration
@@ -114,13 +114,13 @@ done
 # ---------------------------------------------------------------------------
 # OpenMPI bind-mount (overlay adios2 links against host MPI)
 #   Vultr Lux: /opt/ompi
-#   ORNL Lux: Shelby config-bundle stack (lux_mpi_env.sh) — default
+#   ORNL Lux: system openmpi/5.0.10 module over ob1/TCP
 # ---------------------------------------------------------------------------
 MPI_BINDS=()
 MPI4PY_LIBMPI=""
 HG_MPI_EXTRA_LDPATH=""
 if [[ -z "${HG_OMPI_DIR:-}" ]] && lux_mpi_setup; then
-  HG_USE_SHELBY_MPI=1
+  HG_USE_SYSTEM_MPI=1
   MPI_BINDS=( "${MPI_BINDS[@]}" )
 elif [[ -z "${HG_OMPI_DIR:-}" ]]; then
   if [[ -x /opt/ompi/bin/mpicc ]]; then
@@ -150,7 +150,7 @@ elif [[ -z "${HG_OMPI_DIR:-}" ]]; then
   fi
 fi
 if [[ -z "${HG_OMPI_DIR:-}" || ${#MPI_BINDS[@]} -eq 0 ]]; then
-  echo "ERROR: OpenMPI not found for ADIOS MPI. On ORNL Lux use Shelby stack (lux_mpi_env.sh)." >&2
+  echo "ERROR: OpenMPI not found for ADIOS MPI. On ORNL Lux load the system OpenMPI module." >&2
   exit 2
 fi
 
@@ -159,8 +159,6 @@ fi
 HG_HYDRAGNN_SHA="${HG_HYDRAGNN_SHA:-2fb0bd0157e3c85a74f9841887155095bd163303}"
 # Orion world-shared ADIOS stores (Alexandria-v3, legacy ANI1x) lack graph_attr.
 export HG_DISABLE_GRAPH_ATTR="${HG_DISABLE_GRAPH_ATTR:-1}"
-# Apptainer multi-node: verbs RC unavailable in SIF — default to TCP over ai* netdevs.
-export HG_LUX_MPI_NIC_MODE="${HG_LUX_MPI_NIC_MODE:-tcp}"
 if [[ ! -d "${HG_REPO_DIR}/examples/multidataset_hpo_sc26" ]]; then
   echo "--- Cloning HydraGNN (pinned SHA: ${HG_HYDRAGNN_SHA}) ---"
   PROXY_ENVS=()
@@ -201,7 +199,7 @@ hg_setup_dataset_binds
 # Multi-node: expose host RDMA/RoCE sysfs to UCX inside Apptainer.
 LUX_MPI_MULTINODE_BINDS=()
 LUX_RCCL_MULTINODE_ENVS=()
-if [[ "$NODES" -gt 1 && "${HG_USE_SHELBY_MPI}" == 1 ]]; then
+if [[ "$NODES" -gt 1 && "${HG_USE_SYSTEM_MPI}" == 1 ]]; then
   lux_mpi_multinode_apptainer_binds
   lux_mpi_rccl_multinode_envs
   for _bind in "${LUX_MPI_MULTINODE_BINDS[@]}"; do
@@ -293,15 +291,11 @@ export HYDRAGNN_TRACE_LEVEL="${HYDRAGNN_TRACE_LEVEL:-1}"
 # Required for RCCL stability on MI355X
 export HSA_NO_SCRATCH_RECLAIM=1
 
-# ORNL Lux multi-node: per-rank GPU + NIC pinning (Shelby UCX stack).
+# Multi-node: pin one GPU per rank. MPI uses ob1/TCP on bond0; RCCL selects
+# ionic HCAs independently through NCCL_IB_HCA.
 if [[ "${SLURM_JOB_NUM_NODES:-1}" -gt 1 ]]; then
   _local_rank="${SLURM_LOCALID:-${OMPI_COMM_WORLD_LOCAL_RANK:-0}}"
   export ROCR_VISIBLE_DEVICES="${_local_rank}"
-  if [[ "${HG_LUX_MPI_NIC_MODE:-tcp}" == "tcp" ]]; then
-    export UCX_NET_DEVICES="ai${_local_rank}"
-  else
-    export UCX_NET_DEVICES="ionic_${_local_rank}:1"
-  fi
 fi
 
 cd "$HG_OUTPUT_DIR"
@@ -380,15 +374,14 @@ chmod +x "$RANK_SCRIPT"
 # ---------------------------------------------------------------------------
 RCCL_MULTINODE_ENVS=()
 MPI_MULTINODE_ENVS=()
-if [[ "${HG_USE_SHELBY_MPI}" == 1 ]]; then
+if [[ "${HG_USE_SYSTEM_MPI}" == 1 ]]; then
   if lux_mpi_runtime_envs; then
     MPI_MULTINODE_ENVS=( "${LUX_MPI_RUNTIME_ENVS[@]}" )
     if [[ "$NODES" -gt 1 ]]; then
-      echo "  Multi-node MPI: Shelby config-bundle (${HG_LUX_MPI_BUNDLE_MODE}, UCX PML)"
-      echo "  Config bundle : ${HG_LUX_CONFIG_BUNDLE}"
+      echo "  Multi-node MPI: system openmpi/5.0.10 (ob1/tcp)"
     fi
   else
-    echo "WARNING: config-bundle missing — MPI tuning not applied" >&2
+    echo "WARNING: system OpenMPI module unavailable — MPI tuning not applied" >&2
   fi
 elif [[ "$NODES" -gt 1 ]]; then
   # Vultr Lux: ob1/tcp + RCCL ANP over ionic fabric
@@ -460,10 +453,29 @@ for k in HYDRAGNN_MAX_NUM_BATCH HYDRAGNN_NUM_WORKERS HYDRAGNN_PERSISTENT_WORKERS
   fi
 done
 
+# Stage ext3 overlay to node-local /tmp once per node. Concurrent fuse2fs mounts of
+# the same Lustre .img from NGPU ranks starve/deadlock Apptainer startup on ORNL Lux.
+HG_OVERLAY_USE="$HG_OVERLAY"
+if [[ -n "${HG_OVERLAY:-}" && -f "${HG_OVERLAY}" && "${HG_STAGE_OVERLAY_LOCAL:-1}" != "0" ]]; then
+  _LOCAL_OV="/tmp/hydragnn-overlay-${SLURM_JOB_ID}.img"
+  echo "--- Staging overlay to node-local ${_LOCAL_OV} (1 task/node) ---"
+  srun -N "$NODES" --ntasks-per-node=1 --cpus-per-task=2 --gres=none \
+    bash -c '
+      src="'"$HG_OVERLAY"'"
+      dst="'"$_LOCAL_OV"'"
+      if [[ ! -s "$dst" ]]; then
+        echo "  $(hostname): cp -> $dst"
+        cp -f "$src" "$dst"
+      fi
+      echo "  $(hostname): ready $(du -h "$dst" 2>/dev/null | cut -f1)"
+    '
+  HG_OVERLAY_USE="$_LOCAL_OV"
+fi
+
 srun --mpi=pmix \
     apptainer exec \
     --rocm \
-    --overlay "${HG_OVERLAY}:ro" \
+    --overlay "${HG_OVERLAY_USE}:ro" \
     "${MPI_BINDS[@]}" \
     "${LUX_MPI_MULTINODE_BINDS[@]}" \
     --bind "${SCRATCH_LOCAL:-/tmp}:${SCRATCH_LOCAL:-/tmp}" \
@@ -484,7 +496,6 @@ srun --mpi=pmix \
     --env HYDRAGNN_TRACE_LEVEL="${HYDRAGNN_TRACE_LEVEL:-1}" \
     --env HG_EXAMPLE_DIR="$EXAMPLE_DIR" \
     --env HG_OUTPUT_DIR="$HG_OUTPUT_DIR" \
-    --env HG_LUX_MPI_NIC_MODE="${HG_LUX_MPI_NIC_MODE:-tcp}" \
     --env TORCH_NCCL_HIGH_PRIORITY="$TORCH_NCCL_HIGH_PRIORITY" \
     --env GPU_MAX_HW_QUEUES="$GPU_MAX_HW_QUEUES" \
     "${OPT_ENVS[@]}" \

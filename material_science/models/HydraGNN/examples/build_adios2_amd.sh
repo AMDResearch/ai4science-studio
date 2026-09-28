@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Build MPI-enabled ADIOS2 Python bindings against the cluster MPI stack.
 #
-# ORNL Lux: in-container cmake with Shelby MPI bound at /opt/lux-mpi (lux_mpi_env.sh).
+# ORNL Lux: in-container cmake with the system OpenMPI module (software tree discovered at runtime).
 # Vultr Lux: in-container build against /opt/ompi.
 #
 # Installs to a persistent prefix on shared storage; reuse from build_overlay_amd.sh.
 #
 # Quick start (ORNL Lux compute node):
-#   export AI4S_SHARED_DIR=/lustre/orion/ven136/proj-shared/<user>/ai4science
+#   export AI4S_SHARED_DIR=/path/to/shared
 #   sbatch sbatch_build_adios2_amd.sh
 
 set -euo pipefail
@@ -34,14 +34,14 @@ echo ""
 MPI_BINDS=()
 BUILD_OMPI_DIR=/opt/ompi
 if lux_mpi_should_use && lux_mpi_setup_binds; then
-  echo "  MPI baseline   : Shelby Lux stack (/opt/lux-mpi + OPAL_PREFIX)"
-  BUILD_OMPI_DIR="${HG_LUX_OMPI_CONTAINER}"
+  echo "  MPI baseline   : system ${HG_LUX_OPENMPI_MODULE}"
+  BUILD_OMPI_DIR="${HG_OMPI_DIR}"
   export HG_MPI_EXTRA_LDPATH MPI4PY_LIBMPI HG_LUX_OPAL_PREFIX
 elif [[ -x /opt/ompi/bin/mpicc ]]; then
   MPI_BINDS=( --bind /opt/ompi:/opt/ompi:ro )
   echo "  MPI baseline   : /opt/ompi"
 else
-  echo "ERROR: No MPI stack found. On ORNL Lux use Shelby config-bundle (lux_mpi_env.sh)." >&2
+  echo "ERROR: No MPI stack found. On ORNL Lux load the system OpenMPI module." >&2
   exit 1
 fi
 echo ""

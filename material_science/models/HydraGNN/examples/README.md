@@ -32,7 +32,7 @@ relative to their own directory), but the files fall into the groups below.
 | [`sbatch_build_adios2_amd.sh`](sbatch_build_adios2_amd.sh) | SLURM wrapper — ADIOS2 build on ORNL Lux compute node |
 | [`build_overlay_amd.sh`](build_overlay_amd.sh) | One-time Apptainer ext3 overlay (PyG + hydragnn; stages ADIOS2 from prefix) |
 | [`sbatch_build_overlay_amd.sh`](sbatch_build_overlay_amd.sh) | SLURM wrapper — overlay build on compute node |
-| [`lux_mpi_env.sh`](lux_mpi_env.sh) | ORNL Lux MPI baseline — Shelby config-bundle binds + runtime MCA/UCX env |
+| [`lux_mpi_env.sh`](lux_mpi_env.sh) | ORNL Lux system OpenMPI module + ob1/TCP runtime environment |
 | [`sbatch_train_amd.sh`](sbatch_train_amd.sh) | SLURM/Apptainer multi-node training (HPC) |
 | [`sbatch_train_perf_amd.sh`](sbatch_train_perf_amd.sh) | 2-node training + PyTorch profiler + Omnistat telemetry (thin variant of `sbatch_train_amd.sh` for the perf-analysis recipe) |
 | [`sbatch_infer_amd.sh`](sbatch_infer_amd.sh) | SLURM/Apptainer inference on AMD Instinct (needs a prebuilt overlay + downloaded weights) |

@@ -106,13 +106,12 @@ export MIOPEN_DEBUG_AMD_MP_BD_WINOGRAD_WORKSPACE_MAX="${ORBIT2_MIOPEN_MP_BD_WINO
 export MIOPEN_DEBUG_CONV_WINOGRAD="${ORBIT2_MIOPEN_CONV_WINOGRAD:-0}"
 export HSA_FORCE_FINE_GRAIN_PCIE="${HSA_FORCE_FINE_GRAIN_PCIE:-1}"
 
-# ORNL Lux: Shelby OpenMPI/UCX stack (same as HydraGNN). Vultr Lux: /opt/ompi + ob1/tcp.
+# ORNL Lux: system OpenMPI module over ob1/TCP. Vultr Lux: /opt/ompi + ob1/TCP.
 LUX_MPI_SH="${SCRIPT_DIR}/../../../../material_science/models/HydraGNN/examples/lux_mpi_env.sh"
 MPI_BINDS=()
 MPI_RUNTIME_ENVS=()
 LUX_MPI_MULTINODE_BINDS=()
 NODES="${SLURM_JOB_NUM_NODES:-1}"
-export HG_LUX_MPI_NIC_MODE="${ORBIT2_LUX_MPI_NIC_MODE:-tcp}"
 if [[ -f "$LUX_MPI_SH" ]]; then
   # shellcheck source=../../../../material_science/models/HydraGNN/examples/lux_mpi_env.sh
   source "$LUX_MPI_SH"
@@ -124,7 +123,7 @@ if lux_mpi_should_use 2>/dev/null && lux_mpi_setup_binds && lux_mpi_runtime_envs
   MPI_BINDS=( "${MPI_BINDS[@]}" )
   MPI_RUNTIME_ENVS=( "${LUX_MPI_RUNTIME_ENVS[@]}" )
   lux_mpi_multinode_apptainer_binds
-  echo "  MPI stack: ORNL Lux Shelby (lux_mpi_env.sh)"
+  echo "  MPI stack: ORNL Lux system openmpi/5.0.10 (ob1/tcp)"
 elif [[ -x /opt/ompi/bin/mpicc ]]; then
   MPI_BINDS=( --bind /opt/ompi:/opt/ompi:ro )
   _CLUSTER_CFG="${SCRIPT_DIR}/../../../../.cluster-config.yaml"
@@ -141,7 +140,7 @@ elif [[ -x /opt/ompi/bin/mpicc ]]; then
   )
   echo "  MPI stack: /opt/ompi (ob1/tcp on ${MPI_TCP_IFACE})"
 else
-  echo "ERROR: no OpenMPI baseline found (ORNL Lux: Shelby bundle via lux_mpi_env.sh; Vultr: /opt/ompi)" >&2
+  echo "ERROR: no OpenMPI baseline found (ORNL Lux: system module; Vultr: /opt/ompi)" >&2
   exit 2
 fi
 OPT_MPI_ENVS=()
@@ -345,7 +344,7 @@ set -euo pipefail
 source /opt/venv/bin/activate
 echo "[rank \$SLURM_PROCID / \$SLURM_NTASKS] GPU \$SLURM_LOCALID on \$(hostname)"
 export PYTHONPATH="/opt/orbit2-pkgs:/orbit2/src:/orbit2:\${PYTHONPATH:-}"
-OMPI="\${HG_OMPI_DIR:-/opt/lux-mpi/openmpi}"
+OMPI="\${HG_OMPI_DIR:-/opt/ompi}"
 if [[ -n "\${HG_MPI_EXTRA_LDPATH:-}" ]]; then
   export LD_LIBRARY_PATH="/opt/orbit2-pkgs:\${OMPI}/lib:\${HG_MPI_EXTRA_LDPATH}:/opt/venv/lib/python3.12/site-packages/torch/lib:\${LD_LIBRARY_PATH:-}"
 else
@@ -438,7 +437,6 @@ RANKEOF
       --env MASTER_PORT="$MASTER_PORT" \
       --env PMIX_MCA_gds=hash \
       --env PMIX_MCA_psec=native \
-      --env HG_LUX_MPI_NIC_MODE="${HG_LUX_MPI_NIC_MODE:-tcp}" \
       --env PYTHONPATH="/opt/orbit2-pkgs:/orbit2/src:/orbit2" \
       "${MPI_RUNTIME_ENVS[@]}" \
       "${OPT_MPI_ENVS[@]}" \

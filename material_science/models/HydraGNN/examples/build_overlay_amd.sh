@@ -13,7 +13,7 @@
 #
 # ── MPI-enabled adios2 ──────────────────────────────────────────────────────
 #   Built separately by build_adios2_amd.sh (standard cmake install).
-#   ORNL Lux uses Shelby config-bundle MPI via lux_mpi_env.sh — not spack modules.
+#   ORNL Lux uses the site openmpi/5.0.10 module via lux_mpi_env.sh.
 #
 # ── torch-scatter / torch-sparse / torch-cluster / torch-spline-conv ────────
 #   No official ROCm wheels exist at data.pyg.org.  We use pre-built ROCm
@@ -73,7 +73,7 @@ fi
 # MPI binds needed for overlay verify (adios2 loads host MPI at import time).
 MPI_BINDS=()
 if lux_mpi_should_use && lux_mpi_setup_binds; then
-  echo "  MPI runtime  : Shelby Lux (/opt/lux-mpi)"
+  echo "  MPI runtime  : system ${HG_LUX_OPENMPI_MODULE}"
 elif [[ -x /opt/ompi/bin/mpicc ]]; then
   MPI_BINDS=( --bind /opt/ompi:/opt/ompi:ro )
   echo "  MPI runtime  : /opt/ompi"

@@ -85,7 +85,14 @@ submit() {
     "$SCRIPT_DIR/sbatch_train_amd.sh"
 }
 
-declare -A TIME_LIMIT=( [1]="02:00:00" [2]="02:30:00" [4]="03:00:00" [8]="04:00:00" )
+# Smoke / validation walls stay short to limit GPU-hour burn. Override per-submit
+# (e.g. ORBIT2_SCALING_TIME_1=02:00:00) for longer production sweeps.
+declare -A TIME_LIMIT=(
+  [1]="${ORBIT2_SCALING_TIME_1:-00:45:00}"
+  [2]="${ORBIT2_SCALING_TIME_2:-00:45:00}"
+  [4]="${ORBIT2_SCALING_TIME_4:-00:45:00}"
+  [8]="${ORBIT2_SCALING_TIME_8:-00:45:00}"
+)
 IFS=',' read -ra NODE_COUNTS <<< "$NODES_LIST"
 echo "=== ORBIT-2 scaling sweep (${ORBIT2_SCALING_TAG}) ==="
 echo "  Data root    : $ORBIT2_DATA_ROOT"

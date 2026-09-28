@@ -84,12 +84,11 @@ NODES="${SLURM_JOB_NUM_NODES:-1}"
 GPUS_PER_NODE=8
 TOTAL_RANKS=$((NODES * GPUS_PER_NODE))
 
+# HSDP: fsdp=GPUs/node (intra-node), simple_ddp=nodes (inter-node).
 if [[ -n "${ORBIT2_FSDP:-}" && -n "${ORBIT2_SIMPLE_DDP:-}" ]]; then
   RENDER_PARALLEL=(--fsdp "$ORBIT2_FSDP" --simple-ddp "$ORBIT2_SIMPLE_DDP")
-elif [[ "$NODES" -eq 1 && "$GPUS_PER_NODE" -eq 8 ]]; then
-  RENDER_PARALLEL=(--fsdp 8 --simple-ddp 1)
 else
-  RENDER_PARALLEL=()
+  RENDER_PARALLEL=(--fsdp "$GPUS_PER_NODE" --simple-ddp "$NODES")
 fi
 
 # Bayes-CAST launch/launch_diffusion.sh is an OLCF/Crusher wrapper (nested srun, ignores argv).
@@ -169,11 +168,7 @@ echo "=== ORBIT-2 Perf Analysis Run ==="
 echo "  Nodes        : $NODES"
 echo "  Total ranks  : $TOTAL_RANKS"
 echo "  ORBIT2_ROOT  : $ORBIT2_ROOT"
-if ((${#RENDER_PARALLEL[@]})); then
-  echo "  Parallelism  : ${RENDER_PARALLEL[*]}"
-else
-  echo "  Parallelism  : (render default fsdp=$NODES simple_ddp=$GPUS_PER_NODE)"
-fi
+echo "  Parallelism  : ${RENDER_PARALLEL[*]}  (HSDP: fsdp=GPUs/node, simple_ddp=nodes)"
 if [[ "$LAUNCH_EDM_DIRECT" -eq 1 ]]; then
   echo "  Train entry  : python3 /orbit2/launch/train_edm.py (Bayes EDM)"
 elif [[ -n "$LAUNCH_IC" ]]; then
@@ -410,10 +405,29 @@ if [[ "$ORBIT2_TUNABLEOP_MODE" != "off" ]]; then
   TUNABLEOP_BIND=(--bind "$ORBIT2_TUNABLEOP_DIR":"$ORBIT2_TUNABLEOP_DIR")
 fi
 
+# Stage ext3 overlay to node-local /tmp once per node. Concurrent fuse2fs mounts of
+# the same Lustre .img from NGPU ranks starve/deadlock Apptainer startup on ORNL Lux.
+ORBIT2_OVERLAY_USE="$ORBIT2_OVERLAY"
+if [[ -n "${ORBIT2_OVERLAY:-}" && -f "${ORBIT2_OVERLAY}" && "${ORBIT2_STAGE_OVERLAY_LOCAL:-1}" != "0" ]]; then
+  _LOCAL_OV="/tmp/orbit2-overlay-${SLURM_JOB_ID}.img"
+  echo "--- Staging overlay to node-local ${_LOCAL_OV} (1 task/node) ---"
+  srun -N "$NODES" --ntasks-per-node=1 --cpus-per-task=2 --gres=none \
+    bash -c '
+      src="'"$ORBIT2_OVERLAY"'"
+      dst="'"$_LOCAL_OV"'"
+      if [[ ! -s "$dst" ]]; then
+        echo "  $(hostname): cp -> $dst"
+        cp -f "$src" "$dst"
+      fi
+      echo "  $(hostname): ready $(du -h "$dst" 2>/dev/null | cut -f1)"
+    '
+  ORBIT2_OVERLAY_USE="$_LOCAL_OV"
+fi
+
 echo "--- Launching perf training: $TOTAL_RANKS ranks ---"
 set +e
 srun --mpi=pmix apptainer exec \
-    --rocm --overlay "${ORBIT2_OVERLAY}:ro" \
+    --rocm --overlay "${ORBIT2_OVERLAY_USE}:ro" \
     --bind "/opt/ompi:/opt/ompi:ro" \
     "${TUNABLEOP_BIND[@]}" \
     --bind "$ORBIT2_ROOT":/orbit2 \

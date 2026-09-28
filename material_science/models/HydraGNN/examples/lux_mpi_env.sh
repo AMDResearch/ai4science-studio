@@ -1,188 +1,128 @@
 #!/usr/bin/env bash
-# ORNL Lux MPI baseline — Shelby Lockhart config-bundle + from-source stack.
+# ORNL Lux system OpenMPI module for Apptainer.
 #
-# Gold standard on Lux until OLCF ships a verbs-capable UCX/MPI module.
-# See: /lustre/orion/ven136/proj-shared/slockhar/config-bundle/README.md
-#
-# The stack lives on Lustre but was built with prefix /ccs/home/slockhar/opt/...
-# Apptainer cannot bind into another user's home — bind at /opt/lux-mpi/* and
-# set OPAL_PREFIX=/opt/lux-mpi/openmpi inside the container.
-#
-# Usage (source from build_overlay_amd.sh / sbatch_train_amd.sh):
-#   source "${SCRIPT_DIR}/lux_mpi_env.sh"
-#   lux_mpi_setup_binds   # sets MPI_BINDS, HG_OMPI_DIR (container paths)
+# MPI control traffic is TCP-only: OpenMPI ob1 + btl=tcp,self on bond0.
+# UCX is intentionally not configured or supported here. RCCL remains a
+# separate GPU data plane over the ionic HCAs.
 
-# Defaults — override before sourcing if your deployment differs.
-HG_LUX_CONFIG_BUNDLE="${HG_LUX_CONFIG_BUNDLE:-/lustre/orion/ven136/proj-shared/slockhar/config-bundle}"
-HG_LUX_MPI_OPT="${HG_LUX_MPI_OPT:-/lustre/orion/ven136/proj-shared/slockhar/mpi-build-tests/opt}"
-HG_LUX_MPI_BUNDLE_MODE="${HG_LUX_MPI_BUNDLE_MODE:-native}"   # native | ucc
-HG_LUX_MPI_RULES_FILE="${HG_LUX_MPI_RULES_FILE:-coll-tuned-dynamic-rules-mean.conf}"
+HG_LUX_ROCM_MODULE="${HG_LUX_ROCM_MODULE:-rocm/7.2.4}"
+HG_LUX_COMPILER_MODULE="${HG_LUX_COMPILER_MODULE:-amd-llvm/7.2.4}"
+HG_LUX_OPENMPI_MODULE="${HG_LUX_OPENMPI_MODULE:-openmpi/5.0.10}"
 
-# Lustre install trees (host)
-HG_LUX_OMPI_LUSTRE="${HG_LUX_MPI_OPT}/openmpi/ompi5.0.10-ucc1.8.x-ucx1.21.x-gcc-gfortran"
-HG_LUX_UCX_LUSTRE="${HG_LUX_MPI_OPT}/ucx/ucx1.21.x-gcc-gfortran"
-HG_LUX_UCC_LUSTRE="${HG_LUX_MPI_OPT}/ucc/ucc1.8.x-ucx1.21.x-gcc-gfortran"
-
-# Apptainer bind targets (container) — must match OPAL_PREFIX
-HG_LUX_OMPI_CONTAINER="/opt/lux-mpi/openmpi"
-HG_LUX_UCX_CONTAINER="/opt/lux-mpi/ucx"
-HG_LUX_UCC_CONTAINER="/opt/lux-mpi/ucc"
-
-# Host libfabric satisfies OpenMPI's libopen-pal (FABRIC_1.8). The Ubuntu SIF
-# ships an older libfabric; bind the host library over the container path.
-HG_LUX_LIBFABRIC_HOST="${HG_LUX_LIBFABRIC_HOST:-/lib64/libfabric.so.1}"
-HG_LUX_LIBFABRIC_CONTAINER="${HG_LUX_LIBFABRIC_CONTAINER:-/lib/x86_64-linux-gnu/libfabric.so.1}"
+lux_mpi_load_module() {
+  command -v module >/dev/null 2>&1 || return 1
+  # Lux uses a hierarchy: OpenMPI becomes visible only after ROCm + amd-llvm.
+  module load "$HG_LUX_ROCM_MODULE" >/dev/null 2>&1 || return 1
+  module load "$HG_LUX_COMPILER_MODULE" >/dev/null 2>&1 || return 1
+  module load "$HG_LUX_OPENMPI_MODULE" >/dev/null 2>&1 || return 1
+  command -v mpicc >/dev/null 2>&1
+}
 
 lux_mpi_available() {
-  [[ -x "${HG_LUX_OMPI_LUSTRE}/bin/mpicc" ]] \
-    && [[ -d "${HG_LUX_UCX_LUSTRE}/lib" ]] \
-    && [[ -d "${HG_LUX_UCC_LUSTRE}/lib" ]] \
-    && [[ -f "${HG_LUX_CONFIG_BUNDLE}/ucx.conf" ]]
+  lux_mpi_load_module
 }
 
-# Populate MPI_BINDS and container-side HG_OMPI_DIR / mpi4py paths.
+# Compatibility no-op: the site module tree is already on every node.
+lux_mpi_stage_local() {
+  lux_mpi_available
+}
+
+# Longest directory prefix shared by the MPI install and its non-system libs.
+# Spack layouts put hwloc/libevent/UCX next to OpenMPI, not inside its prefix.
+# Override with HG_LUX_SW_ROOT when the discovered tree is too wide or too narrow.
+lux_mpi_sw_root() {
+  if [[ -n "${HG_LUX_SW_ROOT:-}" ]]; then
+    printf '%s\n' "$HG_LUX_SW_ROOT"
+    return 0
+  fi
+  local lib="${HG_OMPI_DIR}/lib/libmpi.so.40"
+  [[ -e "$lib" ]] || lib="${HG_OMPI_DIR}/lib/libmpi.so"
+  local prefix="$HG_OMPI_DIR"
+  local line target candidate
+  if [[ -e "$lib" ]]; then
+    while IFS= read -r line; do
+      [[ "$line" == *"=>"* ]] || continue
+      target="${line##*=> }"
+      target="${target%% *}"
+      [[ "$target" == /* ]] || continue
+      # Host ROCm and libc live outside the MPI software tree. Do not let them
+      # collapse the bind root to /.
+      case "$target" in
+        /lib/*|/lib64/*|/usr/lib/*|/usr/lib64/*|/opt/rocm*|/opt/amdgpu*) continue ;;
+      esac
+      target="$(dirname "$target")"
+      candidate="$prefix"
+      while [[ "$target" != "$candidate"* && "$candidate" != "/" ]]; do
+        candidate="$(dirname "$candidate")"
+      done
+      [[ "$candidate" == "/" ]] && continue
+      prefix="$candidate"
+    done < <(ldd "$lib" 2>/dev/null || true)
+  fi
+  [[ "$prefix" != "/" && -d "$prefix" ]] || return 1
+  printf '%s\n' "$prefix"
+}
+
+# Load the site module and bind its software tree at the same path in Apptainer.
 lux_mpi_setup_binds() {
-  if ! lux_mpi_available; then
-    return 1
-  fi
+  lux_mpi_available || return 1
 
-  HG_OMPI_DIR="${HG_LUX_OMPI_CONTAINER}"
-  MPI4PY_LIBMPI="${HG_LUX_OMPI_CONTAINER}/lib/libmpi.so.40"
-  HG_MPI_EXTRA_LDPATH="${HG_LUX_UCC_CONTAINER}/lib:${HG_LUX_UCX_CONTAINER}/lib"
-  HG_LUX_OPAL_PREFIX="${HG_LUX_OMPI_CONTAINER}"
-
-  MPI_BINDS=(
-    --bind "${HG_LUX_OMPI_LUSTRE}:${HG_LUX_OMPI_CONTAINER}:ro"
-    --bind "${HG_LUX_UCX_LUSTRE}:${HG_LUX_UCX_CONTAINER}:ro"
-    --bind "${HG_LUX_UCC_LUSTRE}:${HG_LUX_UCC_CONTAINER}:ro"
-    --bind "${HG_LUX_CONFIG_BUNDLE}:${HG_LUX_CONFIG_BUNDLE}:ro"
-  )
-  if [[ -f "${HG_LUX_LIBFABRIC_HOST}" ]]; then
-    MPI_BINDS+=( --bind "${HG_LUX_LIBFABRIC_HOST}:${HG_LUX_LIBFABRIC_CONTAINER}:ro" )
-    _fabric_real=$(readlink -f "${HG_LUX_LIBFABRIC_HOST}" 2>/dev/null || true)
-    if [[ -n "${_fabric_real}" && -f "${_fabric_real}" ]]; then
-      _fabric_base=$(basename "${_fabric_real}")
-      MPI_BINDS+=( --bind "${_fabric_real}:/lib/x86_64-linux-gnu/${_fabric_base}:ro" )
-    fi
-  fi
-  # Host libfabric + OpenMPI libopen-pal need RHEL libnl/EFA/RDMA at link and runtime.
+  HG_OMPI_DIR="$(cd "$(dirname "$(dirname "$(command -v mpicc)")")" && pwd)"
+  MPI4PY_LIBMPI="${HG_OMPI_DIR}/lib/libmpi.so.40"
+  HG_MPI_EXTRA_LDPATH="${HG_OMPI_DIR}/lib"
+  HG_LUX_OPAL_PREFIX="${HG_OMPI_DIR}"
+  HG_LUX_SW_ROOT="$(lux_mpi_sw_root)" || return 1
+  MPI_BINDS=( --bind "${HG_LUX_SW_ROOT}:${HG_LUX_SW_ROOT}:ro" )
+  # This site build links a few host services directly. Bind only their SONAME
+  # files into Ubuntu's loader path; never add all of /usr/lib64 to LD_LIBRARY_PATH.
+  local _lib _src
   for _lib in \
-    /lib64/liblnetconfig.so.4 \
-    /lib64/liblustreapi.so.1 \
-    /lib64/libnl-genl-3.so.200 \
-    /lib64/libnl-3.so.200 \
-    /lib64/libnl-route-3.so.200 \
-    /lib64/libefa.so.1 \
-    /lib64/librdmacm.so.1 \
-    /lib64/libibverbs.so.1; do
-    [[ -f "$_lib" ]] && MPI_BINDS+=( --bind "${_lib}:${_lib}:ro" )
+    libpmix.so.2 libmunge.so.2 liblustreapi.so.1 liblnetconfig.so.4 \
+    libyaml-0.so.2 libnl-genl-3.so.200 libnl-3.so.200; do
+    _src=""
+    [[ -e "/usr/lib64/${_lib}" ]] && _src="$(readlink -f "/usr/lib64/${_lib}")"
+    [[ -z "$_src" && -e "/lib64/${_lib}" ]] && _src="$(readlink -f "/lib64/${_lib}")"
+    [[ -n "$_src" ]] && MPI_BINDS+=( --bind "${_src}:/lib/x86_64-linux-gnu/${_lib}:ro" )
   done
-  # Ubuntu SIF linker searches /lib/x86_64-linux-gnu for libnl when linking libfabric.
-  for _pair in \
-    /lib64/libnl-3.so.200:/lib/x86_64-linux-gnu/libnl-3.so.200 \
-    /lib64/libnl-route-3.so.200:/lib/x86_64-linux-gnu/libnl-route-3.so.200 \
-    /lib64/libnl-genl-3.so.200:/lib/x86_64-linux-gnu/libnl-genl-3.so.200 \
-    /usr/lib64/libefa.so.1:/lib/x86_64-linux-gnu/libefa.so.1 \
-    /usr/lib64/libefa.so.1.4.61.0:/lib/x86_64-linux-gnu/libefa.so.1.4.61.0 \
-    /usr/lib64/libibverbs.so.1:/lib/x86_64-linux-gnu/libibverbs.so.1 \
-    /usr/lib64/libibverbs.so.1.15.61.0:/lib/x86_64-linux-gnu/libibverbs.so.1.15.61.0 \
-    /lib64/librdmacm.so.1:/lib/x86_64-linux-gnu/librdmacm.so.1; do
-    _src="${_pair%%:*}"
-    _dst="${_pair##*:}"
-    [[ -f "$_src" ]] && MPI_BINDS+=( --bind "${_src}:${_dst}:ro" )
-  done
-  return 0
+  export HG_OMPI_DIR MPI4PY_LIBMPI HG_MPI_EXTRA_LDPATH HG_LUX_OPAL_PREFIX HG_LUX_SW_ROOT
 }
 
-# Apptainer --env flags for UCX + OpenMPI MCA tuning (runtime / multi-node).
 lux_mpi_runtime_envs() {
-  LUX_MPI_RUNTIME_ENVS=()
-  if ! lux_mpi_available; then
-    return 1
-  fi
-
-  # shellcheck disable=SC1090
-  source "${HG_LUX_CONFIG_BUNDLE}/ucx.conf"
-
-  local _mca="${HG_LUX_CONFIG_BUNDLE}/${HG_LUX_MPI_BUNDLE_MODE}/openmpi-mca-params.conf"
-  local _rules="${HG_LUX_CONFIG_BUNDLE}/${HG_LUX_MPI_RULES_FILE}"
-
+  lux_mpi_available || return 1
+  local _iface="${HG_LUX_MPI_TCP_IFACE:-${NCCL_SOCKET_IFNAME:-bond0}}"
+  # Apptainer --env KEY=a,b truncates at the first comma (same trap as NCCL_IB_HCA).
+  export APPTAINERENV_OMPI_MCA_btl="tcp,self"
   LUX_MPI_RUNTIME_ENVS=(
-    --env "OPAL_PREFIX=${HG_LUX_OMPI_CONTAINER}"
-    --env "UCX_TLS=${UCX_TLS}"
-    --env "UCX_ROCM_COPY_LAT=${UCX_ROCM_COPY_LAT}"
-    --env "UCX_RNDV_THRESH=${UCX_RNDV_THRESH}"
-    --env "UCX_RNDV_SCHEME=${UCX_RNDV_SCHEME}"
-    --env "UCX_MAX_RNDV_RAILS=${UCX_MAX_RNDV_RAILS}"
-    --env "UCX_IB_GPU_DIRECT_RDMA=${UCX_IB_GPU_DIRECT_RDMA}"
-    --env "UCX_IB_ROCE_LOCAL_SUBNET=${UCX_IB_ROCE_LOCAL_SUBNET}"
-    --env "UCX_IB_TRAFFIC_CLASS=${UCX_IB_TRAFFIC_CLASS}"
-    --env "UCX_RC_MAX_NUM_EPS=${UCX_RC_MAX_NUM_EPS}"
-    --env "UCX_RC_MAX_RD_ATOMIC=${UCX_RC_MAX_RD_ATOMIC}"
-    --env "UCX_RC_RX_QUEUE_LEN=${UCX_RC_RX_QUEUE_LEN}"
-    --env "UCX_RC_VERBS_RX_MATCH_BATCH=${UCX_RC_VERBS_RX_MATCH_BATCH}"
-    --env "UCX_RC_TIMEOUT=${UCX_RC_TIMEOUT}"
-    --env "UCX_RC_RNR_RETRY_COUNT=${UCX_RC_RNR_RETRY_COUNT}"
-    --env "UCX_WARN_UNUSED_ENV_VARS=${UCX_WARN_UNUSED_ENV_VARS}"
-    --env "OMPI_MCA_mca_base_param_files=${_mca}"
-    --env "OMPI_MCA_coll_tuned_dynamic_rules_filename=${_rules}"
+    --env "OPAL_PREFIX=${HG_OMPI_DIR}"
+    --env "OMPI_MCA_pml=ob1"
+    --env "OMPI_MCA_osc=^ucx"
+    --env "OMPI_MCA_btl_tcp_if_include=${_iface}"
+    --env "OMPI_MCA_coll=^ucc"
     --env "MPI4PY_RC_THREADS=false"
   )
-  if [[ "${NODES:-1}" -gt 1 ]]; then
-    if [[ "${HG_LUX_MPI_NIC_MODE:-tcp}" == "tcp" ]]; then
-      # Apptainer cannot init ionic verbs RC inside the SIF — use ai* TCP netdevs.
-      LUX_MPI_RUNTIME_ENVS+=( --env "UCX_TLS=${HG_LUX_UCX_TLS_TCP:-sm,self,rocm_copy,rocm_ipc,cma,tcp}" )
-    else
-      LUX_MPI_RUNTIME_ENVS+=( --env "UCX_NET_DEVICES=${UCX_NET_DEVICES:-^bnxt_re0}" )
-    fi
-  fi
-  return 0
 }
 
 lux_mpi_should_use() {
-  [[ "${HG_USE_LUX_MPI:-auto}" == "1" ]] && lux_mpi_available && return 0
-  [[ "${HG_USE_LUX_MPI:-auto}" == "0" ]] && return 1
-  [[ -x /opt/ompi/bin/mpicc ]] && return 1
   lux_mpi_available
 }
 
 lux_mpi_setup() {
-  if lux_mpi_should_use && lux_mpi_setup_binds; then
-    export HG_OMPI_DIR MPI4PY_LIBMPI HG_MPI_EXTRA_LDPATH HG_LUX_OPAL_PREFIX
-    return 0
-  fi
-  return 1
+  lux_mpi_setup_binds
 }
 
-# Apptainer binds so UCX/OpenMPI can see host RoCE/RDMA inside the container.
-# Without these, multi-node jobs hang with "transport 'rc' is not available".
+# MPI itself is TCP-only. These device views are for the independent RCCL
+# ionic data plane used by multi-node PyTorch training.
 lux_mpi_multinode_apptainer_binds() {
   LUX_MPI_MULTINODE_BINDS=()
   [[ "${NODES:-1}" -gt 1 ]] || return 0
-
   for _path in /sys/class/infiniband /dev/infiniband /sys/class/net; do
-    if [[ -d "$_path" ]]; then
-      LUX_MPI_MULTINODE_BINDS+=( --bind "${_path}:${_path}" )
-    fi
+    [[ -e "$_path" ]] && LUX_MPI_MULTINODE_BINDS+=( --bind "${_path}:${_path}" )
   done
-  # Verbs provider libs only for RC/ionic mode — binding incomplete sets breaks TCP.
-  if [[ "${HG_LUX_MPI_NIC_MODE:-tcp}" != "tcp" ]]; then
-    if [[ -d /etc/libibverbs.d ]]; then
-      LUX_MPI_MULTINODE_BINDS+=( --bind /etc/libibverbs.d:/etc/libibverbs.d )
-    fi
-    for _libdir in /usr/lib64/libibverbs /lib64/libibverbs; do
-      if [[ -d "$_libdir" ]]; then
-        LUX_MPI_MULTINODE_BINDS+=( --bind "${_libdir}:${_libdir}:ro" )
-      fi
-    done
-  fi
-  return 0
 }
 
 # RCCL env for PyTorch DDP across nodes on ORNL Lux Pensando ionic fabric.
-# Sources (aligned 2026-09): mswu/rccl-tests-scripts/rccl-pensando-env.sh (native
-# IB, not ANP — ANP blocked on ORNL rdma-core 61); sidconde Primus env.lux.sh
-# (bond0 OOB, ionic_0..7, GID index 1). Leave NCCL_NET_PLUGIN unset.
+# Native RCCL IB (not ANP) with bond0 OOB, ionic_0..7, and GID index 1.
+# Leave NCCL_NET_PLUGIN unset.
 #
 # CRITICAL: Apptainer --env KEY=a,b,c truncates at the first comma. Comma-valued
 # fabric vars MUST be exported as APPTAINERENV_* (Sidafa Primus container_run.sh).
