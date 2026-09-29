@@ -1,5 +1,14 @@
 # AI4Science Studio — Remote Serving Runbook
 
+> **⚠️ POLICY: cloudflared stays DOWN unless explicitly asked.** The public
+> tunnel is not part of a default bring-up — demos are reached over the
+> login→compute SSH forward. `cloudflared-tunnel.service` and
+> `am-studio-reconcile.timer` are both disabled (set 2026-08-15). Note that
+> `serve-all.sh` starts the reconcile service and will bring the tunnel back,
+> so re-check after running it. Full policy and commands:
+> [~/Projects/demos/RUNBOOK.md](../../demos/RUNBOOK.md).
+
+
 Authoritative, tested procedure for running the Studio demo on the lux MI355X
 cluster and reaching it from a laptop. This is the source of truth — do not
 re-derive it each session.
