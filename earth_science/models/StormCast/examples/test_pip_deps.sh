@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Interactive test: time each pip install step for StormCast inside the SIF.
-# Run via: salloc --partition=lux --account=vultr_lux --nodes=1 --gres=gpu:1 --time=01:00:00
+# Run via: salloc --partition=YOUR_PARTITION_HERE --account=YOUR_ACCOUNT_HERE --nodes=1 --gres=gpu:1 --time=01:00:00
 # Then on the node: bash test_pip_deps.sh
 #
 # Purpose: identify which packages are slow / require source builds so we can
@@ -8,7 +8,7 @@
 
 set -euo pipefail
 
-SC_SIF="${SC_SIF:-/shared/spannala/images/pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif}"
+SC_SIF="${SC_SIF:-${AI4S_SHARED_DIR:?set AI4S_SHARED_DIR (or SC_SIF)}/images/pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif}"
 TEST_DIR="${TEST_DIR:-/tmp/sc-pip-test-$$}"
 ROCM_WHL_TAG="${ROCM_WHL_TAG:-rocm7.2}"
 

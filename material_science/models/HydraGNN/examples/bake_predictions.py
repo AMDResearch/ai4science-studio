@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """Bake REAL HydraGNN predictions on multiple held-out Alexandria structures.
 
 Runs the actual trained model (1-GPU and/or 8-GPU checkpoint) on a set of real
@@ -9,6 +10,7 @@ Env:
     HG_MODEL_VARIANT  label (1gpu | 8gpu)
     N_STRUCTURES      how many held-out structures to predict (default 8)
     BAKE_OUT          output JSON path
+    HG_DATASET_BP     Alexandria ADIOS file (default: $HG_DATA_DIR/Alexandria-v2.bp)
 """
 import sys, os, json, numpy as np, torch
 INFER = os.environ["HG_INFER_REPO"]; sys.path.insert(0, INFER)
@@ -63,7 +65,9 @@ def main():
     metrics = ck.get("metrics", {})
     print(f"[bake] loaded {variant} model: corr={metrics.get('corr')}, MAE={metrics.get('mae')}", flush=True)
 
-    bp = "/shared/aaji/models/HydraGNN/weights/Alexandria-v2.bp"
+    bp = os.environ.get("HG_DATASET_BP") or os.path.join(
+        os.environ.get("HG_DATA_DIR") or sys.exit("set HG_DATASET_BP or HG_DATA_DIR"),
+        "Alexandria-v2.bp")
     predictions = []
     with FileReader(bp) as f:
         rd = f.read

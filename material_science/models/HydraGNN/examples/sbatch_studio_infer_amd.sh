@@ -8,6 +8,9 @@
 #   HG_INFER_REPO       Cloned HydraGNN repo (Predictive_GFM_2024 branch)
 #   HG_MODEL_PATH       Trained model checkpoint (.pk with model_state_dict + config)
 #   HG_STUDIO_INFER     studio_infer.py path
+#   HG_DATA_DIR         directory holding the Alexandria ADIOS dataset (bound read-only)
+#   HG_BASE             HydraGNN working tree to bind read-write
+#                       (default: $AI4S_SHARED_DIR/models/HydraGNN)
 #   STUDIO_RESULT_OUT   where to write result JSON
 #   STRUCT_INDEX        which held-out structure to predict (default 4)
 set -euo pipefail
@@ -17,6 +20,8 @@ HG_OVERLAY="${HG_OVERLAY:?}"
 HG_INFER_REPO="${HG_INFER_REPO:?}"
 HG_MODEL_PATH="${HG_MODEL_PATH:?}"
 HG_STUDIO_INFER="${HG_STUDIO_INFER:?}"
+HG_DATA_DIR="${HG_DATA_DIR:?set HG_DATA_DIR to the Alexandria dataset directory}"
+HG_BASE="${HG_BASE:-${AI4S_SHARED_DIR:?set AI4S_SHARED_DIR (or HG_BASE)}/models/HydraGNN}"
 
 echo "=== HydraGNN energy prediction (our trained model) ==="
 echo "  Model      : $HG_MODEL_PATH"
@@ -32,8 +37,9 @@ while IFS= read -r _v; do _MPI_UNSET+=(-u "$_v"); done < <(
 
 env "${_MPI_UNSET[@]}" apptainer exec --rocm \
     --overlay "${HG_OVERLAY}:ro" \
-    --bind /shared/aaji/models/HydraGNN/weights:/shared/aaji/models/HydraGNN/weights:ro \
-    --bind /shared/spannala/models/HydraGNN:/shared/spannala/models/HydraGNN \
+    --bind "${HG_DATA_DIR}:${HG_DATA_DIR}:ro" \
+    --bind "${HG_BASE}:${HG_BASE}" \
+    --env HG_DATA_DIR="$HG_DATA_DIR" \
     --env HG_INFER_REPO="$HG_INFER_REPO" \
     --env MODEL_PATH="$HG_MODEL_PATH" \
     --env HG_MODEL_VARIANT="${HG_MODEL_VARIANT:-}" \
