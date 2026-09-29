@@ -49,6 +49,13 @@ HG_OUTPUT_DIR="${HG_OUTPUT_DIR:-${WORK}/perf-runs/${SLURM_JOB_ID:-$$}}"
 # A self-contained copy lives beside this script in studio/telemetry/.
 OMNISTAT_TEMPLATE="${OMNISTAT_TEMPLATE:-/home/spannala/Projects/ai4science-studio/studio/telemetry/omnistat.config.template}"
 OMNISTAT_USERMODE_INTERVAL="${OMNISTAT_USERMODE_INTERVAL:-1}"
+# Push frequency (MINUTES) into VictoriaMetrics. Omnistat HARD-FLOORS this at 1 min
+# ("[ERROR]: Please set data_frequency_mins >= 1 minute" — the exporter refuses to
+# start below that). So VictoriaMetrics only gets minute-resolution batches, which
+# is fine for the post-run harvest. For sub-second LIVE plots the studio scrapes the
+# exporter's Prometheus /metrics endpoint (port from the config, 8101) directly —
+# see telemetry.harvest_live() — which reflects the fast --interval sampling.
+OMNISTAT_PUSH_INTERVAL="${OMNISTAT_PUSH_INTERVAL:-1}"
 
 export HG_SIF=/shared/spannala/images/pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif
 export HG_OVERLAY=/shared/spannala/models/HydraGNN/overlays/hydragnn-overlay.img
@@ -78,16 +85,35 @@ if [[ ! -x "${OMNISTAT_VENV}/bin/omnistat-usermode" ]]; then
   _TELEMETRY_ON=0
 fi
 
+# ── Kernel tracing (opt-in via OMNISTAT_KERNEL_TRACE=1) ──────────────────────
+# Per-kernel dispatch counts + durations (per-epoch structure). Requires the
+# libomnistat_trace.so built once on a compute node (build_kernel_trace_amd.sh)
+# and loaded into the workload via ROCP_TOOL_LIBRARIES. Degrades gracefully: if
+# the lib is missing we warn and keep the run going with counters-only telemetry.
+OMNISTAT_KERNEL_TRACE="${OMNISTAT_KERNEL_TRACE:-0}"
+OMNISTAT_TRACE_LIB="${OMNISTAT_TRACE_LIB:-${PERF_TOOLS_DIR}/omnistat-src/build-trace/libomnistat_trace.so}"
+_KTRACE_ON=0
+if [[ "$OMNISTAT_KERNEL_TRACE" == "1" ]]; then
+  if [[ -f "$OMNISTAT_TRACE_LIB" ]]; then
+    _KTRACE_ON=1
+    echo "--- Kernel tracing ENABLED (lib: $OMNISTAT_TRACE_LIB) ---"
+  else
+    echo "WARN: OMNISTAT_KERNEL_TRACE=1 but trace lib missing ($OMNISTAT_TRACE_LIB); build it with build_kernel_trace_amd.sh. Continuing without kernel trace." >&2
+  fi
+fi
+
 # ── Render per-job omnistat config (substitute @JOB_DIR@ + @PERF_TOOLS_DIR@) ──
 OMNISTAT_CONFIG="${HG_OUTPUT_DIR}/omnistat.config"
 if [[ "$_TELEMETRY_ON" == "1" ]]; then
   sed -e "s|@JOB_DIR@|${HG_OUTPUT_DIR}|g" \
       -e "s|@PERF_TOOLS_DIR@|${PERF_TOOLS_DIR}|g" \
       "$OMNISTAT_TEMPLATE" > "$OMNISTAT_CONFIG"
-  echo "--- Starting Omnistat user-mode (interval=${OMNISTAT_USERMODE_INTERVAL}s) ---"
+  # Flip kernel tracing on in the rendered config when the lib is present.
+  [[ "$_KTRACE_ON" == "1" ]] && sed -i 's/^enable_kernel_trace = False/enable_kernel_trace = True/' "$OMNISTAT_CONFIG"
+  echo "--- Starting Omnistat user-mode (interval=${OMNISTAT_USERMODE_INTERVAL}s, push=${OMNISTAT_PUSH_INTERVAL}min) ---"
   export PATH="${OMNISTAT_VENV}/bin:${PATH}"
   "${OMNISTAT_VENV}/bin/omnistat-usermode" --configfile "$OMNISTAT_CONFIG" \
-      --start --interval "$OMNISTAT_USERMODE_INTERVAL" \
+      --start --interval "$OMNISTAT_USERMODE_INTERVAL" --pushinterval "$OMNISTAT_PUSH_INTERVAL" \
       2>&1 | tee "${HG_OUTPUT_DIR}/omnistat_start.log" || {
     echo "WARN: omnistat-usermode --start returned nonzero; continuing without telemetry" >&2
     _TELEMETRY_ON=0
@@ -126,6 +152,20 @@ chmod +x "$WORK/scripts/tele8_rank.sh"
 _U=(); while IFS= read -r v; do _U+=(-u "$v"); done \
   < <(env | grep -oE '^(PMIX_|PMI_|OMPI_)[A-Za-z0-9_]+')
 
+# Kernel-trace: bind the tool lib + set the rocprofiler/HSA env that loads it
+# inside the container (per Omnistat docs: ROCP_TOOL_LIBRARIES + HSA_TOOLS_LIB +
+# HSA_TOOLS_ROCPROFILER_V1_TOOLS). Empty arrays when tracing is off.
+_KT_BIND=(); _KT_ENV=()
+if [[ "$_KTRACE_ON" == "1" ]]; then
+  # The trace lib POSTs to the omnistat collector port (8101 in the template).
+  _OMNI_PORT=$(awk -F'[= \t]+' '/^[[:space:]]*port[[:space:]]*=/ {print $2; exit}' "$OMNISTAT_CONFIG")
+  _KT_BIND=(--bind "${OMNISTAT_TRACE_LIB}:${OMNISTAT_TRACE_LIB}:ro")
+  _KT_ENV=(--env ROCP_TOOL_LIBRARIES="${OMNISTAT_TRACE_LIB}"
+           --env HSA_TOOLS_LIB=/opt/rocm/lib/librocprofiler64.so
+           --env HSA_TOOLS_ROCPROFILER_V1_TOOLS=1
+           --env OMNISTAT_TRACE_ENDPOINT_PORT="${_OMNI_PORT:-8101}")
+fi
+
 _T0=$(date +%s)
 srun --ntasks=8 --gpus-per-node=8 --mpi=pmix --cpu-bind=none \
   env "${_U[@]}" apptainer exec --rocm \
@@ -133,6 +173,7 @@ srun --ntasks=8 --gpus-per-node=8 --mpi=pmix --cpu-bind=none \
   --bind "${HG_DATA_DIR}:${HG_DATA_DIR}:ro" \
   --bind "$WORK:$WORK" \
   --bind "$HG_INFER_REPO:$HG_INFER_REPO" \
+  "${_KT_BIND[@]}" "${_KT_ENV[@]}" \
   --env HG_INFER_REPO="$HG_INFER_REPO" \
   --env HG_DATASET_BP="$HG_DATASET_BP" \
   --env HG_NUM_EPOCH="$HG_NUM_EPOCH" \
