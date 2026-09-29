@@ -153,3 +153,10 @@ logs/*
 
 # Ephemeral dev-server restart logs (backend/frontend, per-session)
 studio/**/*_restart.log
+
+# One-off local Playwright capture scripts (hardcoded ports and /tmp outputs,
+# some carry demo credentials). The reusable tooling is shot-on-compute.sh +
+# shot-capture.js; keep ad hoc captures out of the repo.
+studio/demo/*.mjs
+studio/demo/shot-preview.js
+studio/demo/shot-saf*.js
