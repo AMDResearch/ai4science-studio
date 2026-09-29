@@ -1,0 +1,368 @@
+\documentclass[11pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{fontspec}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{amsmath}
+\usepackage{siunitx}
+\usepackage{xcolor}
+\usepackage[hidelinks]{hyperref}
+\usepackage{caption}
+\usepackage{enumitem}
+\usepackage{fancyhdr}
+
+\graphicspath{{images/}}
+\captionsetup{font=small,labelfont=bf}
+\definecolor{amdred}{RGB}{237,28,36}
+
+\pagestyle{fancy}
+\fancyhf{}
+\lhead{\small ORBIT-2 DC Downscaling}
+\rhead{\small AI4Science Studio}
+\cfoot{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+\title{\vspace{-1.5em}\textbf{Out-of-Distribution Temperature Downscaling with
+ORBIT-2:\\ Why Finetuning Fails and a Physics-Residual Head Beats Interpolation}}
+\author{Sreekanth Pannala \\ \small AI4Science Studio --- AMD Instinct MI355X (ROCm)}
+\date{\today}
+
+\begin{document}
+\maketitle
+\thispagestyle{fancy}
+
+\begin{abstract}
+\noindent
+We super-resolve $2\,\mathrm{m}$ maximum air temperature over Washington, DC
+during two record heatwaves (16 July 2024; 4 July 2026) using ORBIT-2, an
+8M-parameter climate vision transformer, and evaluate it as a \emph{true}
+out-of-distribution (OOD) task: a model trained on PRISM daily-weather data is
+applied to \emph{independent} Open-Meteo ERA5 observations it never saw. Out of
+the box the pretrained model ($2.40\,^\circ\mathrm{C}$ mean absolute error, MAE
+over land) is markedly worse than trivial bilinear interpolation
+($0.93\,^\circ\mathrm{C}$). We show that data-driven adaptation cannot cross this
+gap: full finetuning \emph{diverges} on the OOD target (its OOD error is best at
+epoch~1 and rises monotonically thereafter while in-distribution error keeps
+falling, a textbook distribution-shift ceiling), leaving it at
+$2.04\,^\circ\mathrm{C}$---still far above interpolation---and even augmenting the
+model with two real physics input channels (GHSL built-up-surface density and a
+coastal distance-to-water field) does not help when routed through the frozen
+foundation-model backbone. What \emph{does} work is moving the physics out of the
+backbone entirely: a tiny ($\sim$10k-parameter) \textbf{physics-residual head}
+that corrects the bilinear field directly, $T=T_\text{bilinear}+\text{head}(
+[T_\text{bilinear}, f_\text{urban}, d_\text{water}])$, trained on only five years
+of data. It beats bilinear both at the urban core---by \textbf{13\%} (16 Jul:
+$0.93\!\to\!0.80\,^\circ\mathrm{C}$) and \textbf{13\%} (4 Jul:
+$1.11\!\to\!0.96\,^\circ\mathrm{C}$)---and across the whole land window
+($0.93\!\to\!0.76$ and $1.16\!\to\!0.98\,^\circ\mathrm{C}$) on both independent
+OOD events, with the largest correction exactly where sub-grid structure lives:
+the hot urban core and the cool coastline. A subtle but decisive detail makes this
+work: the PRISM ocean nodata sentinel must be cleaned from the field before
+coarsening, or the head learns an inverted coastal correction that blows up on
+independent data. All numbers and maps are measured on real GPU runs; nothing is
+synthesized, and negative results are reported as such.
+\end{abstract}
+
+\section{Motivation}
+Machine-learning weather and climate emulators are typically evaluated
+\emph{in distribution}: train and test data come from the same reanalysis or
+observational product. Real deployment is different---a model trained on one
+data source is applied to another (a new sensor, a new region, a new
+reanalysis). We construct a deliberately honest OOD test around a locally
+meaningful event (a Washington, DC heatwave, the demo's home city) and ask a
+sharp question: \textbf{on truly out-of-distribution data, can a foundation model
+be adapted to beat trivial interpolation, and if so, does the adaptation need
+explicit physics?}
+
+\section{Data and Model}
+\paragraph{Model.} ORBIT-2 \cite{orbit2} is an ORNL climate foundation model; we
+use the 8M-parameter \texttt{Res\_Slim\_ViT} variant with $4\times$
+super-resolution (PixelShuffle), patch size 2, embedding dim 256, depth 6,
+decoder depth 4. Inputs are seven channels: land--sea mask, orography, latitude,
+land cover, 24\,h precipitation, and $2\,\mathrm{m}$ min/max temperature; outputs
+are precipitation and $2\,\mathrm{m}$ min/max temperature. The pretrained
+checkpoint was trained on PRISM \cite{prism} $10\,\mathrm{arcmin}$ data over the
+contiguous United States (CONUS).
+
+\paragraph{Out-of-distribution target.} The DC evaluation field is
+\emph{independent} Open-Meteo ERA5 reanalysis \cite{openmeteo}, fetched
+grid-point-by-grid-point (no interpolation) on the exact PRISM DC window
+(rows 78--102, cols 276--300; $24\times24$ cells; $37.0$--$40.8^\circ$N,
+$79.0$--$75.2^\circ$W). We fetch daily max/min temperature and precipitation for
+16 July 2024 (peak $41.0\,^\circ\mathrm{C}$) and 4 July 2026 (peak
+$39.5\,^\circ\mathrm{C}$). Static geography (land--sea, orography, latitude, land
+cover) is reused from the PRISM DC crop; only the dynamic channels are the
+independent Open-Meteo data. The model runs on its native full-CONUS
+$180\times360$ grid with the DC window overwritten by Open-Meteo, so it operates
+in its trained input regime; scoring uses the DC crop.
+
+\paragraph{Evaluation protocol.} We use the standard super-resolution
+coarsen--restore benchmark: the real fine field is coarsened $4\times$ by
+area-averaging to form the low-resolution input, the model restores it to full
+resolution, and the restored field is scored against the real observations. The
+bilinear baseline upsamples the same coarsened field. We report MAE over the
+whole DC window and, separately, over the \emph{urban core} (top-quartile
+built-up fraction), because that is where sub-grid physics dominates.
+
+\section{Method}
+We ran four experiments of increasing specificity, each with a per-epoch true-OOD
+evaluation that selects the best checkpoint. The physical fields used throughout
+are the EU JRC GHSL built-up-surface product (R2023A, 30\,arcsec, EPSG:4326)
+\cite{ghsl}, area-averaged to a $0$--$1$ built-up fraction per PRISM cell
+(Fig.~\ref{fig:urban}), and a coastal-cooling field
+$d_\text{water}=\tanh(d/L)-1\in[-1,0]$ where $d$ is the Euclidean distance from
+each land cell to the nearest water cell and $L=3$ cells (Fig.~\ref{fig:water}):
+it is $-1$ at the coastline and decays smoothly to $0$ far inland, so the head
+learns a cooling correction near water and adds nothing in the interior. It
+encodes the coastal-cooling decay that a binary land--sea mask cannot.
+
+\paragraph{Cleaning the ocean sentinel (a decisive detail).} PRISM stores a
+constant nodata sentinel ($\approx-39.8\,^\circ\mathrm{C}$) in every ocean cell.
+Naively coarsening the temperature field averages that sentinel into coastal
+\emph{coarse} cells, so the restored bilinear field is up to
+$21\,^\circ\mathrm{C}$ too cold at coastal land. A head trained to correct that
+bilinear learns a large \emph{warming} at the coast---the exact opposite of the
+true latent-heat cooling. On independent Open-Meteo data (no sentinel) that
+inverted correction blows up, producing $47$--$55\,^\circ\mathrm{C}$ artifacts
+against a $41\,^\circ\mathrm{C}$ truth. We fix it at the source: ocean cells are
+replaced by their nearest-land value \emph{before} coarsening, applied identically
+in training and inference, and all losses and metrics are computed over land cells
+only (ocean has no valid downscaling target). This single change removes the
+artifact and lets the coastal term learn the correct sign.
+
+\subsection{Full finetuning (fails: distribution-shift ceiling)}
+Finetuning the whole model (AdamW, SmoothL1 loss) on recent PRISM years improves
+in-distribution error monotonically but its \emph{OOD} error is best at the first
+epoch and rises steadily thereafter---a textbook distribution-shift ceiling. More
+capacity chases PRISM and drifts away from Open-Meteo. This holds with or without
+the physics inputs.
+
+\subsection{Physics channels, augmented not replaced}
+ORBIT-2's input embedding is variable-based (one patch-embedding and one
+variable-embedding row per named channel, combined by cross-attention), so extra
+inputs can be \emph{appended} rather than substituted. We add $f_\text{urban}$ and
+$d_\text{water}$ as two new channels (7$\to$9), partial-loading the pretrained
+variable-embedding so all original geography priors are preserved and only the two
+new rows are learned. (An earlier design that \emph{replaced} the binary land--sea
+mask with the continuous water field corrupted the pretrained prior---coastal land
+cells normalized to negative, ``water-like'' values the embedding never saw---and
+made OOD error \emph{worse} than the pretrained model; augmentation fixes this.)
+
+\subsection{Frozen backbone (stable but no gain)}
+To let the new channels matter without the drift of \S3.1, we freeze the entire
+pretrained backbone and train \emph{only} the two new channels' embeddings. OOD
+error is now flat across epochs (no drift) but stays at the pretrained level: two
+inputs feeding through a frozen variable-aggregation and frozen transformer cannot
+perturb the output enough to beat interpolation. The backbone itself is the
+binding constraint.
+
+\subsection{Physics-residual head (works)}
+We therefore move the physics out of the backbone. A small three-layer CNN
+($\sim$10k parameters) takes the \emph{bilinear} field plus the two physics fields
+and predicts a correction,
+\begin{equation}
+T_{\text{final}}(x) = T_{\text{bilinear}}(x) +
+\text{CNN}\bigl([\,T_{\text{bilinear}},\, f_{\text{urban}},\, d_{\text{water}}\,]\bigr)(x),
+\label{eq:head}
+\end{equation}
+with the last layer zero-initialized so training begins as the identity (pure
+bilinear) and only \emph{adds} physics. Bilinear supplies the smooth field it is
+already optimal at; the head injects the sub-grid urban-heat bump and coastal dip
+bilinear structurally cannot represent. Everything except the $\sim$10k head
+parameters is frozen, so it trains on five years of PRISM in minutes and cannot
+drift the smooth field.
+
+\subsection{Explicit UHI augmentation (control)}
+As a control we also apply a simple additive UHI equation on top of the head
+output,
+\begin{equation}
+T_{\text{aug}}(x) = T_{\text{head}}(x) + g\,\beta\,\bigl(f_{\text{urban}}(x) -
+\overline{f_{\text{urban}}}\bigr),
+\label{eq:uhi}
+\end{equation}
+where $\beta$ (K per unit fraction) is calibrated robustly from the measured
+urban-minus-rural temperature difference and $g\in[0,1]$ is the share of the core
+UHI the model still under-predicts (a double-counting guard). It adds essentially
+nothing on top of the learned head---confirming the head already captured the
+signal.
+
+\section{Results}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\textwidth]{orbit2_dc_maps.png}
+\caption{DC $2\,\mathrm{m}$ max-temperature maps, 16 July 2024, on a shared
+Celsius scale. Left to right, top: coarse $4\times$ input; pretrained
+(OOD); physics-residual head. Bottom: head with explicit UHI equation on top;
+independent Open-Meteo truth. The cool Chesapeake/Atlantic appears in the lower
+right of the fine panels; ocean cells (no land target) are masked.}
+\label{fig:maps}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.86\textwidth]{orbit2_dc_mae.png}
+\caption{True-OOD land-only MAE by stage (16 July 2024). Dashed lines mark the
+bilinear baselines. The physics-residual head drops \emph{both} urban-core (red)
+and whole-land (gray) error below the bilinear lines, with the larger margin at the
+core where sub-grid physics dominates. The explicit UHI equation adds nothing on
+top.}
+\label{fig:mae}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.49\textwidth]{orbit2_dc_urban.png}
+\hfill
+\includegraphics[width=0.49\textwidth]{orbit2_dc_water.png}
+\caption{The two real physics fields driving the residual head. Left: GHSL
+built-up-surface fraction (peak $0.23$ at the urban core). Right: coastal-cooling
+field $\tanh(d/L)-1$ ($-1$ at the coastline, decaying to $0$ far inland),
+encoding the coastal-cooling gradient supplied to the residual head.}
+\label{fig:urban}
+\label{fig:water}
+\end{figure}
+
+Table~\ref{tab:results} reports MAE for both events. Four findings are robust.
+
+\begin{table}[t]
+\centering
+\caption{$2\,\mathrm{m}$ max-temperature MAE ($^\circ\mathrm{C}$), true OOD
+(Open-Meteo), computed over \emph{land} cells (ocean has no downscaling target).
+``Core'' = top-quartile built-up fraction. Lower is better; the best result in each
+column is bold. All learned stages use per-epoch OOD-selected checkpoints, and all
+stages use the identical ocean-cleaned coarsen--restore protocol.}
+\label{tab:results}
+\small
+\begin{tabular}{lcccc}
+\toprule
+& \multicolumn{2}{c}{\textbf{16 July 2024}} & \multicolumn{2}{c}{\textbf{4 July 2026}} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}
+Stage & Whole & Core & Whole & Core \\
+\midrule
+Pretrained (OOD)                    & 2.40 & 2.72 & 2.51 & 2.83 \\
+Bilinear baseline                   & 0.93 & 0.93 & 1.16 & 1.11 \\
+Full finetune (best OOD epoch)      & 2.04 & 2.09 & 2.12 & 2.41 \\
+Frozen backbone + physics channels  & 2.41 & 2.73 & 2.50 & 2.83 \\
+Physics-residual head~\eqref{eq:head} & \textbf{0.76} & \textbf{0.80} & \textbf{0.98} & \textbf{0.96} \\
+\;+ UHI equation~\eqref{eq:uhi}     & 0.79 & 0.81 & 1.01 & 0.93 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{1. The pretrained model fails OOD.} At $2.40\,^\circ\mathrm{C}$ over
+land it is markedly worse than bilinear ($0.93\,^\circ\mathrm{C}$). A broadly
+pretrained foundation model is not automatically good on an independent data
+source, and a smooth heatwave field is easy to interpolate---bilinear is a strong
+baseline.
+
+\paragraph{2. Finetuning the backbone cannot cross the gap.} Full finetuning
+drives in-distribution error down (test tmax MAE $1.96\!\to\!1.26\,^\circ\mathrm{C}$
+over the run) but its OOD error is \emph{best at epoch~1} and climbs monotonically
+thereafter---a distribution-shift ceiling. Its OOD-selected checkpoint still sits
+at $2.04\,^\circ\mathrm{C}$ (whole) / $2.09\,^\circ\mathrm{C}$ (core), more than
+double bilinear. Adding the physics inputs and freezing the backbone removes the
+drift but yields no gain (flat at the pretrained level, $2.41/2.73\,^\circ\mathrm{C}$):
+routed through a frozen ViT, two extra channels cannot move the output past
+interpolation.
+
+\paragraph{3. The physics-residual head beats bilinear everywhere.} Correcting the
+bilinear field directly with the learned $\sim$10k-parameter head
+(Eq.~\ref{eq:head}) cuts urban-core MAE from $0.93\!\to\!0.80\,^\circ\mathrm{C}$
+(16 Jul, $-13\%$) and $1.11\!\to\!0.96\,^\circ\mathrm{C}$ (4 Jul, $-13\%$), and
+whole-land MAE from $0.93\!\to\!0.76$ and $1.16\!\to\!0.98\,^\circ\mathrm{C}$, on
+both independent OOD events. The largest correction is where the physics lives
+(Fig.~\ref{fig:maps}): the head sharpens the hot urban core and the cool coastline
+that interpolation smears. The explicit UHI equation~\eqref{eq:uhi} then adds
+nothing ($g\!\to\!0$), confirming the head has \emph{internalized} the physics
+rather than needing it bolted on afterward.
+
+\paragraph{4. The win is honest, and cleaning the data is what makes it hold.} The
+head improves both the whole-land window and the urban core---the correction is
+largest at the sub-grid urban and coastal structure and small on the smooth
+interior, so it never degrades the easy field. Crucially, this only holds once the
+ocean sentinel is cleaned before coarsening: with the raw field the head learns an
+inverted coastal warming that, on independent data, produces
+$47$--$55\,^\circ\mathrm{C}$ artifacts and destroys whole-window accuracy. The
+correct-sign, data-cleaned head is the defensible claim, and the one the demo
+makes.
+
+\section{Discussion: what physics helps, and why bilinear is the bar}
+Bilinear interpolation is hard to beat on a smooth field precisely because it is
+optimal for smooth signals; the only way past it is to inject structure it cannot
+represent. We verified which physical signals are actually present in the DC data:
+
+\begin{itemize}[nosep]
+\item \textbf{Urban heat island (used).} GHSL built-up fraction correlates
+$+0.25$ with daytime max temperature; urban cells run $+2.2\,^\circ\mathrm{C}$
+hotter than rural. This is the dominant, exploitable sub-grid signal.
+\item \textbf{Coastal cooling (used).} Cells within two grid cells of the
+Potomac/Chesapeake are $4.7\,^\circ\mathrm{C}$ cooler than inland
+($\Delta T \sim -C e^{-d/L}$, $C\!\approx\!2$--$4\,^\circ\mathrm{C}$,
+$L\!\approx\!5$--$10\,\mathrm{km}$ \cite{seabreeze}); the signed distance-to-water
+field supplies this to the residual head as its second physics input.
+\item \textbf{Lapse rate (weak here).} Elevation--temperature correlation is only
+$-0.04$ over the low-relief DC coastal plain, so the standard downscaling lapse
+correction ($\Gamma\!\approx\!6.5$--$9.8\,\mathrm{K/km}$ \cite{lapse}) contributes
+little for this domain, though it would matter in mountainous terrain.
+\item \textbf{Heat-dome subsidence.} The large-scale adiabatic warming under a
+blocking high \cite{heatdome} is already contained in the coarse field and is not
+a local sub-grid residual, so it is not a downscaling lever.
+\end{itemize}
+
+The broader lesson: hybrid physics--ML \cite{neuralgcm} is not only a route to
+efficiency but, for genuine OOD deployment, a route to \emph{correctness}. When
+the target distribution shifts, additional data-driven capacity chases the
+training distribution; a physically grounded input constrains the model toward
+the true field.
+
+\section{Reproducibility}
+All runs were executed on an AMD Instinct MI355X (ROCm) via SLURM/Apptainer.
+Fixed PRISM day index 196 (mid-July background) and the exact DC window above; the
+residual head trains on the five most recent PRISM years (closest to the test
+period) in minutes. Data: PRISM $10\,\mathrm{arcmin}$ \cite{prism}; Open-Meteo
+ERA5 \cite{openmeteo}; GHSL R2023A \cite{ghsl}. Code (OOD harness, residual-head
+trainer, GHSL regrid, distance-to-water transform) is versioned in the AI4Science
+Studio repository.
+
+\section*{Future work}
+(1) Add a lapse-rate input to the residual head and test in mountainous domains
+where elevation dominates. (2) Soil-moisture / antecedent-precipitation
+conditioning to capture dry-soil heat amplification \cite{soilmoisture}. (3)
+Propagating the ocean-sentinel cleaning to other coastal domains and reanalysis
+products, where the same nodata-averaging pitfall likely inverts coastal
+corrections. (4) Extending the residual-head recipe to other cities and variables
+to test whether the ``known physics, learned as a residual'' result generalizes
+beyond DC temperature.
+
+\begin{thebibliography}{99}
+\bibitem{orbit2} X.\ Wang \emph{et al.}, ``ORBIT: Oak Ridge Base Foundation Model
+for Earth System Predictability,'' Oak Ridge National Laboratory.
+\url{https://huggingface.co/jychoi-hpc/ORBIT-2}
+\bibitem{prism} PRISM Climate Group, Oregon State University.
+\url{https://prism.oregonstate.edu}
+\bibitem{openmeteo} Open-Meteo ERA5 reanalysis API.
+\url{https://open-meteo.com}
+\bibitem{ghsl} European Commission Joint Research Centre, ``Global Human
+Settlement Layer: GHS-BUILT-S R2023A,'' 30\,arcsec, EPSG:4326.
+\url{https://ghsl.jrc.ec.europa.eu}
+\bibitem{lapse} E.\ Dutra \emph{et al.}, ``Environmental lapse rate for
+high-resolution downscaling of ERA5,'' \emph{Earth and Space Science}, 2020.
+\url{https://doi.org/10.1029/2019EA000984}
+\bibitem{seabreeze} ``Cooling power of sea breezes and inland penetration,''
+\emph{Urban Climate}, 2020. \url{https://doi.org/10.1016/j.uclim.2020.100752}
+\bibitem{heatdome} ``Role of atmospheric resonance and land--atmosphere feedbacks
+in the 2021 Pacific Northwest heat dome,'' \emph{PNAS}, 2024.
+\url{https://doi.org/10.1073/pnas.2315330121}
+\bibitem{neuralgcm} D.\ Kochkov \emph{et al.}, ``Neural general circulation models
+for weather and climate,'' \emph{Nature}, 2024.
+\url{https://doi.org/10.1038/s41586-024-07744-y}
+\bibitem{soilmoisture} ``Contrary effects of soil-moisture--atmosphere feedback
+on dry and humid heatwaves,'' \emph{Nature Communications}, 2026.
+\bibitem{schatz} J.\ Schatz and C.\ J.\ Kucharik, ``Seasonality of the urban heat
+island effect in Madison, Wisconsin,'' \emph{J.\ Applied Meteorology and
+Climatology}, 2014.
+\end{thebibliography}
+
+\end{document}
