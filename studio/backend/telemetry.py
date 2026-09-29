@@ -20,30 +20,17 @@ from pathlib import Path
 
 import requests
 
-POINTS = 93  # match the reference telemetry panel's time-series resolution
+import telemetry_catalog as cat
 
-# ── PromQL ────────────────────────────────────────────────────────────────────
+POINTS = 200  # time-series resolution (denser now that sampling is 0.5-1s)
+
 # The VictoriaMetrics DB is per-job (one omnistat-db per SLURM job), so we do NOT
-# need the rmsjob_info join used in the multi-job perf-runs DB — every series in
-# this DB already belongs to the one job. Metric names verified against a real
-# gfx950 run (smoke test 17733). fp64 GFLOP/s follows the config-template formula;
-# we keep the MFMA term (dominant for GEMM-heavy ML training).
-#
-# {jobid} kept in the format string for API symmetry but unused in the exprs.
-_EXPR = {
-    "gpu_util_pct": 'rocm_utilization_percentage',
-    "power_w": 'rocm_average_socket_power_watts',
-    "temp_c": 'rocm_temperature_celsius',
-    "vram_gb": 'rocm_vram_used_percentage * rocm_vram_total_bytes / 100 / 1073741824',
-    "fp64_tflops": (
-        'rate(omnistat_hardware_counter{{name="SQ_INSTS_VALU_MFMA_MOPS_F64"}}[30s]) '
-        '* 512 / 1e12'
-    ),
-    "hbm_read_gbs": 'rate(omnistat_hardware_counter{{name="FETCH_SIZE"}}[30s]) * 1024 / 1e9',
-}
-
-# Series metrics rendered as interactive charts (max across GPUs per timestamp).
-_SERIES_KEYS = ("gpu_util_pct", "power_w", "temp_c")
+# need the rmsjob_info join used in the multi-job perf-runs DB — every series here
+# belongs to the one job. All metric exprs + aggregations live in telemetry_catalog.
+_EXPR = {d["key"]: d["promql"] for d in cat.CATALOG}
+_AGG = {d["key"]: d["agg"] for d in cat.CATALOG}
+_UNITS = {d["key"]: d["unit"] for d in cat.CATALOG}
+_DEFAULT_KEYS = cat.DEFAULT_KEYS
 
 
 def _free_port() -> int:
@@ -166,27 +153,43 @@ def _range_avg(url: str, base_expr: str, start: int, end: int, step: int) -> lis
         return []
 
 
-def _peak(url: str, key: str, jobid: str, start: int, end: int) -> float | None:
-    """Peak (max across GPUs and time) of a metric over the job window.
+_AGG_FN = {"max": _range_max, "sum": _range_sum, "avg": _range_avg}
 
-    Uses query_range + Python max rather than a max_over_time subquery: the latter
-    silently returns empty for rate()-based counter expressions in this VM build.
+
+def _series_for(url: str, key: str, start: int, end: int, step: int) -> list:
+    """Downsampled (t_rel, value) series for a catalog metric, aggregated per its agg."""
+    expr = _EXPR[key].format(jobid="")
+    fn = _AGG_FN.get(_AGG.get(key, "max"), _range_max)
+    return fn(url, expr, start, end, step)
+
+
+def _collect(url: str, keys, start: int, end: int) -> dict:
+    """Series for the requested catalog keys, zipped on a shared t_s axis.
+
+    Returns {"t_s":[...], key:[...], ...}. Keys with no data yield [] (frontend
+    treats an empty series as "not available yet").
     """
-    expr = _EXPR[key].format(jobid=jobid)
     step = max(1, (end - start) // POINTS)
-    pts = _range_max(url, expr, start, end, step)
+    series: dict[str, list] = {"t_s": []}
+    for key in keys:
+        pts = _series_for(url, key, start, end, step)
+        if pts and not series["t_s"]:
+            series["t_s"] = [t for t, _ in pts]
+        series[key] = [v for _, v in pts]
+    return series
+
+
+def _peak(url: str, key: str, start: int, end: int) -> float | None:
+    """Peak of a metric over the job window (aggregated across GPUs per its agg)."""
+    step = max(1, (end - start) // POINTS)
+    pts = _series_for(url, key, start, end, step)
     vals = [v for _, v in pts if v is not None]
     return round(max(vals), 3) if vals else None
 
 
-def _mean(url: str, key: str, jobid: str, start: int, end: int) -> float | None:
-    """Mean over time of the per-timestamp AVERAGE across GPUs (the 'typical' value).
-
-    Peak alone is misleading (a single GPU spiking to 100% shows as 100%); the mean
-    of the cross-GPU average is the honest headline companion, matching the reference
-    panel's 'peak 58% / mean 2.457%' framing.
-    """
-    expr = _EXPR[key].format(jobid=jobid)
+def _mean(url: str, key: str, start: int, end: int) -> float | None:
+    """Mean over time of the per-timestamp AVERAGE across GPUs (the 'typical' value)."""
+    expr = _EXPR[key].format(jobid="")
     step = max(1, (end - start) // POINTS)
     pts = _range_avg(url, expr, start, end, step)
     vals = [v for _, v in pts if v is not None]
@@ -239,36 +242,10 @@ def harvest(manifest_path: Path) -> dict | None:
         start, end = _tsdb_window(db_path, url)
         if runtime_s <= 0:
             runtime_s = max(end - start, 1)
-        peaks = {k: _peak(url, k, jobid, start, end) for k in _EXPR}
-        means = {k: _mean(url, k, jobid, start, end) for k in _EXPR}
-        # Energy (kJ) = mean total socket power (summed across GPUs) * runtime / 1000.
-        step = max(1, (end - start) // POINTS)
-        _pwr_sum = _range_sum(url, _EXPR["power_w"], start, end, step)
-        _pvals = [v for _, v in _pwr_sum if v is not None]
-        mean_power = (sum(_pvals) / len(_pvals)) if _pvals else None
-        peaks["energy_kj"] = round(mean_power * runtime_s / 1000.0, 2) if mean_power else None
-        means["energy_kj"] = peaks["energy_kj"]  # energy is cumulative; no separate mean
-        series: dict[str, list] = {"t_s": []}
-        first = True
-        for key in _SERIES_KEYS:
-            pts = _range_max(url, _EXPR[key].format(jobid=jobid), start, end, step)
-            if first and pts:
-                series["t_s"] = [t for t, _ in pts]
-                first = False
-            series[key] = [v for _, v in pts]
-
-        return {
-            "n_gpus": int(manifest.get("n_gpus", 8)),
-            "epochs": int(manifest.get("epochs", 0)),
-            "runtime_s": runtime_s,
-            "peaks": peaks,
-            "means": means,
-            "units": {
-                "gpu_util_pct": "%", "power_w": "W", "temp_c": "C", "vram_gb": "GB",
-                "energy_kj": "kJ", "fp64_tflops": "TFLOP/s", "hbm_read_gbs": "GB/s",
-            },
-            "series": series,
-        }
+        payload = _build_payload(url, start, end, keys=None, runtime_s=runtime_s)
+        payload["n_gpus"] = int(manifest.get("n_gpus", 8))
+        payload["epochs"] = int(manifest.get("epochs", 0))
+        return payload
     finally:
         if proc:
             proc.terminate()
@@ -276,3 +253,57 @@ def harvest(manifest_path: Path) -> dict | None:
                 proc.wait(timeout=10)
             except subprocess.TimeoutExpired:
                 proc.kill()
+
+
+def _build_payload(url: str, start: int, end: int, keys, runtime_s: int) -> dict:
+    """Assemble the telemetry payload (peaks/means/units/series) for a VM URL.
+
+    Shared by the on-disk harvest and the live cross-node endpoint. `keys` limits
+    the series (None = catalog defaults); peaks/means are computed for ALL catalog
+    metrics so the tiles are always populated. Series keys always include the
+    requested/default set so the charts render.
+    """
+    series_keys = list(keys) if keys else list(_DEFAULT_KEYS)
+    peaks = {k: _peak(url, k, start, end) for k in _EXPR}
+    means = {k: _mean(url, k, start, end) for k in _EXPR}
+    # Energy (kJ) = mean total socket power (summed across GPUs) * runtime / 1000.
+    step = max(1, (end - start) // POINTS)
+    _pwr_sum = _range_sum(url, _EXPR["power_w"], start, end, step)
+    _pvals = [v for _, v in _pwr_sum if v is not None]
+    mean_power = (sum(_pvals) / len(_pvals)) if _pvals else None
+    peaks["energy_kj"] = round(mean_power * runtime_s / 1000.0, 2) if mean_power else None
+    means["energy_kj"] = peaks["energy_kj"]
+    units = dict(_UNITS); units["energy_kj"] = "kJ"
+    return {
+        "runtime_s": runtime_s,
+        "peaks": peaks,
+        "means": means,
+        "units": units,
+        "series": _collect(url, series_keys, start, end),
+        "series_keys": series_keys,
+    }
+
+
+def harvest_live(node: str, start_epoch: int, keys=None, port: int = 9090) -> dict | None:
+    """Query the RUNNING omnistat VictoriaMetrics on a compute node for live telemetry.
+
+    `node` is the compute hostname (from slurm.job_state); the user-mode VM binds
+    :9090 there. Data only becomes queryable after omnistat's first ≥1-min push, so
+    an empty result means "warming up" (the caller reports that state). Short request
+    timeouts keep a slow/unreachable node from blocking the poll.
+    """
+    url = f"http://{node}:{port}"
+    try:
+        requests.get(f"{url}/api/v1/status/tsdb", timeout=3).raise_for_status()
+    except requests.RequestException:
+        return None  # VM not up / node unreachable
+    now = int(time.time())
+    start = int(start_epoch) if start_epoch else now - 600
+    end = now
+    if end - start < 2:
+        return None
+    payload = _build_payload(url, start, end, keys=keys, runtime_s=max(end - start, 1))
+    # "warming up" = VM up but no samples pushed yet (all series empty).
+    if not payload["series"].get("t_s"):
+        return None
+    return payload

@@ -32,8 +32,32 @@ def _run_dir(run_id: str) -> Path:
     return d
 
 
+import re as _re
+
+# Noisy lines from OpenMPI/PMIx/SLURM that clutter the run log without signal.
+# Dropped at the single choke point so output.log itself stays clean.
+_LOG_DENY = [
+    _re.compile(p, _re.IGNORECASE) for p in (
+        r"Sorry!\s+You were supposed to get help",
+        r"Couldn't open the help file.*\.txt",
+        r"help-btl-vader\.txt", r"btl_vader",
+        r"But I couldn't open the help file",
+        r"No such file or directory.*help",
+        r"PMIx?\b.*(WARNING|not found|unable)",
+        r"ompi_mpi_init|MPI_Init.*warn",
+        r"^\s*-{10,}\s*$",  # bare separator rules echoed by MPI help blocks
+    )
+]
+
+
 def _emit(run_id: str, line: str):
-    """Append to log file and push to SSE queue if any listener."""
+    """Append to log file and push to SSE queue if any listener.
+
+    Drops known-noisy MPI/PMIx help-file lines (see _LOG_DENY) so both the on-disk
+    log and the live stream stay signal-only.
+    """
+    if any(rx.search(line) for rx in _LOG_DENY):
+        return
     log = _run_dir(run_id) / "output.log"
     with open(log, "a") as f:
         f.write(line + "\n")
@@ -263,12 +287,21 @@ def _build_slurm_script(run_id: str, slug: str, domain: str, task: str,
         _prec = str(params.get("precision", "fp32")).lower()
         if _prec not in ("fp32", "fp64"):
             _prec = "fp32"
+        # Sampling resolution (s) and kernel-trace toggle (UI-selectable).
+        try:
+            _interval = float(params.get("omnistat_interval", 0.5))
+        except (TypeError, ValueError):
+            _interval = 0.5
+        _interval = min(max(_interval, 0.1), 10.0)
+        _ktrace = 1 if str(params.get("kernel_trace", 0)) in ("1", "true", "True") else 0
         script_lines += [
             f"export PERF_TOOLS_DIR={_PERF_TOOLS_DIR!r}",
             f"export OMNISTAT_VENV={_PERF_TOOLS_DIR}/omnistat-venv",
             f"export HG_DATA_DIR={_AI4S_SHARED_DIR}/models/HydraGNN/weights",
             f"export HG_NUM_EPOCH={_epochs}",
             f"export HG_PRECISION={_prec}",
+            f"export OMNISTAT_USERMODE_INTERVAL={_interval}",
+            f"export OMNISTAT_KERNEL_TRACE={_ktrace}",
             "",
         ]
     elif slug == "HydraGNN":
@@ -334,7 +367,8 @@ def _build_slurm_script(run_id: str, slug: str, domain: str, task: str,
 
     # Extra params from UI (skip ones already handled above)
     _handled = {"model_variant", "struct_index", "pairtune_prop", "pairtune_epochs",
-                "dc_event", "model_variant", "STRUCT_INDEX", "epochs", "precision"}
+                "dc_event", "model_variant", "STRUCT_INDEX", "epochs", "precision",
+                "omnistat_interval", "kernel_trace"}
     for k, v in params.items():
         if k.lower() not in _handled:
             script_lines.append(f"export {k.upper()}={q(str(v))}")
@@ -420,16 +454,24 @@ def _harvest_telemetry(run_id: str) -> dict | None:
         except Exception:
             pass
 
-    # Parse per-epoch loss curve from the training log so the Results tab can show
-    # convergence (train/val/test loss vs epoch), like the classic training view.
+    # Parse per-epoch loss curve so the Results tab shows convergence. The studio
+    # backend delegates to the telemetry sbatch via `bash sbatch_...`, so the inner
+    # `#SBATCH --output` is inert — training stdout lands in THIS run's slurm.log /
+    # output.log (not train_work/logs/hg_tele8_<jobid>.log). Read the run-dir logs.
     import re
-    log = Path(f"{_AI4S_SHARED_DIR}/models/HydraGNN/train_work/logs/hg_tele8_{slurm_id}.log")
-    if log.exists():
+    pat = re.compile(
+        r"Epoch:\s*(\d+),\s*Train Loss:\s*([\d.eE+-]+),\s*"
+        r"Val Loss:\s*([\d.eE+-]+),\s*Test Loss:\s*([\d.eE+-]+)")
+    _candidates = [
+        _run_dir(run_id) / "slurm.log",
+        _run_dir(run_id) / "output.log",
+        Path(f"{_AI4S_SHARED_DIR}/models/HydraGNN/train_work/logs/hg_tele8_{slurm_id}.log"),
+    ]
+    for log in _candidates:
+        if not log.exists():
+            continue
         try:
             epochs = []
-            pat = re.compile(
-                r"Epoch:\s*(\d+),\s*Train Loss:\s*([\d.eE+-]+),\s*"
-                r"Val Loss:\s*([\d.eE+-]+),\s*Test Loss:\s*([\d.eE+-]+)")
             for line in log.read_text().splitlines():
                 mm = pat.search(line)
                 if mm:
@@ -437,6 +479,7 @@ def _harvest_telemetry(run_id: str) -> dict | None:
                                    "val": float(mm.group(3)), "test": float(mm.group(4))})
             if epochs:
                 result["loss_curve"] = epochs
+                break
         except Exception:
             pass
     job["output_dir"] = str(perf_dir)
@@ -669,6 +712,37 @@ def launch(slug: str, domain: str, task: str, mode: str, prompt: str,
 
 def get_job(run_id: str) -> dict | None:
     return _jobs.get(run_id) or provenance.get_run(run_id)
+
+
+def live_telemetry(run_id: str, keys: list[str] | None) -> dict:
+    """Query the running job's Omnistat VM (compute node :9090) for live telemetry.
+
+    Returns {status, telemetry?}: 'pending' (no SLURM job / node yet), 'starting'
+    (VM up but no samples pushed — omnistat's first push is ≥1 min in), or 'live'.
+    """
+    import telemetry
+    from datetime import datetime
+    job = _jobs.get(run_id) or provenance.get_run(run_id) or {}
+    # If the run already completed and harvested, serve the final result telemetry.
+    if job.get("state") == "completed" and (job.get("result") or {}).get("telemetry"):
+        return {"status": "final", "telemetry": job["result"]["telemetry"]}
+    slurm_id = job.get("slurm_job_id")
+    if not slurm_id:
+        return {"status": "pending"}
+    info = slurm.job_state(str(slurm_id))
+    node = info.get("node")
+    if info.get("state", "").upper() in ("PENDING", "") or not node:
+        return {"status": "pending"}
+    # Derive the job's start epoch from created_at so the live window grows from t0.
+    start_epoch = 0
+    try:
+        start_epoch = int(datetime.fromisoformat(job["created_at"]).timestamp())
+    except Exception:
+        pass
+    tel = telemetry.harvest_live(node, start_epoch, keys=keys)
+    if tel is None:
+        return {"status": "starting", "node": node}
+    return {"status": "live", "node": node, "telemetry": tel}
 
 
 def list_jobs(limit: int = 50) -> list[dict]:

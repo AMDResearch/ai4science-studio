@@ -164,22 +164,42 @@ def job_state(job_id: str, ssh_host: str | None = None) -> dict:
     if not available(ssh_host):
         return {"state": "UNKNOWN", "exit_code": None, "elapsed": None}
 
-    base = ["sacct", "-X", "-n", "-P", "-j", job_id, "--format=State,ExitCode,Elapsed"]
+    base = ["sacct", "-X", "-n", "-P", "-j", job_id, "--format=State,ExitCode,Elapsed,NodeList"]
     cmd = _ssh_cmd(ssh_host, base) if ssh_host else base
     ok, out = _run(cmd)
     if not ok or not out.strip():
-        base2 = ["squeue", "-h", "-j", job_id, "-o", "%T"]
+        # squeue fallback: also grab the node (%N) for live telemetry queries.
+        base2 = ["squeue", "-h", "-j", job_id, "-o", "%T|%N"]
         cmd2 = _ssh_cmd(ssh_host, base2) if ssh_host else base2
         ok2, out2 = _run(cmd2)
         if ok2 and out2.strip():
-            return {"state": out2.strip().splitlines()[0], "exit_code": None, "elapsed": None}
-        return {"state": "UNKNOWN", "exit_code": None, "elapsed": None}
+            g = out2.strip().splitlines()[0].split("|")
+            return {"state": g[0].strip(), "exit_code": None, "elapsed": None,
+                    "node": _first_node(g[1] if len(g) > 1 else "")}
+        return {"state": "UNKNOWN", "exit_code": None, "elapsed": None, "node": None}
     f = out.strip().splitlines()[0].split("|")
     return {
         "state":     f[0].strip() if len(f) > 0 else "UNKNOWN",
         "exit_code": f[1].strip() if len(f) > 1 else None,
         "elapsed":   f[2].strip() if len(f) > 2 else None,
+        "node":      _first_node(f[3].strip() if len(f) > 3 else ""),
     }
+
+
+def _first_node(nodelist: str) -> str | None:
+    """First hostname from a SLURM NodeList (single-node runs → the node).
+
+    Handles 'lux-mi355x-a2', 'lux-mi355x-a[2-5]', 'a2,a3'. Uses `scontrol show
+    hostnames` when available for correctness on ranges; falls back to a simple parse.
+    """
+    nodelist = (nodelist or "").strip()
+    if not nodelist or nodelist in ("None", "(null)", ""):
+        return None
+    if "[" in nodelist or "," in nodelist:
+        ok, out = _run(["scontrol", "show", "hostnames", nodelist])
+        if ok and out.strip():
+            return out.strip().splitlines()[0]
+    return nodelist.split(",")[0]
 
 
 def cancel(job_id: str, ssh_host: str | None = None) -> tuple[bool, str]:

@@ -4,7 +4,7 @@ from __future__ import annotations
 import getpass
 import json
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -83,8 +83,16 @@ class AddModelRequest(BaseModel):
     tasks_available: list[str] = ["inference"]
     curated_prompts: list[dict] = []
 
+def _is_demo_origin(request: Request) -> bool:
+    o = (request.headers.get("origin") or request.headers.get("referer") or "")
+    return "ai4science-studio-demo." in o or "-studio-demo" in o
+
+
 @app.post("/api/models")
-def add_model(body: AddModelRequest):
+def add_model(body: AddModelRequest, request: Request):
+    # Read-only demo site: no model registration (defense in depth).
+    if _is_demo_origin(request):
+        raise HTTPException(403, "Model registration is disabled on the read-only demo site.")
     ok = registry.add_model(body.model_dump())
     if not ok:
         raise HTTPException(500, "Failed to register model")
@@ -103,7 +111,12 @@ class LaunchRequest(BaseModel):
     partition: str = "lux"
 
 @app.post("/api/jobs")
-def launch_job(body: LaunchRequest):
+def launch_job(body: LaunchRequest, request: Request):
+    # Read-only demo site: reject LIVE launches whose Origin/Referer is the demo
+    # hostname (defense in depth — the demo UI already grays out Live, but this blocks
+    # a crafted request from the demo origin from ever submitting a SLURM job).
+    if body.mode == "live" and _is_demo_origin(request):
+        raise HTTPException(403, "Live mode is disabled on the read-only demo site.")
     # Validate prompt first
     v = prompts.validate_prompt(body.slug, body.domain, body.prompt)
     if not v["ok"]:
@@ -163,6 +176,27 @@ async def stream_job(run_id: str):
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+# ── Telemetry (Omnistat) ────────────────────────────────────────────────────────
+
+@app.get("/api/telemetry/catalog")
+def telemetry_catalog():
+    """The selectable Omnistat metric catalog for the Performance-tab dropdown."""
+    import telemetry_catalog as cat
+    return cat.as_json()
+
+
+@app.get("/api/jobs/{run_id}/telemetry/live")
+def telemetry_live(run_id: str, keys: str | None = None):
+    """Live GPU telemetry from the RUNNING job's Omnistat VM on the compute node.
+
+    Returns {status: pending|starting|live, telemetry?}. Omnistat only serves
+    queryable data after its first ≥1-min push, so 'starting' means the exporter is
+    up but no samples have landed yet (the UI shows a 'warming up' state).
+    """
+    key_list = [k for k in (keys.split(",") if keys else []) if k] or None
+    return jobs.live_telemetry(run_id, key_list)
 
 
 # ── Slurm info ────────────────────────────────────────────────────────────────
