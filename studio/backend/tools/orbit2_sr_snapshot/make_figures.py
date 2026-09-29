@@ -5,9 +5,16 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib import cm
 
-OUT = os.environ.get("FIG_DIR", "/home/spannala/Projects/ai4science-studio/docs/images")
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_REPO = os.path.abspath(os.path.join(_HERE, "..", "..", "..", ".."))
+OUT = os.environ.get("FIG_DIR", os.path.join(_REPO, "docs", "images"))
 os.makedirs(OUT, exist_ok=True)
-S = json.load(open("/shared/spannala/orbit2_sr/orbit2_ood_dc.json"))
+# Result JSON written by orbit2_ood_dc.py (OUT_JSON there).
+_RESULT = os.environ.get("OOD_RESULT_JSON") or (
+    os.environ.get("ORBIT2_SR_DIR") and os.path.join(os.environ["ORBIT2_SR_DIR"], "orbit2_ood_dc.json"))
+if not _RESULT:
+    raise SystemExit("set OOD_RESULT_JSON or ORBIT2_SR_DIR")
+S = json.load(open(_RESULT))
 maps = S["maps"]
 m = S["metrics"]
 
@@ -80,7 +87,7 @@ print("wrote orbit2_dc_mae.png")
 
 
 # ---- Figure 3: GHSL urban density field ----
-u = json.load(open("/home/spannala/Projects/ai4science-studio/studio/backend/assets/dc_urban_density.json"))
+u = json.load(open(os.path.join(_REPO, "studio", "backend", "assets", "dc_urban_density.json")))
 uf = np.array(u["built_up_fraction"]); ulat = np.array(u["lat"]); ulon = np.array(u["lon"])
 fig, ax = plt.subplots(figsize=(6, 5.2))
 ext = [ulon.min(), ulon.max(), ulat.min(), ulat.max()]

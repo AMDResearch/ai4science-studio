@@ -1,5 +1,5 @@
 #!/bin/bash
-# AMD AI4Science Studio — Vultr Lux cluster launcher
+# AMD AI4Science Studio — cluster login-node launcher
 # Binds to 0.0.0.0 so the Cloudflare tunnel / SSH tunnels can reach both services.
 # Run this on the cluster login node.
 
@@ -30,10 +30,10 @@ fi
 npm run dev -- --host 0.0.0.0 --port 5275 2>&1 | sed 's/^/[frontend] /' &
 
 echo ""
-echo "[studio] ✅ Studio up on Vultr Lux."
+echo "[studio] ✅ Studio up on $(hostname -s)."
 echo "[studio]    To share externally (Cloudflare named tunnel):"
-echo "[studio]      cloudflared tunnel --config /shared/spannala/.cloudflared/config.yml run ai4science-studio"
-echo "[studio]      Public URL: https://ai4science-studio.axiomfabric.ai"
+echo "[studio]      cloudflared tunnel --config \${CLOUDFLARED_CONFIG:-<your config.yml>} run <tunnel-name>"
+echo "[studio]      Public URL: ${STUDIO_PUBLIC_URL:-<your tunnel hostname>}"
 echo "[studio]    Backend health: http://\$(hostname -f):8275/api/health"
 echo "[studio]    Frontend:       http://\$(hostname -f):5275"
 echo ""

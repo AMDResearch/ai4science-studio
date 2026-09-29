@@ -1,13 +1,13 @@
 #!/bin/bash
 # Record the three 4K (3840x2160, 16:9) _v1 demo videos.
 #
-# Run this ON a4, where the studio backend + frontend are ALREADY running.
+# Run this ON the compute node where the studio backend + frontend are ALREADY running.
 # It does NOT start or stop any service — it only connects, records, and copies
 # the results to ~/transfer.
 #
-# Typically launched on a4 via the hold job:
+# Typically launched on that node via the hold job:
 #   srun --jobid=<hold-jobid> --overlap bash \
-#     ~/Projects/ai4science-studio/studio/scripts/demo/record_demos_v1.sh
+#     <repo>/studio/scripts/demo/record_demos_v1.sh
 #
 # Ports default to the fixed studio ports from studio/SERVING.md (frontend 5376,
 # backend 8376). Override with FRONT_URL / BACK_URL if the services moved.
@@ -17,9 +17,9 @@
 set -e
 echo "[demos_v1] Host $(hostname) at $(date)"
 
-STUDIO="$HOME/Projects/ai4science-studio/studio"
+STUDIO="${STUDIO_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 SCRIPTS="$STUDIO/scripts/demo"
-# Must match the live a4 services. The frontend's Vite /api proxy must point at
+# Must match the live services. The frontend's Vite /api proxy must point at
 # the backend port, or rendered pages 500 (recorders' own API calls would still
 # work, silently producing broken videos). Keep these in sync with the running services.
 export FRONT_URL="${FRONT_URL:-http://127.0.0.1:5376}"
@@ -31,8 +31,8 @@ mkdir -p "$OUT_DIR" "$LOG_DIR" "$TRANSFER"
 
 # ── Stage GTK/X libs Chromium needs + copy Chromium to scratch (compute nodes
 #    lack these; Ubuntu 24.04 t64 package suffixes). Same recipe as record_demos.slurm.
-DEPS="/scratch/$USER/rdemos_v1_deps_$$"
-CHROME_LOCAL="/scratch/$USER/rdemos_v1_chrome_$$"
+DEPS="${AI4S_LOCAL_SCRATCH:-${TMPDIR:-/tmp}/$USER}/rdemos_v1_deps_$$"
+CHROME_LOCAL="${AI4S_LOCAL_SCRATCH:-${TMPDIR:-/tmp}/$USER}/rdemos_v1_chrome_$$"
 mkdir -p "$DEPS" "$CHROME_LOCAL"
 cleanup() { rm -rf "$DEPS" "$CHROME_LOCAL"; }
 trap cleanup EXIT
@@ -50,19 +50,21 @@ export PLAYWRIGHT_BROWSERS_PATH="$CHROME_LOCAL"
 # ── Locate ffmpeg (imageio-ffmpeg bundled binary)
 FFMPEG_CANDIDATES=(
   "$STUDIO/backend/.venv/lib/python3.12/site-packages/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2"
-  "$HOME/Projects/Utils/.venv/lib/python3.12/site-packages/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2"
 )
+# An explicit $FFMPEG wins; `ffmpeg` on PATH is the last resort.
+[ -n "${FFMPEG:-}" ] && FFMPEG_CANDIDATES=("$FFMPEG" "${FFMPEG_CANDIDATES[@]}")
+FFMPEG_CANDIDATES+=("$(command -v ffmpeg || true)")
 for f in "${FFMPEG_CANDIDATES[@]}"; do
   if [ -f "$f" ]; then export FFMPEG="$f"; echo "[demos_v1] FFMPEG=$FFMPEG"; break; fi
 done
 
 # ── Health-check the ALREADY-RUNNING services (do not start them) ──────────────
 curl -sf "$BACK_URL/api/health" >/dev/null 2>&1 || {
-  echo "[demos_v1] Backend not reachable at $BACK_URL — start the a4 services first."; exit 1
+  echo "[demos_v1] Backend not reachable at $BACK_URL — start the studio services first."; exit 1
 }
 echo "[demos_v1] backend healthy at $BACK_URL"
 curl -sf "$FRONT_URL/" >/dev/null 2>&1 || {
-  echo "[demos_v1] Frontend not reachable at $FRONT_URL — start the a4 services first."; exit 1
+  echo "[demos_v1] Frontend not reachable at $FRONT_URL — start the studio services first."; exit 1
 }
 echo "[demos_v1] frontend healthy at $FRONT_URL"
 

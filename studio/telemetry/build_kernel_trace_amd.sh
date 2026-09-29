@@ -32,7 +32,7 @@ ls -d /opt/rocm*/lib/cmake/rocprofiler-sdk 2>&1 | head
 # The trace lib links libcurl. The runtime lib (libcurl.so.4) is present but the
 # dev headers/symlink are not — stage libcurl4-openssl-dev into a scratch prefix
 # (same apt-get download + dpkg-deb -x pattern as the demo GTK-lib staging).
-CURLDEV="/scratch/$USER/kt_curldev_$$"
+CURLDEV="${AI4S_LOCAL_SCRATCH:-${TMPDIR:-/tmp}/$USER}/kt_curldev_$$"
 mkdir -p "$CURLDEV"; cd /tmp
 apt-get download libcurl4-openssl-dev 2>&1 | grep -vE "^Get:|^Fetched|^Reading|^W:" || true
 for d in /tmp/libcurl4-openssl-dev*.deb; do [ -f "$d" ] && dpkg-deb -x "$d" "$CURLDEV/"; done

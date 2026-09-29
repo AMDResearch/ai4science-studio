@@ -1,20 +1,22 @@
 #!/bin/bash
 #SBATCH --job-name=hg_guide_shots
-#SBATCH --partition=lux
-#SBATCH --account=vultr_lux
+#SBATCH --partition=YOUR_PARTITION_HERE
+#SBATCH --account=YOUR_ACCOUNT_HERE
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=16G
 #SBATCH --time=0:25:00
-#SBATCH --output=/home/spannala/Projects/ai4science-studio/docs/hydragnn_guide/capture_%j.log
+#SBATCH --output=capture_%j.log
+# Submit from docs/hydragnn_guide inside the checkout.
 
 set -uo pipefail
 echo "[shots] Job $SLURM_JOB_ID on $(hostname) at $(date)"
 echo "[shots] ulimit -u: $(ulimit -u)"
 
-STUDIO="$HOME/Projects/ai4science-studio/studio"
-GUIDE="$HOME/Projects/ai4science-studio/docs/hydragnn_guide"
+REPO="$(git -C "${SLURM_SUBMIT_DIR:-$PWD}" rev-parse --show-toplevel)"
+STUDIO="${STUDIO_DIR:-$REPO/studio}"
+GUIDE="$REPO/docs/hydragnn_guide"
 BACK_PORT=8376
 FRONT_PORT=5299
 export FRONT_URL="http://127.0.0.1:${FRONT_PORT}"
@@ -27,10 +29,11 @@ export HG_DEMO_STRUCT_INDEX_FILE="$GUIDE/.demo_struct_index"
 echo 0 > "$HG_DEMO_STRUCT_INDEX_FILE"
 
 # GTK/X libs Chromium needs (no root). Compute nodes are air-gapped, so the
-# .deb files are pre-staged on the login node into $STAGED_DEBS (shared FS).
-STAGED_DEBS="/shared/spannala/hgshots_debs"
-DEPS="/scratch/$USER/hgshots_deps_$$"
-CHROME_LOCAL="/scratch/$USER/hgshots_chrome_$$"
+# .deb files are pre-staged on the login node (apt-get download ...) into
+# $STAGED_DEBS on a shared filesystem.
+STAGED_DEBS="${STAGED_DEBS:?set STAGED_DEBS to a shared dir of pre-downloaded GTK/X .deb files}"
+DEPS="${AI4S_LOCAL_SCRATCH:-${TMPDIR:-/tmp}/$USER}/hgshots_deps_$$"
+CHROME_LOCAL="${AI4S_LOCAL_SCRATCH:-${TMPDIR:-/tmp}/$USER}/hgshots_chrome_$$"
 mkdir -p "$DEPS" "$CHROME_LOCAL"
 for d in "$STAGED_DEBS"/*.deb; do [ -f "$d" ] && dpkg-deb -x "$d" "$DEPS/" 2>/dev/null; done
 echo "[shots] extracted $(ls "$STAGED_DEBS"/*.deb 2>/dev/null | wc -l) staged debs"

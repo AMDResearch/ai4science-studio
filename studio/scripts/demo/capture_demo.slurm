@@ -1,19 +1,20 @@
 #!/bin/bash
 #SBATCH --job-name=hg_demo_pdf
-#SBATCH --partition=lux
-#SBATCH --account=vultr_lux
+#SBATCH --partition=YOUR_PARTITION_HERE
+#SBATCH --account=YOUR_ACCOUNT_HERE
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=16G
 #SBATCH --time=0:25:00
-#SBATCH --output=/home/spannala/Projects/ai4science-studio/studio/scripts/demo/logs/capture_demo_%j.log
+#SBATCH --output=logs/capture_demo_%j.log
 
 set -uo pipefail
 echo "[demo] Job $SLURM_JOB_ID on $(hostname) at $(date)"
 echo "[demo] ulimit -u: $(ulimit -u)"
 
-STUDIO="$HOME/Projects/ai4science-studio/studio"
+# Submit from inside the checkout (e.g. studio/scripts/demo, where logs/ exists).
+STUDIO="${STUDIO_DIR:-$(git -C "${SLURM_SUBMIT_DIR:-$PWD}" rev-parse --show-toplevel)/studio}"
 BACK_PORT=8299
 FRONT_PORT=5299
 export FRONT_URL="http://127.0.0.1:${FRONT_PORT}"
@@ -22,8 +23,8 @@ export OUT_DIR="$STUDIO/demo/demo-output"
 mkdir -p "$OUT_DIR/logs"
 
 # ── Stage GTK/X libs Chromium needs (no root) ───────────────────────────────
-DEPS="/scratch/$USER/hgdemo_deps_$$"
-CHROME_LOCAL="/scratch/$USER/hgdemo_chrome_$$"
+DEPS="${AI4S_LOCAL_SCRATCH:-${TMPDIR:-/tmp}/$USER}/hgdemo_deps_$$"
+CHROME_LOCAL="${AI4S_LOCAL_SCRATCH:-${TMPDIR:-/tmp}/$USER}/hgdemo_chrome_$$"
 mkdir -p "$DEPS" "$CHROME_LOCAL"
 cd /tmp
 apt-get download \

@@ -13,9 +13,20 @@ import sys, os, glob, json, numpy as np, torch
 from climate_learn.models.hub.res_slimvit import Res_Slim_ViT
 from climate_learn.utils.fused_attn import FusedAttn
 
-PRISM_ROOT = "/shared/aaji/models/ORBIT-2/data/superres/prism/10.0_arcmin"
-CKPT = "/home/spannala/.cache/huggingface/orbit2/pretrain/intermediate_8m.ckpt"
-OUT_CKPT = os.environ.get("FT_OUT", "/shared/spannala/orbit2_sr/orbit2_8m_ft.pk")
+def _site(sub: str) -> str:
+    """Path under the site shared dir ($AI4S_SHARED_DIR); explicit env vars override."""
+    base = os.environ.get("AI4S_SHARED_DIR")
+    if not base:
+        sys.exit(f"set AI4S_SHARED_DIR (or the explicit path variable) to locate {sub}")
+    return os.path.join(base, sub)
+
+
+PRISM_ROOT = os.environ.get("PRISM_ROOT") or _site("models/ORBIT-2/data/superres/prism/10.0_arcmin")
+ORBIT2_SR_DIR = os.environ.get("ORBIT2_SR_DIR") or _site("orbit2_sr")
+CKPT = os.environ.get("ORBIT2_CKPT") or os.path.join(
+    os.environ.get("ORBIT2_HF_CACHE") or os.path.expanduser("~/.cache/huggingface/orbit2"),
+    "pretrain", "intermediate_8m.ckpt")
+OUT_CKPT = os.environ.get("FT_OUT", os.path.join(ORBIT2_SR_DIR, "orbit2_8m_ft.pk"))
 
 DEFAULT_VARS = [
     "land_sea_mask", "orography", "lattitude", "landcover",

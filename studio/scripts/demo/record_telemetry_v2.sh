@@ -3,15 +3,15 @@
 # (3840x2160, 16:9). Same environment recipe as record_demos_v1.sh (GTK/X libs +
 # Chromium to scratch + imageio ffmpeg), targeting the fixed live ports.
 #
-# Run ON a4, where the studio services are already running:
+# Run ON the compute node where the studio services are already running:
 #   srun --jobid=<hold-jobid> --overlap bash \
-#     ~/Projects/ai4science-studio/studio/scripts/demo/record_telemetry_v2.sh
+#     <repo>/studio/scripts/demo/record_telemetry_v2.sh
 #
 # Output: ~/transfer/hydragnn_training_4k_demo.mp4
 set -e
 echo "[tele_v2] Host $(hostname) at $(date)"
 
-STUDIO="$HOME/Projects/ai4science-studio/studio"
+STUDIO="${STUDIO_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 SCRIPTS="$STUDIO/scripts/demo"
 export FRONT_URL="${FRONT_URL:-http://127.0.0.1:5376}"
 export BACK_URL="${BACK_URL:-http://127.0.0.1:8376}"
@@ -19,8 +19,8 @@ export OUT_DIR="${OUT_DIR:-$STUDIO/demo/demo-output}"
 TRANSFER="${TRANSFER_DIR:-$HOME/transfer}"
 mkdir -p "$OUT_DIR" "$TRANSFER"
 
-DEPS="/scratch/$USER/rtele_v2_deps_$$"
-CHROME_LOCAL="/scratch/$USER/rtele_v2_chrome_$$"
+DEPS="${AI4S_LOCAL_SCRATCH:-${TMPDIR:-/tmp}/$USER}/rtele_v2_deps_$$"
+CHROME_LOCAL="${AI4S_LOCAL_SCRATCH:-${TMPDIR:-/tmp}/$USER}/rtele_v2_chrome_$$"
 mkdir -p "$DEPS" "$CHROME_LOCAL"
 cleanup() { rm -rf "$DEPS" "$CHROME_LOCAL"; }
 trap cleanup EXIT
@@ -37,8 +37,10 @@ export PLAYWRIGHT_BROWSERS_PATH="$CHROME_LOCAL"
 
 FFMPEG_CANDIDATES=(
   "$STUDIO/backend/.venv/lib/python3.12/site-packages/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2"
-  "$HOME/Projects/Utils/.venv/lib/python3.12/site-packages/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2"
 )
+# An explicit $FFMPEG wins; `ffmpeg` on PATH is the last resort.
+[ -n "${FFMPEG:-}" ] && FFMPEG_CANDIDATES=("$FFMPEG" "${FFMPEG_CANDIDATES[@]}")
+FFMPEG_CANDIDATES+=("$(command -v ffmpeg || true)")
 for f in "${FFMPEG_CANDIDATES[@]}"; do
   if [ -f "$f" ]; then export FFMPEG="$f"; echo "[tele_v2] FFMPEG=$FFMPEG"; break; fi
 done

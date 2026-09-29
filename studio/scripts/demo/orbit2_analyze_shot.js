@@ -1,5 +1,8 @@
 'use strict'
-const { chromium } = require('/home/spannala/Projects/ai4science-studio/studio/demo/node_modules/playwright')
+const path = require('path')
+// Studio dir (repo-relative by default; override with STUDIO_DIR).
+const STUDIO_DIR = process.env.STUDIO_DIR || path.resolve(__dirname, '..', '..')
+const { chromium } = require(path.join(STUDIO_DIR, 'demo', 'node_modules', 'playwright'))
 const RID = process.env.RID
 ;(async () => {
   const browser = await chromium.launch({ channel: 'chromium', headless: true,
@@ -17,7 +20,7 @@ const RID = process.env.RID
     st.setStep(4)
   }, RID)
   await page.waitForTimeout(2500)
-  await page.screenshot({ path: '/home/spannala/orbit2_analyze.png', fullPage: true })
+  await page.screenshot({ path: path.join(process.env.OUT_DIR || require('os').tmpdir(), 'orbit2_analyze.png'), fullPage: true })
   console.log('shot taken')
   await browser.close()
 })().catch(e => { console.error('FAIL:', e.message); process.exit(1) })

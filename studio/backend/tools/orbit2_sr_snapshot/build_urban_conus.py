@@ -4,11 +4,14 @@ Reads the CONUS window of the cached global GHSL GeoTIFF once, converts m^2 ->
 fraction, then vectorized area-averages each GHSL pixel into its PRISM cell via
 index binning. Emits urban_conus.npz aligned to PRISM 10-arcmin.
 """
-import math, numpy as np, rasterio
+import math, os, sys, numpy as np, rasterio
 from rasterio.windows import from_bounds
 
-TIF = "/home/spannala/Projects/ai4science-studio/studio/backend/assets/_ghsl_builtup_dc.tif"
-OUT = "/shared/spannala/orbit2_sr/urban_conus.npz"
+# GHSL cache written by tools/fetch_dc_urban_density.py (gitignored, re-downloadable).
+TIF = os.environ.get("GHSL_TIF") or os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", "..", "assets", "_ghsl_builtup_dc.tif")
+OUT = os.environ.get("URBAN_CONUS") or os.path.join(
+    os.environ.get("ORBIT2_SR_DIR") or sys.exit("set ORBIT2_SR_DIR or URBAN_CONUS"), "urban_conus.npz")
 
 PRISM_LAT0, PRISM_DLAT = 24.0, (53.8333 - 24.0) / 179
 PRISM_LON0, PRISM_DLON = 235.0, (294.8333 - 235.0) / 359   # 0-360

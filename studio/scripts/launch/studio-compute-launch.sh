@@ -1,5 +1,5 @@
 #!/bin/bash
-STUDIO=/home/spannala/Projects/ai4science-studio/studio
+STUDIO="${STUDIO_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 LOGS="$STUDIO/logs"; mkdir -p "$LOGS"
 echo "COMPUTE_NODE: $(hostname)"
 echo "ulimit -u: $(ulimit -u)"

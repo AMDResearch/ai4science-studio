@@ -8,7 +8,7 @@
 #      with GTK/X libs staged via `apt-get download` + `dpkg-deb -x` (no root) onto
 #      LD_LIBRARY_PATH.
 #   2. NFS home cannot mmap chrome's icu data file, so chromium-1228 is copied to
-#      local /scratch and PLAYWRIGHT_BROWSERS_PATH points there.
+#      node-local scratch ($AI4S_LOCAL_SCRATCH, default $TMPDIR or /tmp) and PLAYWRIGHT_BROWSERS_PATH points there.
 #
 # Usage (attach to a running holder allocation):
 #   SHOT_JOBID=<holder> SHOT_TARGET=<url|file:///...> SHOT_OUT=/path/out.png \
@@ -24,14 +24,14 @@ OUT="${SHOT_OUT:?set SHOT_OUT to the output png path}"
 SCRIPT="${SHOT_SCRIPT:?set SHOT_SCRIPT to the capture node script}"
 W="${SHOT_W:-1520}"; H="${SHOT_H:-940}"
 
-DEMO="$HOME/Projects/ai4science-studio/studio/demo"
+DEMO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 _U=(); while IFS= read -r v; do _U+=(-u "$v"); done \
   < <(env | grep -oE '^(PMIX_|PMI_|OMPI_)[A-Za-z0-9_]+')
 
 srun --jobid="$JOBID" --overlap --ntasks=1 --cpu-bind=none env "${_U[@]}" bash -lc "
   set -e
-  DEPS=/scratch/\$USER/shot_deps_\$\$
-  CHROME_LOCAL=/scratch/\$USER/shot_chrome_\$\$
+  DEPS=\${AI4S_LOCAL_SCRATCH:-\${TMPDIR:-/tmp}/\$USER}/shot_deps_\$\$
+  CHROME_LOCAL=\${AI4S_LOCAL_SCRATCH:-\${TMPDIR:-/tmp}/\$USER}/shot_chrome_\$\$
   mkdir -p \"\$DEPS\" \"\$CHROME_LOCAL\"
 
   echo '[shot] staging GTK/X libs...'

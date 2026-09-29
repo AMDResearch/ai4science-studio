@@ -1,12 +1,14 @@
 'use strict'
 const path = require('path')
-const { chromium } = require('/home/spannala/Projects/ai4science-studio/studio/demo/node_modules/playwright')
+// Studio dir (repo-relative by default; override with STUDIO_DIR).
+const STUDIO_DIR = process.env.STUDIO_DIR || path.resolve(__dirname, '..', '..')
+const { chromium } = require(path.join(STUDIO_DIR, 'demo', 'node_modules', 'playwright'))
 const { execFileSync } = require('child_process')
 
 const FRONT = process.env.FRONT_URL || 'http://127.0.0.1:5299'
 const BACK  = process.env.BACK_URL  || 'http://127.0.0.1:8376'
-const OUT   = process.env.OUT_DIR   || '/home/spannala/Projects/ai4science-studio/studio/demo/demo-output'
-const FFMPEG = process.env.FFMPEG || '/home/spannala/Projects/ai4science-studio/studio/backend/.venv/lib/python3.12/site-packages/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2'
+const OUT   = process.env.OUT_DIR   || path.join(STUDIO_DIR, 'demo', 'demo-output')
+const FFMPEG = process.env.FFMPEG || path.join(STUDIO_DIR, 'backend/.venv/lib/python3.12/site-packages/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2')
 const HOLD = 20000   // every content slide holds for 20 seconds
 
 // Inject CSS once to widen the app so content fills a 16:9 big-display frame

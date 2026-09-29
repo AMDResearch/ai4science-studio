@@ -23,11 +23,22 @@ import sys, os, json, glob, numpy as np, torch
 from climate_learn.models.hub.res_slimvit import Res_Slim_ViT
 from climate_learn.utils.fused_attn import FusedAttn
 
-PRISM_ROOT = "/shared/aaji/models/ORBIT-2/data/superres/prism/10.0_arcmin"
-CKPT = "/home/spannala/.cache/huggingface/orbit2/pretrain/intermediate_8m.ckpt"
+def _site(sub: str) -> str:
+    """Path under the site shared dir ($AI4S_SHARED_DIR); explicit env vars override."""
+    base = os.environ.get("AI4S_SHARED_DIR")
+    if not base:
+        sys.exit(f"set AI4S_SHARED_DIR (or the explicit path variable) to locate {sub}")
+    return os.path.join(base, sub)
+
+
+PRISM_ROOT = os.environ.get("PRISM_ROOT") or _site("models/ORBIT-2/data/superres/prism/10.0_arcmin")
+ORBIT2_SR_DIR = os.environ.get("ORBIT2_SR_DIR") or _site("orbit2_sr")
+CKPT = os.environ.get("ORBIT2_CKPT") or os.path.join(
+    os.environ.get("ORBIT2_HF_CACHE") or os.path.expanduser("~/.cache/huggingface/orbit2"),
+    "pretrain", "intermediate_8m.ckpt")
 OOD_FIELDS = os.environ.get(
     "OOD_FIELDS",
-    "/home/spannala/Projects/ai4science-studio/studio/backend/assets/dc_ood_fields.json")
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "assets", "dc_ood_fields.json"))
 EVENT = os.environ.get("DC_EVENT", "july16_2024")
 
 DEFAULT_VARS = [
@@ -206,9 +217,9 @@ def main():
 
     # Model checkpoints. FT_HEATWAVE = finetune on 814 real PRISM DC heatwave days;
     # FT_URBAN = same, plus GHSL urban-density swapped into the landcover channel.
-    FT_HW = os.environ.get("FT_HEATWAVE", "/shared/spannala/orbit2_sr/orbit2_8m_ft_dc_hw.pk")
-    FT_URB = os.environ.get("FT_URBAN", "/shared/spannala/orbit2_sr/orbit2_8m_ft_urban.pk")
-    URBAN_CONUS = os.environ.get("URBAN_CONUS", "/shared/spannala/orbit2_sr/urban_conus.npz")
+    FT_HW = os.environ.get("FT_HEATWAVE", os.path.join(ORBIT2_SR_DIR, "orbit2_8m_ft_dc_hw.pk"))
+    FT_URB = os.environ.get("FT_URBAN", os.path.join(ORBIT2_SR_DIR, "orbit2_8m_ft_urban.pk"))
+    URBAN_CONUS = os.environ.get("URBAN_CONUS", os.path.join(ORBIT2_SR_DIR, "urban_conus.npz"))
 
     # Stage A: pretrained (also yields bilinear baseline + truth).
     m_pre = build_model(device, CKPT)
@@ -404,7 +415,7 @@ def main():
             "truth": upay(truth_dc, "Open-Meteo ERA5 (real DC observations)", mask_ocean=False),
         },
     }
-    out = os.environ.get("OUT_JSON", "/shared/spannala/orbit2_sr/orbit2_ood_dc.json")
+    out = os.environ.get("OUT_JSON", os.path.join(ORBIT2_SR_DIR, "orbit2_ood_dc.json"))
     json.dump(story, open(out, "w"))
     print(f"[ood] wrote {out}", flush=True)
 

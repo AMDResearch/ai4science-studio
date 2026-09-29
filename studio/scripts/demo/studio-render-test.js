@@ -1,5 +1,8 @@
 'use strict'
-const { chromium } = require('/home/spannala/Projects/ai4science-studio/studio/demo/node_modules/playwright')
+const path = require('path')
+// Studio dir (repo-relative by default; override with STUDIO_DIR).
+const STUDIO_DIR = process.env.STUDIO_DIR || path.resolve(__dirname, '..', '..')
+const { chromium } = require(path.join(STUDIO_DIR, 'demo', 'node_modules', 'playwright'))
 ;(async () => {
   const browser = await chromium.launch({
     channel: 'chromium',
@@ -11,12 +14,12 @@ const { chromium } = require('/home/spannala/Projects/ai4science-studio/studio/d
 
   console.log('Loading studio home...')
   await page.goto('http://localhost:5275', { waitUntil: 'networkidle', timeout: 30000 })
-  await page.screenshot({ path: '/home/spannala/ss_home.png', fullPage: true })
+  await page.screenshot({ path: path.join(process.env.OUT_DIR || require('os').tmpdir(), 'ss_home.png'), fullPage: true })
 
   // Navigate to Healthcare (GP-MoLFormer has 2 images)
   await page.click('text=Healthcare')
   await page.waitForTimeout(2000)
-  await page.screenshot({ path: '/home/spannala/ss_healthcare.png', fullPage: true })
+  await page.screenshot({ path: path.join(process.env.OUT_DIR || require('os').tmpdir(), 'ss_healthcare.png'), fullPage: true })
 
   const cards = await page.$$eval('.card', els => els.map(el => el.innerText))
   const gp = cards.find(c => c.includes('GP-MoLFormer')) || ''
@@ -31,7 +34,7 @@ const { chromium } = require('/home/spannala/Projects/ai4science-studio/studio/d
   await page.waitForTimeout(1000)
   await page.click('text=Earth Science')
   await page.waitForTimeout(2000)
-  await page.screenshot({ path: '/home/spannala/ss_earth.png', fullPage: true })
+  await page.screenshot({ path: path.join(process.env.OUT_DIR || require('os').tmpdir(), 'ss_earth.png'), fullPage: true })
   const esCards = await page.$$eval('.card', els => els.map(el => el.innerText))
   const storm = esCards.find(c => c.includes('StormCast')) || ''
   console.log('\n=== StormCast card (rendered) ===')

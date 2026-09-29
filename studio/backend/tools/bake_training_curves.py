@@ -9,10 +9,17 @@ Run once (or whenever the models are retrained):
     python3 tools/bake_training_curves.py
 """
 import json
+import os
 import re
+import sys
 from pathlib import Path
 
-TRAIN_WORK = Path("/shared/spannala/models/HydraGNN/train_work")
+# HydraGNN training work tree: $HG_WORK, else $AI4S_SHARED_DIR/models/HydraGNN/train_work.
+_work = os.environ.get("HG_WORK") or (
+    os.environ.get("AI4S_SHARED_DIR") and os.path.join(os.environ["AI4S_SHARED_DIR"], "models/HydraGNN/train_work"))
+if not _work:
+    sys.exit("set HG_WORK or AI4S_SHARED_DIR")
+TRAIN_WORK = Path(_work)
 OUT = Path(__file__).resolve().parents[1] / "assets" / "hydragnn_training.json"
 
 # HydraGNN emits: "0: Epoch: NN, Train Loss: X, Val Loss: Y, Test Loss: Z"

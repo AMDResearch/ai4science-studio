@@ -1,9 +1,10 @@
 #!/bin/bash
 set -e
+STUDIO="${STUDIO_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 echo "NODE: $(hostname)  ulimit-u: $(ulimit -u)"
 
-DEPS="/scratch/$USER/studio_chrome_deps_$$"
-CHROME_LOCAL="/scratch/$USER/studio_chrome_$$"
+DEPS="${AI4S_LOCAL_SCRATCH:-${TMPDIR:-/tmp}/$USER}/studio_chrome_deps_$$"
+CHROME_LOCAL="${AI4S_LOCAL_SCRATCH:-${TMPDIR:-/tmp}/$USER}/studio_chrome_$$"
 mkdir -p "$DEPS" "$CHROME_LOCAL"
 
 echo "[test] Staging GTK/X libs..."
@@ -23,5 +24,5 @@ echo "[test] Backend health:"
 curl -sf http://localhost:8275/api/health && echo ""
 
 echo "[test] Running render test..."
-cd /home/spannala/Projects/ai4science-studio/studio/demo
-node /home/spannala/studio-render-test.js
+cd "$STUDIO/demo"
+node "$STUDIO/scripts/demo/studio-render-test.js"

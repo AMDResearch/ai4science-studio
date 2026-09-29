@@ -14,9 +14,20 @@ import sys, os, json, glob, numpy as np, torch
 from climate_learn.models.hub.res_slimvit import Res_Slim_ViT
 from climate_learn.utils.fused_attn import FusedAttn
 
-PRISM_ROOT = "/shared/aaji/models/ORBIT-2/data/superres/prism/10.0_arcmin"
-CKPT = "/home/spannala/.cache/huggingface/orbit2/pretrain/intermediate_8m.ckpt"
-FT_MODEL = os.environ.get("FT_MODEL", "/shared/spannala/orbit2_sr/orbit2_8m_ft.pk")
+def _site(sub: str) -> str:
+    """Path under the site shared dir ($AI4S_SHARED_DIR); explicit env vars override."""
+    base = os.environ.get("AI4S_SHARED_DIR")
+    if not base:
+        sys.exit(f"set AI4S_SHARED_DIR (or the explicit path variable) to locate {sub}")
+    return os.path.join(base, sub)
+
+
+PRISM_ROOT = os.environ.get("PRISM_ROOT") or _site("models/ORBIT-2/data/superres/prism/10.0_arcmin")
+ORBIT2_SR_DIR = os.environ.get("ORBIT2_SR_DIR") or _site("orbit2_sr")
+CKPT = os.environ.get("ORBIT2_CKPT") or os.path.join(
+    os.environ.get("ORBIT2_HF_CACHE") or os.path.expanduser("~/.cache/huggingface/orbit2"),
+    "pretrain", "intermediate_8m.ckpt")
+FT_MODEL = os.environ.get("FT_MODEL", os.path.join(ORBIT2_SR_DIR, "orbit2_8m_ft.pk"))
 
 DEFAULT_VARS = [
     "land_sea_mask", "orography", "lattitude", "landcover",
@@ -134,8 +145,8 @@ def main():
     hi = {v: z[v][tindex, 0].astype(np.float32) for v in IN_VARS}
 
     # First finetune = broad (CONUS-wide); second finetune = DC-targeted (weighted).
-    FT1 = os.environ.get("FT_MODEL_1", "/shared/spannala/orbit2_sr/orbit2_8m_ft_v2.pk")
-    FT2 = os.environ.get("FT_MODEL_2", "/shared/spannala/orbit2_sr/orbit2_8m_ft_dc.pk")
+    FT1 = os.environ.get("FT_MODEL_1", os.path.join(ORBIT2_SR_DIR, "orbit2_8m_ft_v2.pk"))
+    FT2 = os.environ.get("FT_MODEL_2", os.path.join(ORBIT2_SR_DIR, "orbit2_8m_ft_dc.pk"))
 
     # Stage 0: pretrained model (also yields the bilinear baseline + truth).
     m_pre = build_model(device, CKPT)
@@ -211,7 +222,7 @@ def main():
             "truth": grid_payload(truth_dc, lat, lon, "PRISM truth (10-arcmin)", 0.16),
         },
     }
-    out = os.environ.get("OUT_JSON", "/shared/spannala/orbit2_sr/orbit2_story.json")
+    out = os.environ.get("OUT_JSON", os.path.join(ORBIT2_SR_DIR, "orbit2_story.json"))
     json.dump(story, open(out, "w"))
     print(f"[story] wrote {out}", flush=True)
 

@@ -1,17 +1,17 @@
 #!/bin/bash
 # AMD AI4Science Studio — Slurm batch demo recorder
-# Adapted from the tested DigitalTwin demo pattern (lux job 16826, 2026-07-16).
+# Adapted from a tested DigitalTwin demo recorder (2026-07-16).
 #
 # Usage:
 #   sbatch studio/demo/record_demo.slurm
 #   # or with explicit partition override:
-#   sbatch --partition=lux --account=vultr_lux studio/demo/record_demo.slurm
+#   sbatch --partition=<partition> --account=<account> studio/demo/record_demo.slurm
 #
-# Output: ~/Projects/ai4science-studio/studio/demo/demo-output/ai4science_demo.{webm,mp4}
+# Output: <repo>/studio/demo/demo-output/ai4science_demo.{webm,mp4}
 
 #SBATCH --job-name=studio_demo
-#SBATCH --partition=lux
-#SBATCH --account=vultr_lux
+#SBATCH --partition=YOUR_PARTITION_HERE
+#SBATCH --account=YOUR_ACCOUNT_HERE
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=16G
 #SBATCH --time=0:45:00
@@ -21,15 +21,14 @@
 set -e
 echo "[demo] Job $SLURM_JOB_ID on $(hostname) at $(date)"
 
-# Studio services run on the login node (NFS-shared home dir).
-# Compute nodes reach it via internal IP 10.2.96.4 (rad-vultr-login hostname
-# doesn't resolve from compute nodes in some DNS configs).
-LOGIN_HOST="10.2.96.4"
+# Studio services run on another host (e.g. the login node). Compute nodes may
+# not resolve its hostname, so STUDIO_HOST is usually its internal IP address.
+LOGIN_HOST="${STUDIO_HOST:?set STUDIO_HOST to the host (IP) running the studio services}"
 export STUDIO_URL="http://${LOGIN_HOST}:5173"
 
-STUDIO="$HOME/Projects/ai4science-studio/studio"
-DEPS="/scratch/$USER/studio_chrome_deps_$$"
-CHROME_LOCAL="/scratch/$USER/studio_chrome_$$"
+STUDIO="${STUDIO_DIR:-$(git -C "${SLURM_SUBMIT_DIR:-$PWD}" rev-parse --show-toplevel)/studio}"
+DEPS="${AI4S_LOCAL_SCRATCH:-${TMPDIR:-/tmp}/$USER}/studio_chrome_deps_$$"
+CHROME_LOCAL="${AI4S_LOCAL_SCRATCH:-${TMPDIR:-/tmp}/$USER}/studio_chrome_$$"
 mkdir -p "$DEPS" "$CHROME_LOCAL"
 
 # ── Stage missing GTK/X libs (Ubuntu 24.04 t64 naming, no root needed) ──────
@@ -56,13 +55,13 @@ for retry in 1 2 3; do
   curl -sf "http://${LOGIN_HOST}:8099/api/health" && echo " — backend healthy" && break || sleep 3
 done
 curl -sf "http://${LOGIN_HOST}:8099/api/health" > /dev/null || {
-  echo "[demo] Backend not reachable on ${LOGIN_HOST}:8099 — start it first: bash studio/launch-lux.sh"; exit 1
+  echo "[demo] Backend not reachable on ${LOGIN_HOST}:8099 — start the studio services first"; exit 1
 }
 for retry in 1 2 3; do
   curl -sf "http://${LOGIN_HOST}:5173/" > /dev/null && echo "[demo] Frontend healthy" && break || sleep 5
 done
 curl -sf "http://${LOGIN_HOST}:5173/" > /dev/null || {
-  echo "[demo] Frontend not reachable on ${LOGIN_HOST}:5173 — start it first: bash studio/launch-lux.sh"; exit 1
+  echo "[demo] Frontend not reachable on ${LOGIN_HOST}:5173 — start the studio services first"; exit 1
 }
 BACK_PID=""
 FRONT_PID=""
@@ -71,9 +70,10 @@ FRONT_PID=""
 # Try the studio venv's ffmpeg first, then Software venv
 FFMPEG_CANDIDATES=(
   "$STUDIO/backend/.venv/lib/python3.12/site-packages/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2"
-  "$HOME/Projects/Fusion/Software/venv/lib/python3.12/site-packages/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2"
-  "$HOME/Projects/Verticals/SubSurface/demo/bin/ffmpeg"
 )
+# An explicit $FFMPEG wins; `ffmpeg` on PATH is the last resort.
+[ -n "${FFMPEG:-}" ] && FFMPEG_CANDIDATES=("$FFMPEG" "${FFMPEG_CANDIDATES[@]}")
+FFMPEG_CANDIDATES+=("$(command -v ffmpeg || true)")
 for f in "${FFMPEG_CANDIDATES[@]}"; do
   if [ -f "$f" ]; then export FFMPEG="$f"; echo "[demo] FFMPEG=$FFMPEG"; break; fi
 done

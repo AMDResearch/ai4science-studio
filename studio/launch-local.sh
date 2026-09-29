@@ -27,7 +27,7 @@
 #      `localhost:5376`, NOT the compute hostname (which it cannot resolve/reach).
 #   7. Cloudflare (public URL) runs on the login node and its ingress `service:`
 #      hardcodes the compute-node hostname. When the studio moves nodes, update
-#      /shared/spannala/.cloudflared/config.yml and restart cloudflared (SERVING.md).
+#      your cloudflared config.yml ingress and restart cloudflared (SERVING.md).
 #
 # Usage:
 #   ./launch-local.sh                 # auto-detect the holder allocation
@@ -105,7 +105,7 @@ $SRUN bash -c "
 # The laptop can reach ONLY the login node, never compute nodes. So the LOGIN node
 # must forward its own 127.0.0.1:${FRONTEND_PORT} to the compute node's frontend.
 # The laptop then does `ssh -L ${FRONTEND_PORT}:localhost:${FRONTEND_PORT}
-# rad-vultr-login` (targeting login-node localhost, NOT the compute hostname the
+# <login-node>` (targeting login-node localhost, NOT the compute hostname the
 # laptop can't resolve). We (re)create this forward here so it always tracks ${NODE}.
 echo "[studio] (Re)creating login->compute forward for 127.0.0.1:${FRONTEND_PORT} -> ${NODE}..."
 # Kill any stale forward bound to our port (e.g. pointing at a previous node).
@@ -127,9 +127,9 @@ echo "[studio]    The laptop reaches ONLY the login node, so tunnel to login-nod
 echo "[studio]    localhost (NOT ${NODE}, which the laptop can't reach). The login->"
 echo "[studio]    compute forward above bridges the last hop."
 echo "[studio]    On your laptop:"
-echo "[studio]      ssh -N -L ${FRONTEND_PORT}:localhost:${FRONTEND_PORT} rad-vultr-login"
+echo "[studio]      ssh -N -L ${FRONTEND_PORT}:localhost:${FRONTEND_PORT} ${STUDIO_LOGIN_HOST:-<login-node>}"
 echo "[studio]      http://localhost:${FRONTEND_PORT}"
-echo "[studio]    Public URL (Cloudflare): https://ai4science-studio.axiomfabric.ai"
+echo "[studio]    Public URL (Cloudflare): ${STUDIO_PUBLIC_URL:-<not configured>}"
 echo "[studio]      (if the node changed, update config.yml ingress to ${NODE} and"
 echo "[studio]       restart cloudflared — see studio/SERVING.md)."
 echo "[studio]    Logs: $BACKEND/logs/backend_restart.log , $FRONTEND/logs/frontend_restart.log"

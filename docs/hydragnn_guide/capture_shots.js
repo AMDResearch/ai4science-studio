@@ -13,12 +13,14 @@
  * Requires the studio running: BACK_URL (127.0.0.1:8376), FRONT_URL (5299). */
 const fs = require('fs')
 const path = require('path')
-const PW = '/home/spannala/Projects/ai4science-studio/studio/demo/node_modules/playwright'
+// Studio dir (repo-relative by default; override with STUDIO_DIR).
+const STUDIO_DIR = process.env.STUDIO_DIR || path.resolve(__dirname, '..', '..', 'studio')
+const PW = path.join(STUDIO_DIR, 'demo', 'node_modules', 'playwright')
 const { chromium } = require(PW)
 
 const FRONT = process.env.FRONT_URL || 'http://127.0.0.1:5299'
 const BACK = process.env.BACK_URL || 'http://127.0.0.1:8376'
-const SHOTS = process.env.SHOTS_DIR || '/home/spannala/Projects/ai4science-studio/docs/hydragnn_guide/shots'
+const SHOTS = process.env.SHOTS_DIR || path.join(__dirname, 'shots')
 fs.mkdirSync(SHOTS, { recursive: true })
 
 async function shot(page, file) {

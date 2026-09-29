@@ -5,12 +5,14 @@
  * the studio backend (BACKEND_URL) and Vite frontend (FRONT_URL) are live. */
 const fs = require('fs')
 const path = require('path')
-const PW = '/home/spannala/Projects/ai4science-studio/studio/demo/node_modules/playwright'
+// Studio dir (repo-relative by default; override with STUDIO_DIR).
+const STUDIO_DIR = process.env.STUDIO_DIR || path.resolve(__dirname, '..', '..')
+const PW = path.join(STUDIO_DIR, 'demo', 'node_modules', 'playwright')
 const { chromium } = require(PW)
 
 const FRONT = process.env.FRONT_URL || 'http://127.0.0.1:5299'
 const BACK = process.env.BACK_URL || 'http://127.0.0.1:8299'
-const OUT = process.env.OUT_DIR || '/home/spannala/Projects/ai4science-studio/studio/demo/demo-output'
+const OUT = process.env.OUT_DIR || path.join(STUDIO_DIR, 'demo', 'demo-output')
 const SHOTS = path.join(OUT, 'shots')
 fs.mkdirSync(SHOTS, { recursive: true })
 
@@ -133,7 +135,7 @@ async function shot(page, file, title, caption, full = true) {
 
   // Inject the REAL live-inference result (from the ddp smoke test) for pred-vs-DFT.
   try {
-    const liveResult = JSON.parse(fs.readFileSync('/shared/spannala/models/HydraGNN/train_work/logs/hg_ismoke_result.json', 'utf8'))
+    const liveResult = JSON.parse(fs.readFileSync(process.env.HG_LIVE_RESULT_JSON || path.join(OUT, 'hg_ismoke_result.json'), 'utf8'))
     await setState(([result]) => {
       const st = window.__studioStore.getState()
       st.setResult(result); st.setStep(4)

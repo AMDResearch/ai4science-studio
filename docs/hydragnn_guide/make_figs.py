@@ -2,14 +2,18 @@
 consistent data (v3 8-GPU + 1-GPU-PBC runs, curated predictions, MACE sanity).
 Uses the backend venv matplotlib. Pure read of committed assets + result JSONs.
 """
-import json, os
+import json, os, sys
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-A = "/home/spannala/Projects/ai4science-studio/studio/backend/assets/"
-R = "/shared/spannala/models/HydraGNN/train_work/results/"
-OUT = "/home/spannala/Projects/ai4science-studio/docs/hydragnn_guide/figs/"
+_HERE = os.path.dirname(os.path.abspath(__file__))
+A = os.path.join(_HERE, "..", "..", "studio", "backend", "assets") + os.sep
+# Training result JSONs: $HG_RESULTS_DIR, else $AI4S_SHARED_DIR/models/HydraGNN/train_work/results.
+R = (os.environ.get("HG_RESULTS_DIR") or os.path.join(
+    os.environ.get("AI4S_SHARED_DIR") or sys.exit("set HG_RESULTS_DIR or AI4S_SHARED_DIR"),
+    "models/HydraGNN/train_work/results")) + os.sep
+OUT = os.path.join(_HERE, "figs") + os.sep
 os.makedirs(OUT, exist_ok=True)
 
 AMD_RED = "#ED1C24"

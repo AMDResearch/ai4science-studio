@@ -1,19 +1,20 @@
 #!/bin/bash
 #SBATCH --job-name=record-demos
-#SBATCH --partition=lux
-#SBATCH --account=vultr_lux
+#SBATCH --partition=YOUR_PARTITION_HERE
+#SBATCH --account=YOUR_ACCOUNT_HERE
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=16G
 #SBATCH --time=1:15:00
-#SBATCH --output=/home/spannala/Projects/ai4science-studio/studio/scripts/demo/logs/record_demos_%j.log
+#SBATCH --output=logs/record_demos_%j.log
 
 set -e
 echo "[demos] Job $SLURM_JOB_ID on $(hostname) at $(date)"
 echo "[demos] ulimit -u: $(ulimit -u)"
 
-STUDIO="$HOME/Projects/ai4science-studio/studio"
+# Submit from inside the checkout (e.g. studio/scripts/demo, where logs/ exists).
+STUDIO="${STUDIO_DIR:-$(git -C "${SLURM_SUBMIT_DIR:-$PWD}" rev-parse --show-toplevel)/studio}"
 # Backend port MUST match the Vite dev proxy target in frontend/vite.config.js
 # (/api -> 127.0.0.1:8376). If they differ, the recorder's direct API calls work
 # but every rendered page's /api fetch 500s through the proxy and the UI freezes
@@ -26,8 +27,8 @@ export OUT_DIR="$STUDIO/demo/demo-output"
 mkdir -p "$OUT_DIR/logs"
 
 # Stage GTK/X libs Chromium needs
-DEPS="/scratch/$USER/rdemos_deps_$$"
-CHROME_LOCAL="/scratch/$USER/rdemos_chrome_$$"
+DEPS="${AI4S_LOCAL_SCRATCH:-${TMPDIR:-/tmp}/$USER}/rdemos_deps_$$"
+CHROME_LOCAL="${AI4S_LOCAL_SCRATCH:-${TMPDIR:-/tmp}/$USER}/rdemos_chrome_$$"
 mkdir -p "$DEPS" "$CHROME_LOCAL"
 cd /tmp
 apt-get download libatk1.0-0t64 libatk-bridge2.0-0t64 libcups2t64 libasound2t64 \
@@ -41,8 +42,10 @@ export PLAYWRIGHT_BROWSERS_PATH="$CHROME_LOCAL"
 # Find ffmpeg
 FFMPEG_CANDIDATES=(
   "$STUDIO/backend/.venv/lib/python3.12/site-packages/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2"
-  "$HOME/Projects/Utils/.venv/lib/python3.12/site-packages/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2"
 )
+# An explicit $FFMPEG wins; `ffmpeg` on PATH is the last resort.
+[ -n "${FFMPEG:-}" ] && FFMPEG_CANDIDATES=("$FFMPEG" "${FFMPEG_CANDIDATES[@]}")
+FFMPEG_CANDIDATES+=("$(command -v ffmpeg || true)")
 for f in "${FFMPEG_CANDIDATES[@]}"; do
   if [ -f "$f" ]; then export FFMPEG="$f"; echo "[demos] FFMPEG=$FFMPEG"; break; fi
 done

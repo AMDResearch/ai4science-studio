@@ -19,7 +19,7 @@
  *   - Scroll through result cards so they are visible on screen
  *
  * Usage:
- *   cd ~/Projects/ai4science-studio/studio/demo
+ *   cd <repo>/studio/demo
  *   node record-demo.js
  *
  * Prerequisites:
@@ -40,9 +40,7 @@ const OUT_DIR = path.join(__dirname, 'demo-output')
 // imageio-ffmpeg bundled with the studio backend venv (libx264, for MP4 output)
 const FFMPEG = (() => {
   const candidates = [
-    path.join(__dirname, '../../backend/.venv/lib/python3.12/site-packages/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2'),
-    path.join(process.env.HOME, 'Projects/Fusion/Software/venv/lib/python3.12/site-packages/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2'),
-    path.join(process.env.HOME, 'Projects/Verticals/SubSurface/demo/bin/ffmpeg'),
+    path.join(__dirname, '..', 'backend/.venv/lib/python3.12/site-packages/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2'),
   ]
   const env = process.env.FFMPEG
   if (env && fs.existsSync(env)) return env
