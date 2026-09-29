@@ -130,6 +130,8 @@ async function launchJob(page, body, timeoutS = 60) {
   await page.waitForTimeout(800)
   await showCaption(page, 'Configure: 8-GPU training · epochs slider · FP64 to exercise the MI355X matrix units')
   await page.waitForTimeout(HOLD)
+  await showCaption(page, 'Why FP64: HydraGNN trains in FP64 for convergence — and inference needs it too, computing forces as dE/dx (energy gradients). FP64/FP32 beat BF16 on force accuracy.')
+  await page.waitForTimeout(HOLD)
 
   // ── RUN a LIVE 8-GPU job on the cluster ─────────────────────────────────────
   await setState(page, { step: 3 })
@@ -160,7 +162,9 @@ async function launchJob(page, body, timeoutS = 60) {
     await showCaption(page, 'LIVE telemetry captured — real peaks & means from the run\'s Omnistat DB')
     await page.waitForTimeout(HOLD)
     await page.evaluate(() => window.scrollTo({ top: 600, behavior: 'smooth' }))
-    await showCaption(page, 'Utilization, power, temperature, FP64 throughput, HBM bandwidth, energy')
+    await showCaption(page, 'Pick any metric: FP64 throughput, HBM bandwidth, xGMI scale-up — choose what to plot from the full Omnistat catalog')
+    await page.waitForTimeout(HOLD)
+    await showCaption(page, 'Omnistat also captures raw hardware perf counters, scale-up (xGMI) & scale-out (network) bandwidth, host I/O traffic, and more')
     await page.waitForTimeout(HOLD)
     await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'smooth' }))
   } else {
