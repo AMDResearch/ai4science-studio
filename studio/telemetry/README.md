@@ -5,18 +5,20 @@ Omnistat GPU telemetry during the run and renders it in an interactive
 "System Telemetry" panel on the Analyze page. Also adds a configurable epochs slider
 and a demo (baked-asset) replay of the same panel.
 
-## Self-owned (no dependency on colleagues)
+## Self-owned (no dependency on anyone else's tree)
 
-All perf tooling and data are reproduced under `/shared/spannala`:
+All perf tooling and data live under your own site directories, configured
+through environment variables (see `studio/.env.example` and `studio/SERVING.md`):
 
-| Thing | Path | Provenance |
-|-------|------|-----------|
-| Omnistat venv | `/shared/spannala/perf-tools/omnistat-venv` | built fresh from source (`build_perf_tools.sh`) |
-| VictoriaMetrics | `/shared/spannala/perf-tools/victoriametrics/victoria-metrics-prod` | copied portable Go binary (`stage_victoriametrics.sh`) |
-| Alexandria dataset | `/shared/spannala/models/HydraGNN/weights/Alexandria-v2.bp` | copied 23 GB (`copy_dataset.sh`) |
+| Thing | Default path | Provenance |
+|-------|--------------|-----------|
+| Omnistat venv | `$PERF_TOOLS_DIR/omnistat-venv` | built fresh from source (`build_perf_tools.sh`) |
+| VictoriaMetrics | `$PERF_TOOLS_DIR/victoriametrics/victoria-metrics-prod` | staged portable Go binary (`stage_victoriametrics.sh`, from `VM_BINARY_SRC`) |
+| Alexandria dataset | `$HG_DATA_DIR/Alexandria-v2.bp` | copied 23 GB (`copy_dataset.sh`, from `HG_DATASET_SRC`) |
+| Kernel-trace library | `$PERF_TOOLS_DIR/omnistat-src/build-trace/libomnistat_trace.so` | built once on a compute node (`build_kernel_trace_amd.sh`) |
 
-Independence check: `grep -rn '/shared/aaji\|/shared/omnihub' studio/telemetry/ studio/backend/jobs.py`
-should return nothing at runtime.
+`PERF_TOOLS_DIR` defaults to `$AI4S_SHARED_DIR/perf-tools`, `HG_BASE` to
+`$AI4S_SHARED_DIR/models/HydraGNN`, and `HG_DATA_DIR` to `$HG_BASE/weights`.
 
 ## Isolation guarantee — the live run cannot corrupt the demos
 
@@ -36,17 +38,21 @@ The demos replay static data and load the production checkpoint
 - `CHECKLIST.md` — ordered execution checklist.
 - `build_perf_tools.sh` — build the Omnistat venv from source.
 - `stage_victoriametrics.sh` — stage the VictoriaMetrics binary.
-- `copy_dataset.sh` — copy Alexandria-v2.bp into spannala-owned storage.
+- `copy_dataset.sh` — copy Alexandria-v2.bp into your own storage.
 - `sbatch_train_telemetry_amd.sh` — the 8-GPU training + Omnistat sbatch (per-run isolated).
 - `bake_telemetry_asset.py` — turn a real run's telemetry into the demo asset.
-- The omnistat config template is reused in-repo at
-  `material_science/models/HydraGNN/recipes/perf-analysis/omnistat.config.template`.
+- `build_kernel_trace_amd.sh` — build the optional kernel-trace library.
+- `omnistat.config.template` — self-contained Omnistat config the training
+  sbatch renders per run (found beside the script, also under a direct sbatch).
 
 ## Run
 
 ```bash
-sbatch studio/telemetry/sbatch_train_telemetry_amd.sh          # full 200-epoch run
-HG_NUM_EPOCH=30 sbatch studio/telemetry/sbatch_train_telemetry_amd.sh   # short demo run
+set -a; . studio/.env; set +a                   # from the repo root: AI4S_SHARED_DIR, SBATCH_PARTITION, ...
+cd studio/telemetry                             # logs/ lands here
+sbatch sbatch_train_telemetry_amd.sh                    # full 200-epoch run
+HG_NUM_EPOCH=30 sbatch sbatch_train_telemetry_amd.sh    # short demo run
+OMNISTAT_KERNEL_TRACE=1 sbatch sbatch_train_telemetry_amd.sh   # add per-kernel trace
 ```
 Telemetry + manifest land in `train_work/perf-runs/<jobid>/`; the studio backend
 range-queries the omnistat DB after completion to populate the Analyze panel.

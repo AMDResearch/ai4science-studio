@@ -122,12 +122,12 @@ container overlay.
 \toprule
 \textbf{Component} & \textbf{Path / value} \\
 \midrule
-Cluster / partition & Vultr Lux, \texttt{lux} partition (AMD MI355X, 8 GPU/node) \\
+Cluster & LUX (AMD Instinct MI355X, 8 GPU/node) \\
 Container (SIF) & \texttt{pytorch\_rocm7.2.2\_ubuntu24.04\_py3.12\_...\_2.10.0.sif} \\
 Overlay (HydraGNN + adios2) & \texttt{overlays/hydragnn-overlay.img} \\
 Framework & PyTorch 2.10 (ROCm 7.2.2), HydraGNN (PNA) \\
 Dataset & Alexandria-v2 (ADIOS2 \texttt{.bp}), 268{,}227 val structures \\
-Work root & \texttt{/shared/spannala/models/HydraGNN/train\_work} \\
+Work root & \texttt{\$AI4S\_SHARED\_DIR/models/HydraGNN/train\_work} \\
 \bottomrule
 \end{tabular}
 \caption{Fixed environment. The dataset ships precomputed periodic-boundary (PBC)
@@ -219,7 +219,7 @@ data in comparable wall-clock and improves every metric.}
 The 8-GPU production run is a single \code{sbatch}:
 
 \begin{lstlisting}[language=bash]
-cd /shared/spannala/models/HydraGNN/train_work
+cd "$AI4S_SHARED_DIR/models/HydraGNN/train_work"
 sbatch scripts/hg_ddp8_v3.sbatch     # 600k structures, 8 GPUs, ~9 min
 # 1-GPU matched run (same pipeline, 40k structures):
 sbatch scripts/hg_train1_pbc.sbatch

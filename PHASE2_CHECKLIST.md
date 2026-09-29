@@ -3,8 +3,8 @@
 Crash-recovery guide. All paths are absolute or relative to the repo root.
 Update STATUS fields as steps complete.
 
-**Repo root:** `/home/spannala/Projects/ai4science-studio`
-**Shared storage:** `/shared/spannala/`
+**Repo root:** `<repo>` (this checkout)
+**Shared storage:** `$AI4S_SHARED_DIR/` (see `studio/.env.example`)
 **Session tag:** `v0.1-phase1` (rollback point)
 
 ---
@@ -44,7 +44,7 @@ Goal: fetch real July 16 2024 DC temperature field at two resolutions, bake to J
 Goal: run real pair-tuning (10 epochs, QED property), bake metrics to JSON.
 
 ### 2a. Download weights
-- [ ] `huggingface-cli download ibm-research/GP-MoLFormer-Uniq --local-dir /shared/spannala/models/GP-MoLFormer/weights/`
+- [ ] `huggingface-cli download ibm-research/GP-MoLFormer-Uniq --local-dir $AI4S_SHARED_DIR/models/GP-MoLFormer/weights/`
   - STATUS: PENDING
   - Fallback: weights auto-cloned from GitHub inside the container if HF unavailable
 
@@ -149,7 +149,7 @@ Goal: run real pair-tuning (10 epochs, QED property), bake metrics to JSON.
 - [x] `predictions_8gpu.json` + `predictions_1gpu.json` — REAL model predictions on 8
       held-out Alexandria structures (BrPdSb2, S8K4NiHf3, Y4CeNd2, H12Pr2TbOs3, ...)
       → regen: `sbatch /tmp/bake_preds.sbatch` runs inference/bake_predictions.py, then
-        `cp /shared/spannala/models/HydraGNN/train_work/results/predictions_*.json studio/backend/assets/`
+        `cp $AI4S_SHARED_DIR/models/HydraGNN/train_work/results/predictions_*.json studio/backend/assets/`
 
 **Backend (studio/backend/, committed):**
 - [x] synthetic.py: HydraGNN inference REPLAYS REAL predictions (not random atoms);
@@ -169,8 +169,8 @@ Goal: run real pair-tuning (10 epochs, QED property), bake metrics to JSON.
 **SLURM/compute (verified working):**
 - [x] hg_model_ddp.pk (8-GPU) + hg_model.pk (1-GPU) checkpoints in train_work/results/
 - [x] inference/bake_predictions.py — real prediction baker (element table has lanthanides)
-- [x] Live studio is RUNNING on lux-mi355x-a1: backend :8275, frontend :5275
-      (srun job; logs at /shared/spannala/studio-{backend,frontend}.log)
+- [x] Live studio ran on a compute node: backend :8275, frontend :5275
+      (srun job; logs at $AI4S_SHARED_DIR/studio-{backend,frontend}.log)
 
 ### REMAINING (next steps)
 
@@ -178,7 +178,7 @@ Goal: run real pair-tuning (10 epochs, QED property), bake metrics to JSON.
 Videos need re-recording because: (1) slides now 20-25s (was 2-3s), (2) real
 predictions replace random atoms, (3) Leaflet maps, (4) July 4 2026 data.
 - [x] `sbatch studio/scripts/demo/record_demos.slurm`  (time 0:50:00)
-  - JOB ID: 17457 (running)
+  - Submitted as a single batch job
   - Recorders: record_hydragnn.js, record_orbit2_dc.js, record_gpmolformer.js
     (all use setState() with plain-data args; caption holds = 20000ms; view holds = 25000ms)
   - Starts backend :8299 + Vite :5299 on compute node, records 3 MP4s sequentially
@@ -205,13 +205,13 @@ predictions replace random atoms, (3) Leaflet maps, (4) July 4 2026 data.
 
 | Resource | Path / Command |
 |----------|----------------|
-| Repo root | `/home/spannala/Projects/ai4science-studio` |
+| Repo root | `<repo>` (this checkout) |
 | Studio launch | `bash studio/launch-local.sh` (login node, ports 8275/5275) |
 | Compute launch | See `studio/scripts/demo/capture_demo.slurm` |
-| GP-MoLFormer SIF | `/shared/spannala/images/pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif` |
-| GP-MoLFormer weights | `/shared/spannala/models/GP-MoLFormer/weights/` |
-| ORBIT-2 data | `/shared/aaji/models/ORBIT-2/data/superres/` |
-| HydraGNN models | `/shared/spannala/models/HydraGNN/train_work/results/` |
+| GP-MoLFormer SIF | `$AI4S_SHARED_DIR/images/pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif` |
+| GP-MoLFormer weights | `$AI4S_SHARED_DIR/models/GP-MoLFormer/weights/` |
+| ORBIT-2 data | `$AI4S_SHARED_DIR/models/ORBIT-2/data/superres/` |
+| HydraGNN models | `$AI4S_SHARED_DIR/models/HydraGNN/train_work/results/` |
 | Playwright chromium | `~/.cache/ms-playwright/chromium-1228/` |
 | FFMPEG (for MP4) | `studio/backend/.venv/lib/python3.12/site-packages/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2` |
 | Transfer dir | `~/transfer/` |

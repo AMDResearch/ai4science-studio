@@ -14,7 +14,7 @@ Real HydraGNN 1-GPU vs 8-GPU training results on Alexandria DFT data.
 cd studio/backend
 python3 tools/bake_training_curves.py
 ```
-*Requires: completed training runs in `/shared/spannala/models/HydraGNN/train_work/`*
+*Requires: completed training runs in `$HG_WORK` (default `$AI4S_SHARED_DIR/models/HydraGNN/train_work/`)*
 
 ---
 

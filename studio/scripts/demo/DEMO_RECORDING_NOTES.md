@@ -70,7 +70,7 @@ wall-clock. Each slide now contributes ~40 frames regardless of on-screen motion
 
 Compute nodes are missing the GTK libs Chromium needs
 (`libatk-1.0.so.0: cannot open shared object file`). The working recipe (used by
-`record_demos.slurm` and for ad-hoc runs on a node with a live studio, e.g. a4):
+`record_demos.slurm` and for ad-hoc runs on a node with a live studio):
 `apt-get download` the `*t64` GTK/X libs, `dpkg-deb -x` into a scratch dir, add
 it to `LD_LIBRARY_PATH`, copy `chromium-1228` to scratch, and point
 `PLAYWRIGHT_BROWSERS_PATH` at it. Note the Ubuntu 24.04 `t64` package suffixes.
@@ -105,7 +105,7 @@ muxer in some paths — use `-c:v mjpeg` and frame-select, not `-ss`.)
 
 Added `record_{hydragnn,orbit2_dc,gpmolformer}_v1.js` + runner
 `record_demos_v1.sh`. They output `*_demo_v1.mp4` at **3840×2160 (16:9)** and copy
-the results to `~/transfer/`. Originals are untouched.
+the results to `$TRANSFER_DIR` (default `~/transfer/`). Originals are untouched.
 
 ### What changed vs the originals
 - **Viewport + capture:** `newContext` viewport `1920×1080` with
@@ -139,7 +139,7 @@ The VP9 `spawn` step already used an arg array and was fine.
 ## HydraGNN 8-GPU training + live Omnistat telemetry demo (2026-07-21)
 
 Added `record_hydragnn_telemetry_v2.js` + runner `record_telemetry_v2.sh` →
-`~/transfer/hydragnn_training_4k_demo.mp4` (3840×2160, ~3 min). It reuses the
+`$TRANSFER_DIR/hydragnn_training_4k_demo.mp4` (3840×2160, ~3 min). It reuses the
 proven `_v1` scaffolding (CDP screencast + 2 fps sampling + width-first fit +
 `execFileSync` encode + VP9→x264) — do NOT reinvent; copy this recorder for any
 new single-model story.
@@ -165,19 +165,20 @@ shown, ending on Results.
   tiles populate, matching the reference screenshot.
 
 ## Where to run (important)
-Run on the **compute node** (a4 = `lux-mi355x-a4`), not the login node
+Run on the **compute node** that hosts the studio services, not the login node
 ("login node has limits"). The studio node is held by the `studio-hold` SLURM job
 (`squeue -u $USER`). Launch:
 ```
 srun --jobid=<hold-jobid> --overlap bash \
-  ~/Projects/ai4science-studio/studio/scripts/demo/record_demos_v1.sh
+  <repo>/studio/scripts/demo/record_demos_v1.sh
 ```
-- a4 has node (`~/.local/bin/node`), the chromium-1228 cache, writable `/scratch`,
+- That node needs `node`, the chromium-1228 cache, writable node-local scratch
+  (`AI4S_LOCAL_SCRATCH`),
   and (unlike some compute nodes) apt-get reachability — so the `*t64` GTK-lib
   staging works there. Chrome fails with `libatk-1.0.so.0: not found` without it.
 - **Fixed live ports (SERVING.md): frontend 5376, backend 8376** — NOT 5299 (a
   stale default in the older `record_demos.slurm`). `record_demos_v1.sh` defaults
   to 5376/8376 and only health-checks the already-running services (it does not
-  start/stop them, since a4's services are persistent).
+  start/stop them, since the node's services are persistent).
 - Verify each output is `3840×2160` (`ffprobe ... stream=width,height`) and
   spot-check a mid-slide frame per the section above before shipping.

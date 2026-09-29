@@ -160,3 +160,12 @@ studio/**/*_restart.log
 studio/demo/*.mjs
 studio/demo/shot-preview.js
 studio/demo/shot-saf*.js
+
+# Studio site configuration: keep the template, ignore the filled-in copy and
+# deployment-specific runbook notes.
+!studio/.env.example
+studio/SERVING.local.md
+
+# Generated demo artifacts (regenerate with the capture/record scripts)
+studio/demo/demo-output/*.pdf
+studio/assets/**/*.mp4
