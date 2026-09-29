@@ -8,6 +8,7 @@ Degrades gracefully to available=False when neither is possible.
 """
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import subprocess
@@ -39,10 +40,10 @@ def available(ssh_host: str | None = None) -> bool:
     return shutil.which("sinfo") is not None
 
 
-def _run(cmd: list[str]) -> tuple[bool, str]:
+def _run(cmd: list[str], env: dict | None = None) -> tuple[bool, str]:
     try:
         p = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=_TIMEOUT, check=False
+            cmd, capture_output=True, text=True, timeout=_TIMEOUT, check=False, env=env
         )
     except (FileNotFoundError, subprocess.TimeoutExpired) as e:
         return False, str(e)
@@ -151,7 +152,12 @@ def submit(script_path: str, ssh_host: str | None = None) -> tuple[bool, str]:
             return False, (p.stderr or p.stdout or f"exit {p.returncode}").strip()
         return True, p.stdout.strip().split(";")[0]
 
-    ok, out = _run(["sbatch", "--parsable", script_path])
+    # SBATCH_PARTITION / SBATCH_ACCOUNT in the server's environment would override
+    # the partition and account written into the generated script (sbatch gives
+    # environment variables precedence over #SBATCH lines), so drop them here.
+    env = {k: v for k, v in os.environ.items()
+           if k not in ("SBATCH_PARTITION", "SBATCH_ACCOUNT")}
+    ok, out = _run(["sbatch", "--parsable", script_path], env=env)
     if not ok:
         return False, out
     return True, out.strip().split(";")[0]
