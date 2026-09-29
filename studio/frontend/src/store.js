@@ -1,13 +1,26 @@
 import { create } from 'zustand'
 
+// Read-only demo deployment: when served from the demo hostname (or with the
+// VITE_DEMO_LOCK build flag), the app is locked to DEMO mode — the Live toggle is
+// grayed out and mode can never be switched to 'live'. One frontend build serves
+// both the full site and the demo site; the hostname decides behavior at runtime.
+export const DEMO_LOCK = (() => {
+  try {
+    if (import.meta.env?.VITE_DEMO_LOCK === '1') return true
+    const h = (typeof window !== 'undefined' && window.location?.hostname) || ''
+    return /(^|\.)ai4science-studio-demo\./i.test(h) || h.includes('-studio-demo')
+  } catch { return false }
+})()
+
 export const useStore = create((set, get) => ({
   // Navigation
   step: 0,
   setStep: (s) => set({ step: s }),
 
-  // Demo/Live mode
+  // Demo/Live mode. Demo-locked deployments can never leave 'demo'.
   mode: 'demo',
-  setMode: (m) => set({ mode: m }),
+  demoLock: DEMO_LOCK,
+  setMode: (m) => set({ mode: DEMO_LOCK ? 'demo' : m }),
 
   // Domain selection
   domain: null,

@@ -120,6 +120,40 @@ export function StepConfigure() {
                   </div>
                 ))}
               </div>
+
+              {/* Telemetry knobs (live runs): sampling resolution + kernel tracing */}
+              <div className="section-label" style={{ margin: '.9rem 0 .4rem' }}>Telemetry sampling</div>
+              <div style={{ display: 'flex', gap: '.5rem', alignItems: 'center' }}>
+                {[
+                  { v: 0.1, label: '0.1 s' },
+                  { v: 0.5, label: '0.5 s' },
+                  { v: 1, label: '1 s' },
+                ].map(o => (
+                  <div key={o.v}
+                    className={`card clickable${(params.omnistat_interval ?? 0.5) === o.v ? ' selected' : ''}`}
+                    onClick={() => setParam('omnistat_interval', o.v)}
+                    style={{ flex: 1, padding: '.5rem .7rem', userSelect: 'none', textAlign: 'center' }}>
+                    <div style={{ fontWeight: 700, fontSize: '.82rem', color: '#f5f5f7' }}>{o.label}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ fontSize: '.72rem', color: '#52525b', marginTop: '.3rem' }}>
+                Omnistat GPU sampling resolution. Live charts appear ~1 min into the run (first metrics push).
+              </div>
+
+              <div className="section-label" style={{ margin: '.9rem 0 .4rem' }}>Kernel tracing</div>
+              <div
+                className={`card clickable${params.kernel_trace ? ' selected' : ''}`}
+                onClick={() => setParam('kernel_trace', params.kernel_trace ? 0 : 1)}
+                style={{ padding: '.6rem .8rem', userSelect: 'none' }}>
+                <div style={{ fontWeight: 700, fontSize: '.84rem', color: '#f5f5f7' }}>
+                  {params.kernel_trace ? 'Kernel trace: ON' : 'Kernel trace: OFF'}
+                </div>
+                <div style={{ fontSize: '.72rem', color: '#a1a1aa', marginTop: '.12rem' }}>
+                  Per-kernel dispatch counts + durations (per-epoch structure). Requires the one-time
+                  libomnistat_trace.so build; falls back to counters-only if absent.
+                </div>
+              </div>
             </div>
           )}
 

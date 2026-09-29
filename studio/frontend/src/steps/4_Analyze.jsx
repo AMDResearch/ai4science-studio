@@ -793,74 +793,126 @@ function TrainingConvergenceViz({ result }) {
   )
 }
 
-// ── System Telemetry Panel — live GPU metrics captured by AMD Omnistat ────────
-// Renders 7 peak stat tiles + 3 interactive time-series (hover tooltip, brush
-// zoom, click-legend toggle). Data comes from result.telemetry (peaks + series),
-// harvested from the per-run Omnistat VictoriaMetrics DB (live) or the baked demo
-// asset. All values are real measurements; nothing is synthesized here.
-const _TELE_TILES = [
-  { key: 'gpu_util_pct', label: 'PEAK GPU UTIL', color: '#ED1C24', fmt: v => `${v?.toFixed(0)}%` },
-  { key: 'power_w', label: 'PEAK POWER', color: '#f59e0b', fmt: v => `${v?.toFixed(0)} W` },
-  { key: 'temp_c', label: 'PEAK TEMP', color: '#38bdf8', fmt: v => `${v?.toFixed(0)} C` },
-  { key: 'vram_gb', label: 'PEAK VRAM', color: '#a78bfa', fmt: v => `${v?.toFixed(1)} GB` },
-  { key: 'energy_kj', label: 'ENERGY', color: '#21c77a', fmt: v => `${v?.toFixed(1)} kJ` },
-  { key: 'fp64_tflops', label: 'PEAK FP64', color: '#f472b6', fmt: v => `${v?.toFixed(1)} TF/s` },
-  { key: 'hbm_read_gbs', label: 'PEAK HBM READ', color: '#94a3b8', fmt: v => `${v?.toFixed(0)} GB/s` },
-]
-const _TELE_SERIES = [
-  { key: 'gpu_util_pct', label: 'GPU Utilization (%)', color: '#ED1C24', unit: '%' },
-  { key: 'power_w', label: 'GPU Power (W)', color: '#f59e0b', unit: 'W' },
-  { key: 'temp_c', label: 'GPU Temperature (C)', color: '#38bdf8', unit: 'C' },
-]
+// ── System Telemetry Panel — GPU metrics captured by AMD Omnistat ─────────────
+// Catalog-driven: the selectable metric list comes from /api/telemetry/catalog, so
+// the user picks WHICH of Omnistat's ~25 aggregated metrics to plot (and how many)
+// from a grouped dropdown. Peaks/means tiles + N interactive time-series render
+// dynamically from the selection. Data is real (live cross-node query or the baked
+// demo asset) — nothing synthesized.
+const _CHART_COLORS = ['#ED1C24', '#f59e0b', '#38bdf8', '#a78bfa', '#21c77a',
+  '#f472b6', '#94a3b8', '#eab308', '#34d399', '#60a5fa']
+const _fmtVal = (v, unit) => {
+  if (v == null) return '—'
+  const a = Math.abs(v)
+  const d = a >= 100 ? 0 : a >= 10 ? 1 : a >= 1 ? 2 : 3
+  return `${v.toFixed(d)} ${unit}`
+}
 
-function TelemetryPanel({ result }) {
+// Grouped multi-select dropdown of catalog metrics.
+function MetricPicker({ catalog, selected, onChange }) {
+  const [open, setOpen] = useState(false)
+  const groups = catalog?.groups || []
+  const byGroup = useMemo(() => {
+    const m = {}
+    for (const d of (catalog?.metrics || [])) (m[d.group] ||= []).push(d)
+    return m
+  }, [catalog])
+  const toggle = key => onChange(selected.includes(key)
+    ? selected.filter(k => k !== key) : [...selected, key])
+  return (
+    <div style={{ position: 'relative', marginBottom: '.9rem' }}>
+      <button onClick={() => setOpen(o => !o)} className="btn btn-ghost"
+        style={{ fontSize: '.8rem', border: '1px solid #27272a' }}>
+        Metrics: {selected.length} selected ▾
+      </button>
+      {open && (
+        <div className="card" style={{ position: 'absolute', zIndex: 50, marginTop: '.3rem',
+          padding: '.6rem .8rem', maxHeight: 360, overflowY: 'auto', minWidth: 300,
+          background: '#0f0f11', border: '1px solid #27272a' }}>
+          {groups.map(g => (
+            <div key={g} style={{ marginBottom: '.5rem' }}>
+              <div className="section-label" style={{ fontSize: '.6rem', marginBottom: '.25rem' }}>{g}</div>
+              {(byGroup[g] || []).map(d => (
+                <label key={d.key} style={{ display: 'flex', alignItems: 'center', gap: '.4rem',
+                  fontSize: '.78rem', color: '#d4d4d8', padding: '.12rem 0', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={selected.includes(d.key)}
+                    onChange={() => toggle(d.key)} style={{ accentColor: '#ED1C24' }} />
+                  {d.label} <span style={{ color: '#52525b' }}>({d.unit})</span>
+                </label>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function TelemetryPanel({ result, catalog, selected, setSelected, live }) {
   const tel = result.telemetry || {}
   const peaks = tel.peaks || {}
   const means = tel.means || {}
+  const units = tel.units || {}
   const series = tel.series || {}
-  const [hidden, setHidden] = useState({})
 
-  // Zip parallel arrays (t_s + per-metric) into row objects for Recharts.
+  // Descriptor lookup from the catalog (label/unit per key).
+  const desc = useMemo(() => {
+    const m = {}
+    for (const d of (catalog?.metrics || [])) m[d.key] = d
+    return m
+  }, [catalog])
+
+  // Which selected metrics actually have a series in this payload.
+  const plotKeys = (selected || []).filter(k => (series[k] || []).length > 0)
   const rows = useMemo(() => {
     const t = series.t_s || []
     return t.map((tt, i) => {
       const row = { t: tt }
-      for (const s of _TELE_SERIES) row[s.key] = series[s.key]?.[i] ?? null
+      for (const k of plotKeys) row[k] = series[k]?.[i] ?? null
       return row
     })
-  }, [series])
+  }, [series, plotKeys.join(',')])
 
-  const hasSeries = rows.length > 0
   const metrics = result.metrics || {}
+  // Tiles: the selected metrics + energy (always interesting).
+  const tileKeys = [...new Set([...(selected || []), 'energy_kj'])]
 
   return (
     <div>
       <div className="section-label" style={{ color: '#ED1C24', marginBottom: '.5rem' }}>
-        SYSTEM TELEMETRY — AMD INSTINCT MI355X · PEEK UNDER THE HOOD
+        SYSTEM TELEMETRY — AMD INSTINCT MI355X · {live ? 'LIVE' : 'PEEK UNDER THE HOOD'}
       </div>
       <div style={{ fontSize: '.78rem', color: '#a1a1aa', marginBottom: '.9rem' }}>
-        Live GPU metrics captured by Omnistat during this job — {result.n_gpus || 8} GPUs
+        GPU metrics captured by Omnistat — {result.n_gpus || 8} GPUs
         {result.runtime_s ? `, ${result.runtime_s}s` : ''}
         {result.epochs ? `, ${result.epochs} epochs` : ''}.
+        {' '}Also collects raw perf counters, xGMI scale-up & network scale-out bandwidth, and host I/O.
       </div>
 
-      {/* 7 peak stat tiles */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))',
+      <MetricPicker catalog={catalog} selected={selected} onChange={setSelected} />
+
+      {/* Peak stat tiles (dynamic: selected metrics + energy) */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
         gap: '.6rem', marginBottom: '1.1rem' }}>
-        {_TELE_TILES.map(t => (
-          <div key={t.key} className="card" style={{ padding: '.7rem', textAlign: 'center' }}>
-            <div className="section-label" style={{ marginBottom: '.35rem', fontSize: '.62rem' }}>{t.label}</div>
-            <div style={{ fontSize: '1.25rem', fontWeight: 900, color: t.color }}>
-              {peaks[t.key] != null ? t.fmt(peaks[t.key]) : '—'}
-            </div>
-            {/* Honest companion: mean across GPUs over time (peak alone misleads). */}
-            {t.key !== 'energy_kj' && means[t.key] != null && (
-              <div style={{ fontSize: '.6rem', color: '#71717a', marginTop: '.2rem' }}>
-                mean {t.fmt(means[t.key])}
+        {tileKeys.map((k, i) => {
+          const label = k === 'energy_kj' ? 'ENERGY' : (desc[k]?.label || k).toUpperCase()
+          const unit = units[k] || desc[k]?.unit || ''
+          return (
+            <div key={k} className="card" style={{ padding: '.7rem', textAlign: 'center' }}>
+              <div className="section-label" style={{ marginBottom: '.35rem', fontSize: '.6rem' }}>
+                {k === 'energy_kj' ? '' : 'PEAK '}{label}
               </div>
-            )}
-          </div>
-        ))}
+              <div style={{ fontSize: '1.2rem', fontWeight: 900, color: _CHART_COLORS[i % _CHART_COLORS.length] }}>
+                {peaks[k] != null ? _fmtVal(peaks[k], unit) : '—'}
+              </div>
+              {k !== 'energy_kj' && means[k] != null && (
+                <div style={{ fontSize: '.6rem', color: '#71717a', marginTop: '.2rem' }}>
+                  mean {_fmtVal(means[k], unit)}
+                </div>
+              )}
+            </div>
+          )
+        })}
       </div>
 
       {/* Final accuracy (from the training's own validation.json) */}
@@ -874,33 +926,65 @@ function TelemetryPanel({ result }) {
         </div>
       )}
 
-      {/* 3 interactive time-series charts */}
-      {hasSeries ? _TELE_SERIES.map(s => (
-        <div key={s.key} className="card" style={{ padding: '.75rem', marginBottom: '.85rem' }}>
-          <div className="section-label" style={{ marginBottom: '.4rem' }}>{s.label}</div>
-          <ResponsiveContainer width="100%" height={200}>
-            <LineChart data={rows} margin={{ top: 5, right: 16, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-              <XAxis dataKey="t" tick={{ fill: '#71717a', fontSize: 10 }}
-                tickFormatter={v => `${v}s`} minTickGap={28} />
-              <YAxis tick={{ fill: '#71717a', fontSize: 10 }} width={40} />
-              <Tooltip contentStyle={{ background: '#141416', border: '1px solid #27272a', fontSize: 11 }}
-                labelFormatter={v => `t = ${v}s`}
-                formatter={val => [`${val} ${s.unit}`, s.label]} />
-              <Legend onClick={() => setHidden(h => ({ ...h, [s.key]: !h[s.key] }))}
-                wrapperStyle={{ fontSize: 11, cursor: 'pointer' }} />
-              <Line type="monotone" dataKey={s.key} name={s.label} stroke={s.color}
-                dot={false} strokeWidth={1.6} isAnimationActive={false} hide={!!hidden[s.key]} />
-              <Brush dataKey="t" height={18} stroke="#ED1C24" fill="#0a0a0b"
-                travellerWidth={8} tickFormatter={v => `${v}s`} />
-            </LineChart>
-          </ResponsiveContainer>
+      {/* One interactive time-series chart per selected metric that has data */}
+      {plotKeys.length > 0 ? plotKeys.map((k, i) => {
+        const label = desc[k]?.label || k
+        const unit = units[k] || desc[k]?.unit || ''
+        const color = _CHART_COLORS[i % _CHART_COLORS.length]
+        return (
+          <div key={k} className="card" style={{ padding: '.75rem', marginBottom: '.85rem' }}>
+            <div className="section-label" style={{ marginBottom: '.4rem' }}>{label} ({unit})</div>
+            <ResponsiveContainer width="100%" height={190}>
+              <LineChart data={rows} margin={{ top: 5, right: 16, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                <XAxis dataKey="t" tick={{ fill: '#71717a', fontSize: 10 }}
+                  tickFormatter={v => `${v}s`} minTickGap={28} />
+                <YAxis tick={{ fill: '#71717a', fontSize: 10 }} width={44} />
+                <Tooltip contentStyle={{ background: '#141416', border: '1px solid #27272a', fontSize: 11 }}
+                  labelFormatter={v => `t = ${v}s`} formatter={val => [`${val} ${unit}`, label]} />
+                <Line type="monotone" dataKey={k} name={label} stroke={color}
+                  dot={false} strokeWidth={1.6} isAnimationActive={false} />
+                <Brush dataKey="t" height={18} stroke="#ED1C24" fill="#0a0a0b"
+                  travellerWidth={8} tickFormatter={v => `${v}s`} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        )
+      }) : (
+        <div style={{ color: '#52525b', fontSize: '.8rem' }}>
+          {selected?.length ? 'No data yet for the selected metrics.' : 'Select metrics above to plot.'}
         </div>
-      )) : (
-        <div style={{ color: '#52525b', fontSize: '.8rem' }}>No time-series telemetry available.</div>
       )}
     </div>
   )
+}
+
+// Fetches the metric catalog + owns metric selection, then renders TelemetryPanel.
+// Used for the static/final (Results-view) case; PerformanceTab manages its own
+// selection so it can drive the live query keys.
+function useTelemetryCatalog() {
+  const [catalog, setCatalog] = useState(null)
+  useEffect(() => {
+    let stop = false
+    api.telemetryCatalog().then(c => { if (!stop) setCatalog(c) }).catch(() => {})
+    return () => { stop = true }
+  }, [])
+  return catalog
+}
+
+function TelemetryPanelContainer({ result }) {
+  const catalog = useTelemetryCatalog()
+  const [selected, setSelected] = useState(null)
+  // Seed selection from the payload's own series keys (what was actually harvested),
+  // falling back to catalog defaults.
+  useEffect(() => {
+    if (selected) return
+    const fromResult = Object.keys(result?.telemetry?.series || {}).filter(k => k !== 't_s')
+    if (fromResult.length) setSelected(fromResult)
+    else if (catalog?.defaults) setSelected(catalog.defaults)
+  }, [catalog, result, selected])
+  if (!catalog || !selected) return <Spinner size={24} />
+  return <TelemetryPanel result={result} catalog={catalog} selected={selected} setSelected={setSelected} />
 }
 
 // ── Training Results — loss convergence + final accuracy (the Results tab for
@@ -1565,7 +1649,7 @@ function ResultView({ result, runId }) {
     case 'downscaling': return <DownscalingViz result={result} runId={runId} />
     case 'atomistic_energy': return <EnergyViz result={result} />
     case 'training_convergence': return <TrainingConvergenceViz result={result} />
-    case 'training_telemetry': return <TelemetryPanel result={result} />
+    case 'training_telemetry': return <TelemetryPanelContainer result={result} />
     case 'dc_downscaling': return <DCDownscalingViz result={result} />
     case 'orbit2_story': return <ORBIT2StoryViz result={result} />
     case 'molecule_finetune': return <MolefineTuneViz result={result} />
@@ -1583,53 +1667,90 @@ function ResultView({ result, runId }) {
   }
 }
 
-// Live GPU telemetry while a job runs: polls the job endpoint until result.telemetry
-// appears, then renders the panel. For demo runs the telemetry is present instantly.
+// Frontend safety-net denylist mirroring the backend log filter (Part D).
+const _LOG_DENY = [
+  /Sorry!\s+You were supposed to get help/i,
+  /Couldn't open the help file/i,
+  /help-btl-vader\.txt|btl_vader/i,
+  /PMIx?\b.*(WARNING|not found)/i,
+]
+const _cleanLog = lines => (lines || []).filter(l => !_LOG_DENY.some(re => re.test(l)))
+
+// Live GPU telemetry while a job runs: polls the live cross-node endpoint (Omnistat
+// VM on the compute node) every 2.5s and renders growing charts. Omnistat's first
+// push is ~1 min in, so we show a "warming up" state until data arrives, then live
+// charts, then the harvested final telemetry on completion.
 function PerformanceTab({ runId, result, runState }) {
-  const [live, setLive] = useState(null)
+  const catalog = useTelemetryCatalog()
+  const [selected, setSelected] = useState(null)
+  const [liveTel, setLiveTel] = useState(null)     // {status, telemetry?, node?}
   const [log, setLog] = useState([])
 
-  // Poll job + log while running so the Performance tab is useful from t=0.
+  // Seed selection from catalog defaults (or the final result's own keys).
   useEffect(() => {
-    if (!runId) return
+    if (selected) return
+    const fromResult = Object.keys(result?.telemetry?.series || {}).filter(k => k !== 't_s')
+    if (fromResult.length) setSelected(fromResult)
+    else if (catalog?.defaults) setSelected(catalog.defaults)
+  }, [catalog, result, selected])
+
+  const running = runState === 'running' || runState === 'queued' || runState === 'pending'
+
+  // Poll the live endpoint (keyed to the current selection) + the log while running.
+  // Completion detection is owned by StepAnalyze (runs regardless of active tab).
+  useEffect(() => {
+    if (!runId || !selected) return
     let stop = false
     const tick = async () => {
       try {
-        const job = await api.job(runId)
-        if (stop) return
-        if (job?.result?.telemetry) setLive(job.result)
+        const t = await api.jobTelemetryLive(runId, selected)
+        if (!stop && t) setLiveTel(t)
       } catch { /* ignore */ }
       try {
         const l = await api.jobLog(runId)
-        if (!stop && l?.lines) setLog(l.lines.slice(-14))
+        if (!stop && l?.lines) setLog(_cleanLog(l.lines).slice(-14))
       } catch { /* ignore */ }
     }
     tick()
-    const running = runState === 'running' || runState === 'queued' || runState === 'pending'
     if (running && !result?.telemetry) {
-      const id = setInterval(tick, 3000)
+      const id = setInterval(tick, 2500)
       return () => { stop = true; clearInterval(id) }
     }
     return () => { stop = true }
-  }, [runId, runState, result])
+  }, [runId, running, selected, result])
 
-  const shown = live || (result?.telemetry ? result : null)
-  if (shown) return <TelemetryPanel result={shown} />
+  if (!catalog || !selected) return <Spinner size={24} />
 
-  // No telemetry yet: show a live "collecting" state with the streaming log.
+  // Final (completed) telemetry takes precedence; else live payload; else warmup.
+  const finalTel = result?.telemetry ? result : null
+  const liveShown = liveTel?.status === 'live' && liveTel.telemetry
+    ? { telemetry: liveTel.telemetry, n_gpus: result?.n_gpus, runtime_s: liveTel.telemetry.runtime_s }
+    : null
+  const shown = finalTel || liveShown
+
   return (
     <div>
-      <div className="card" style={{ padding: '1rem', marginBottom: '1rem', display: 'flex',
-        alignItems: 'center', gap: '.75rem' }}>
-        <Spinner size={18} />
-        <div style={{ fontSize: '.85rem', color: '#a1a1aa' }}>
-          Omnistat is collecting GPU telemetry on the AMD MI355X node. Peaks and
-          time-series charts appear here as soon as the collector reports.
+      {shown ? (
+        <TelemetryPanel result={shown} catalog={catalog} selected={selected}
+          setSelected={setSelected} live={!finalTel} />
+      ) : (
+        <div>
+          <MetricPicker catalog={catalog} selected={selected} onChange={setSelected} />
+          <div className="card" style={{ padding: '1rem', marginBottom: '1rem', display: 'flex',
+            alignItems: 'center', gap: '.75rem' }}>
+            <Spinner size={18} />
+            <div style={{ fontSize: '.85rem', color: '#a1a1aa' }}>
+              {liveTel?.status === 'starting'
+                ? `Omnistat is collecting on ${liveTel.node || 'the MI355X node'} — first telemetry push lands ~1 min into the run; live charts appear then.`
+                : 'Waiting for the job to start on a compute node…'}
+            </div>
+          </div>
         </div>
-      </div>
+      )}
+      {/* Streaming log (noise-filtered) below the charts */}
       {log.length > 0 && (
         <pre style={{ background: 'rgba(5,5,6,0.8)', borderRadius: '.5rem', padding: '.75rem',
-          fontSize: '.72rem', color: '#7dd3fc', overflow: 'auto', maxHeight: 260 }}>
+          fontSize: '.72rem', color: '#7dd3fc', overflow: 'auto', maxHeight: 220, marginTop: '1rem' }}>
           {log.join('\n')}
         </pre>
       )}
@@ -1638,7 +1759,7 @@ function PerformanceTab({ runId, result, runState }) {
 }
 
 export function StepAnalyze() {
-  const { runId, result, model, setStep, runState } = useStore()
+  const { runId, result, model, setStep, runState, setResult, setRunState } = useStore()
   const [files, setFiles] = useState([])
   const [loading, setLoading] = useState(true)
   // Performance tab is the default and is available immediately once a run exists.
@@ -1648,6 +1769,29 @@ export function StepAnalyze() {
     if (!runId) { setLoading(false); return }
     api.jobFiles(runId).then(setFiles).finally(() => setLoading(false))
   }, [runId, runState])
+
+  // Completion detection lives HERE (not in a tab component) so it runs regardless
+  // of which tab is active: the Run step navigates here mid-run for live training,
+  // so this step owns harvesting the final result (loss curve + telemetry + metrics)
+  // when the SLURM job finishes. Polls until terminal.
+  useEffect(() => {
+    if (!runId) return
+    const running = runState === 'running' || runState === 'queued' || runState === 'pending'
+    if (!running || result?.loss_curve) return
+    let stop = false
+    const id = setInterval(async () => {
+      try {
+        const job = await api.job(runId)
+        if (stop) return
+        if (job?.state === 'completed' || job?.state === 'failed') {
+          if (job.result) setResult(job.result)
+          setRunState(job.state)
+          clearInterval(id)
+        }
+      } catch { /* ignore */ }
+    }, 3000)
+    return () => { stop = true; clearInterval(id) }
+  }, [runId, runState, result])
 
   const tabBtn = (id, label) => (
     <button onClick={() => setTab(id)}

@@ -34,6 +34,8 @@ export const api = {
   job: (id)                     => _fetch(`/jobs/${id}`),
   jobLog: (id)                  => _fetch(`/jobs/${id}/log`),
   jobFiles: (id)                => _fetch(`/jobs/${id}/files`),
+  telemetryCatalog: ()          => _fetch('/telemetry/catalog'),
+  jobTelemetryLive: (id, keys)  => _fetch(`/jobs/${id}/telemetry/live${keys && keys.length ? `?keys=${keys.join(',')}` : ''}`),
   slurmPartitions: ()           => _fetch('/slurm/partitions'),
   slurmQueue: ()                => _fetch('/slurm/queue'),
   convertVideo: (blob)          => {

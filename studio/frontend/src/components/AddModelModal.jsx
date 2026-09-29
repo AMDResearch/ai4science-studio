@@ -12,7 +12,7 @@ const DOMAINS = [
 ]
 
 export function AddModelModal() {
-  const { setAddModelOpen } = useStore()
+  const { setAddModelOpen, demoLock } = useStore()
   const [form, setForm] = useState({
     slug: '', name: '', domain: 'earth_science', task: '',
     hf_id: '', license: 'Apache-2.0', container_image: '',
@@ -28,6 +28,7 @@ export function AddModelModal() {
 
   async function handleSubmit(e) {
     e.preventDefault()
+    if (demoLock) { setError('Registering models is disabled on the read-only demo site.'); return }
     setSaving(true); setError('')
     try {
       const curated_prompts = form.prompts
@@ -80,6 +81,15 @@ export function AddModelModal() {
           </div>
         ) : (
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '.75rem' }}>
+            {demoLock && (
+              <div style={{ padding: '.5rem .75rem', borderRadius: '.5rem', fontSize: '.8rem',
+                background: 'rgba(237,28,36,.08)', border: '1px solid rgba(237,28,36,.3)', color: '#ff8f93' }}>
+                🔒 Read-only demo — model registration is disabled. Fields are shown for reference only.
+              </div>
+            )}
+            <fieldset disabled={demoLock} style={{ border: 'none', padding: 0, margin: 0,
+              display: 'flex', flexDirection: 'column', gap: '.75rem',
+              opacity: demoLock ? 0.55 : 1 }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '.75rem' }}>
               <div>
                 <label className="section-label" style={{ display: 'block', marginBottom: '.3rem' }}>Slug (ID)</label>
@@ -145,10 +155,14 @@ export function AddModelModal() {
                   }} />
               ))}
             </div>
+            </fieldset>
             {error && <div style={{ color: '#ff8f93', fontSize: '.8rem' }}>{error}</div>}
             <div style={{ display: 'flex', gap: '.75rem', justifyContent: 'flex-end' }}>
-              <button type="button" className="btn btn-ghost" onClick={() => setAddModelOpen(false)}>Cancel</button>
-              <button type="submit" className="btn btn-primary" disabled={saving}>
+              <button type="button" className="btn btn-ghost" onClick={() => setAddModelOpen(false)}>
+                {demoLock ? 'Close' : 'Cancel'}
+              </button>
+              <button type="submit" className="btn btn-primary" disabled={saving || demoLock}
+                style={demoLock ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}>
                 {saving ? <Spinner size={14} /> : null} Register Model
               </button>
             </div>

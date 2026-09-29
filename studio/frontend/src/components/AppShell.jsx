@@ -5,7 +5,7 @@ const STEPS = ['Domain', 'Model', 'Configure', 'Run', 'Analyze']
 
 export function AppShell({ children }) {
   const { step, setStep, mode, setMode, addModelOpen, setAddModelOpen,
-          domain, model, view, setView } = useStore()
+          domain, model, view, setView, demoLock } = useStore()
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
@@ -74,20 +74,39 @@ export function AppShell({ children }) {
           </button>
         </nav>
 
-        {/* Demo / Live toggle */}
+        {/* Demo / Live toggle. Demo-locked (read-only) deployments gray out Live. */}
         <div className="mode-toggle">
           <button className={`mode-btn${mode === 'demo' ? ' active-demo' : ''}`}
             onClick={() => setMode('demo')}>Demo</button>
           <button className={`mode-btn${mode === 'live' ? ' active-live' : ''}`}
-            onClick={() => setMode('live')}>Live</button>
+            onClick={() => !demoLock && setMode('live')}
+            disabled={demoLock}
+            title={demoLock ? 'Live mode is disabled on the read-only demo site' : 'Run live on the cluster'}
+            style={demoLock ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}>
+            Live{demoLock ? ' 🔒' : ''}
+          </button>
         </div>
 
-        {/* Add model */}
+        {/* Add model — button stays available; inputs inside are disabled on the
+            read-only demo site (see AddModelModal). */}
         <button className="btn btn-ghost" style={{ flexShrink: 0, fontSize: '.75rem', padding: '.3rem .8rem' }}
           onClick={() => setAddModelOpen(true)}>+ Model</button>
 
         <RecordButton />
       </header>
+
+      {/* Read-only demo disclaimer banner (demo site only) */}
+      {demoLock && (
+        <div style={{
+          background: 'rgba(237,28,36,.1)', borderBottom: '1px solid rgba(237,28,36,.35)',
+          color: '#ffb3b7', fontSize: '.82rem', textAlign: 'center',
+          padding: '.5rem 1rem', lineHeight: 1.4,
+        }}>
+          🔒 <b style={{ color: '#fff' }}>Demo preview</b> — this read-only site demonstrates the
+          AI4Science Studio <b>workflow</b> with pre-computed results. Live cluster runs are disabled,
+          and the showcased applications are <b>not performance-optimized</b>.
+        </div>
+      )}
 
       {/* Main: persistent LUX left panel + wizard content */}
       <div style={{ flex: 1, display: 'flex',

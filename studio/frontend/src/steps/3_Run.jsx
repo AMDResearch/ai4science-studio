@@ -50,6 +50,16 @@ export function StepRun() {
       setRunId(run_id)
       setRunState('running')
 
+      // Live training runs stream their telemetry on the Analyze › Performance tab,
+      // so jump there right after launch (the charts warm up ~1 min in, once
+      // Omnistat's first push lands). The Analyze step owns completion detection, so
+      // leaving this step early does not drop the final harvest. Demo runs and live
+      // inference stay here and advance on completion via finalize() below.
+      if (mode !== 'demo' && (task === 'train')) {
+        setStep(4)
+        return
+      }
+
       // Finalize once — whichever path (SSE 'done' or polling) sees completion first.
       let finalized = false
       const finalize = async () => {
