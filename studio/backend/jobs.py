@@ -13,6 +13,7 @@ from typing import AsyncIterator
 
 import slurm
 import provenance
+import site_config
 
 RUNS_DIR = Path(__file__).parent / "runs"
 RUNS_DIR.mkdir(exist_ok=True)
@@ -123,18 +124,24 @@ def _run_synthetic(run_id: str, slug: str, domain: str, task: str, prompt: str, 
 
 # ── SLURM (live) runner ───────────────────────────────────────────────────────
 
-_AI4S_SHARED_DIR = "/shared/spannala"
-_BACKEND_DIR     = Path(__file__).resolve().parent
-_SLURM_ACCOUNT   = "vultr_lux"
-_SIF_PATH        = f"{_AI4S_SHARED_DIR}/images/pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif"
+# Site paths (shared dir, partition, account) come from site_config, which reads
+# the environment / studio/.env. They are resolved lazily so demo mode runs with
+# no site configuration at all.
+_BACKEND_DIR = Path(__file__).resolve().parent
 
-# Per-model overlay paths (None = no overlay needed)
-_OVERLAYS: dict[str, str | None] = {
-    "HydraGNN":    f"{_AI4S_SHARED_DIR}/models/HydraGNN/overlays/hydragnn-overlay.img",
-    "ORBIT-2":     f"{_AI4S_SHARED_DIR}/models/ORBIT-2/overlays/orbit2-overlay.img",
-    "StormCast":   f"{_AI4S_SHARED_DIR}/models/StormCast/overlays/stormcast-overlay.img",
-    "GP-MoLFormer": None,
-}
+
+def _shared() -> str:
+    return site_config.shared_dir()
+
+
+def _overlay_for(slug: str) -> str | None:
+    """Per-model Apptainer overlay path (None = no overlay needed)."""
+    rel = {
+        "HydraGNN":  "models/HydraGNN/overlays/hydragnn-overlay.img",
+        "ORBIT-2":   "models/ORBIT-2/overlays/orbit2-overlay.img",
+        "StormCast": "models/StormCast/overlays/stormcast-overlay.img",
+    }.get(slug)
+    return f"{_shared()}/{rel}" if rel else None
 
 
 def _is_dc_run(slug: str, task: str, params: dict) -> bool:
@@ -177,7 +184,9 @@ def _build_slurm_script(run_id: str, slug: str, domain: str, task: str,
         )
     upstream_script = sbatch_candidates[0] if sbatch_candidates else None
 
-    overlay = _OVERLAYS.get(slug)
+    overlay = _overlay_for(slug)
+    _sif = site_config.sif_path()
+    _account = site_config.slurm_account()
 
     # Resource header. Default = single-GPU inference/story path. The 8-GPU HydraGNN
     # training case (live telemetry) needs all 8 GPUs, one task per GPU, and a longer
@@ -196,7 +205,7 @@ def _build_slurm_script(run_id: str, slug: str, domain: str, task: str,
         "#!/bin/bash",
         f"#SBATCH --job-name=studio-{slug[:10]}",
         f"#SBATCH --partition={partition}",
-        f"#SBATCH --account={_SLURM_ACCOUNT}",
+        *([f"#SBATCH --account={_account}"] if _account else []),
         "#SBATCH --nodes=1",
         f"#SBATCH --gres=gpu:{_gpus}",
         f"#SBATCH --ntasks-per-node={_ntasks}",
@@ -210,11 +219,11 @@ def _build_slurm_script(run_id: str, slug: str, domain: str, task: str,
         f"echo {q(f'[studio] Prompt: {prompt[:100]}')}",
         "",
         # Core env vars every upstream script needs
-        f"export AI4S_SHARED_DIR={_AI4S_SHARED_DIR!r}",
-        f"export HG_SIF={_SIF_PATH!r}",
-        f"export ORBIT2_SIF={_SIF_PATH!r}",
-        f"export GPMOL_SIF={_SIF_PATH!r}",
-        f"export SC_SIF={_SIF_PATH!r}",
+        f"export AI4S_SHARED_DIR={_shared()!r}",
+        f"export HG_SIF={_sif!r}",
+        f"export ORBIT2_SIF={_sif!r}",
+        f"export GPMOL_SIF={_sif!r}",
+        f"export SC_SIF={_sif!r}",
     ]
 
     if overlay:
@@ -224,14 +233,14 @@ def _build_slurm_script(run_id: str, slug: str, domain: str, task: str,
             f"export SC_OVERLAY={overlay!r}",
         ]
 
-    # Point dataset dirs at aaji's pre-staged data where available
+    # Pre-staged HydraGNN dataset (HG_DATA_DIR, default under AI4S_SHARED_DIR).
     script_lines += [
-        f"export HG_DATA_DIR=/shared/aaji/models/HydraGNN/weights",
+        f"export HG_DATA_DIR={site_config.hydragnn_data_dir()!r}",
         "",
     ]
 
     # ORBIT-2 runs self-contained synthetic downscaling inference: the upstream
-    # code clone lives in aaji's tree, and synthetic mode auto-generates data +
+    # code clone lives under ORBIT2_ROOT, and synthetic mode auto-generates data +
     # auto-downloads the checkpoint from HF. Single-GPU config avoids the 16-way
     # FSDP default. UI params below can override any of these.
     if _is_dc_run(slug, task, params):
@@ -240,7 +249,10 @@ def _build_slurm_script(run_id: str, slug: str, domain: str, task: str,
         # Static channels come from the PRISM DC crop; dynamic (tmax/tmin/precip)
         # from the baked real Open-Meteo fields. DC event selectable via dc_event.
         # Runs for BOTH the 'story' task and the DC-event 'inference' prompts.
-        _O2 = f"{_AI4S_SHARED_DIR}/orbit2_sr"
+        _O2 = site_config.orbit2_sr_dir()
+        _O2_BASE = site_config.orbit2_base()
+        _O2_HF = site_config.orbit2_hf_cache()
+        _O2_SRC = f"{site_config.orbit2_root()}/src"
         _OOD = str(_BACKEND_DIR / "assets" / "dc_ood_fields.json")
         _dc_event = str(params.get("dc_event", "july16_2024"))
         script_lines += [
@@ -249,34 +261,34 @@ def _build_slurm_script(run_id: str, slug: str, domain: str, task: str,
             "< <(env | grep -oE '^(PMIX_|PMI_|OMPI_)[A-Za-z0-9_]+')",
             "srun --mpi=pmix --ntasks=1 --gpus-per-node=1 --cpu-bind=none "
             f"env \"${{_U[@]}}\" apptainer exec --rocm --overlay {overlay}:ro "
-            "--bind /shared/aaji/models/ORBIT-2:/shared/aaji/models/ORBIT-2:ro "
-            "--bind /home/spannala/.cache/huggingface/orbit2:/home/spannala/.cache/huggingface/orbit2:ro "
-            f"--bind {_AI4S_SHARED_DIR}:{_AI4S_SHARED_DIR} "
+            f"--bind {_O2_BASE}:{_O2_BASE}:ro "
+            f"--bind {_O2_HF}:{_O2_HF}:ro "
+            f"--bind {_shared()}:{_shared()} "
             f"--bind {_BACKEND_DIR}:{_BACKEND_DIR}:ro "
             f"--bind {_run_dir(run_id)}:{_run_dir(run_id)} "
-            "--env PYTHONPATH=/opt/orbit2-pkgs:/shared/aaji/models/ORBIT-2/code/ORBIT-2/src "
+            f"--env PYTHONPATH=/opt/orbit2-pkgs:{_O2_SRC} "
             "--env PYTHONNOUSERSITE=1 --env HSA_NO_SCRATCH_RECLAIM=1 --env MIOPEN_DISABLE_CACHE=1 "
             f"--env OOD_FIELDS={_OOD} --env DC_EVENT={_dc_event} "
             f"--env URBAN_CONUS={_O2}/urban_conus.npz "
             f"--env RH_CKPT={_O2}/orbit2_residual_head.pk "
             "--env WATER_L_CELLS=3.0 "
             f"--env OUT_JSON={str(_run_dir(run_id) / 'orbit2_story.json')} "
-            f"{_SIF_PATH} bash -lc "
+            f"{_sif} bash -lc "
             f"'source /opt/venv/bin/activate 2>/dev/null; python3 {_O2}/orbit2_ood_dc.py'",
             "",
         ]
     elif slug == "ORBIT-2":
         script_lines += [
-            f"export ORBIT2_ROOT=/shared/aaji/models/ORBIT-2/code/ORBIT-2",
+            f"export ORBIT2_ROOT={site_config.orbit2_root()}",
             f"export ORBIT2_USE_SYNTHETIC=1",
             f"export ORBIT2_CONFIG=interm_8m_synthetic_1gpu.yaml",
-            f"export ORBIT2_OUTPUT_DIR={_AI4S_SHARED_DIR}/models/ORBIT-2/outputs/{run_id}",
+            f"export ORBIT2_OUTPUT_DIR={site_config.orbit2_base()}/outputs/{run_id}",
             "",
         ]
 
     # HydraGNN: predict energy with OUR trained PNA model on a real held-out material.
-    _HG_WORK = f"{_AI4S_SHARED_DIR}/models/HydraGNN/train_work"
-    _PERF_TOOLS_DIR = f"{_AI4S_SHARED_DIR}/perf-tools"
+    _HG_WORK = f"{site_config.hydragnn_base()}/train_work"
+    _PERF_TOOLS_DIR = site_config.perf_tools_dir()
     if slug == "HydraGNN" and task == "train":
         # Live 8-GPU DDP training + Omnistat telemetry. The telemetry sbatch reads
         # these; it writes ONLY to a per-run perf-runs/<jobid> dir (HG_OUTPUT_DIR is
@@ -297,7 +309,7 @@ def _build_slurm_script(run_id: str, slug: str, domain: str, task: str,
         script_lines += [
             f"export PERF_TOOLS_DIR={_PERF_TOOLS_DIR!r}",
             f"export OMNISTAT_VENV={_PERF_TOOLS_DIR}/omnistat-venv",
-            f"export HG_DATA_DIR={_AI4S_SHARED_DIR}/models/HydraGNN/weights",
+            f"export HG_DATA_DIR={site_config.hydragnn_data_dir()}",
             f"export HG_NUM_EPOCH={_epochs}",
             f"export HG_PRECISION={_prec}",
             f"export OMNISTAT_USERMODE_INTERVAL={_interval}",
@@ -336,7 +348,7 @@ def _build_slurm_script(run_id: str, slug: str, domain: str, task: str,
                 hits = sorted({z for name, z in _ELEM.items() if name in pl})
                 req = ",".join(str(z) for z in hits) if hits else ""
         script_lines += [
-            f"export HG_INFER_REPO={_AI4S_SHARED_DIR}/models/HydraGNN/outputs/HydraGNN-infer",
+            f"export HG_INFER_REPO={site_config.hydragnn_base()}/outputs/HydraGNN-infer",
             f"export HG_MODEL_PATH={_HG_WORK}/results/{ckpt}",
             f"export HG_MODEL_VARIANT={variant!r}",
             f"export HG_USE_PBC_EDGES=1",
@@ -353,7 +365,7 @@ def _build_slurm_script(run_id: str, slug: str, domain: str, task: str,
         ]
 
     # GP-MoLFormer: pass pairtune params and result output path for finetune task.
-    _GPMOL_WORK = f"{_AI4S_SHARED_DIR}/models/GP-MoLFormer"
+    _GPMOL_WORK = site_config.gpmolformer_base()
     if slug == "GP-MoLFormer" and task == "finetune":
         prop = str(params.get("pairtune_prop", "qed")).lower()
         epochs = int(params.get("pairtune_epochs", 10))
@@ -425,7 +437,7 @@ def _harvest_telemetry(run_id: str) -> dict | None:
     slurm_id = job.get("slurm_job_id")
     if not slurm_id:
         return None
-    perf_dir = Path(f"{_AI4S_SHARED_DIR}/models/HydraGNN/train_work/perf-runs/{slurm_id}")
+    perf_dir = Path(f"{site_config.hydragnn_base()}/train_work/perf-runs/{slurm_id}")
     manifest = perf_dir / "manifest.json"
     if not manifest.exists():
         _emit(run_id, f"[studio] telemetry manifest not found: {manifest}")
@@ -465,7 +477,7 @@ def _harvest_telemetry(run_id: str) -> dict | None:
     _candidates = [
         _run_dir(run_id) / "slurm.log",
         _run_dir(run_id) / "output.log",
-        Path(f"{_AI4S_SHARED_DIR}/models/HydraGNN/train_work/logs/hg_tele8_{slurm_id}.log"),
+        Path(f"{site_config.hydragnn_base()}/train_work/logs/hg_tele8_{slurm_id}.log"),
     ]
     for log in _candidates:
         if not log.exists():
@@ -512,7 +524,7 @@ def _harvest_results(run_id: str):
         return
 
     if slug == "ORBIT-2":
-        out_dir = f"{_AI4S_SHARED_DIR}/models/ORBIT-2/outputs/{run_id}"
+        out_dir = f"{site_config.orbit2_base()}/outputs/{run_id}"
         result: dict = {"type": "downscaling", "model": "ORBIT-2"}
         # "Goodness of fit: PSNR 14.430530, SSIM 0.029594"
         m = re.search(r"PSNR\s+([-\d.]+),\s*SSIM\s+([-\d.]+)", text)
@@ -578,7 +590,7 @@ def _harvest_results(run_id: str):
                 _emit(run_id, f"[studio] Could not parse GP-MoLFormer finetune result: {e}")
         else:
             # Inference: parse generated_molecules.csv from GPMOL_WORK_DIR
-            work = f"{_AI4S_SHARED_DIR}/models/GP-MoLFormer"
+            work = site_config.gpmolformer_base()
             csv_path = Path(work) / "generated.csv"
             if csv_path.exists():
                 try:
@@ -663,7 +675,7 @@ def _poll_slurm(run_id: str, slurm_job_id: str):
 # ── Public API ────────────────────────────────────────────────────────────────
 
 def launch(slug: str, domain: str, task: str, mode: str, prompt: str,
-           params: dict, partition: str = "lux") -> str:
+           params: dict, partition: str = "") -> str:
     run_id = str(uuid.uuid4())
     now = _now()
     job = {
@@ -691,9 +703,15 @@ def launch(slug: str, domain: str, task: str, mode: str, prompt: str,
         t = threading.Thread(target=_run_synthetic, args=(run_id, slug, domain, task, prompt, params), daemon=True)
         t.start()
     else:
-        # Live SLURM
-        script = _build_slurm_script(run_id, slug, domain, task, prompt, params, partition)
-        ok, slurm_id = slurm.submit(str(script))
+        # Live SLURM. A missing site setting fails the run with a message that
+        # names the variable to set instead of submitting a broken script.
+        try:
+            partition = site_config.slurm_partition(partition)
+            script = _build_slurm_script(run_id, slug, domain, task, prompt, params, partition)
+        except site_config.SiteConfigError as e:
+            ok, slurm_id = False, f"site configuration: {e}"
+        else:
+            ok, slurm_id = slurm.submit(str(script))
         if ok:
             _emit(run_id, f"[studio] SLURM job submitted: {slurm_id}")
             _update_state(run_id, "queued", slurm_job_id=slurm_id)

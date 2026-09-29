@@ -19,6 +19,8 @@ export function StepRun() {
   useEffect(() => {
     api.slurmPartitions().then(d => {
       if (d.partitions) setPartitions(d.partitions)
+      // Preselect the site default (AI4S_SLURM_PARTITION) if nothing is chosen yet.
+      if (!useStore.getState().partition && d.default) setPartition(d.default)
     }).catch(() => {})
   }, [])
 
@@ -136,9 +138,8 @@ export function StepRun() {
         <div style={{ marginBottom: '1.2rem' }}>
           <label className="section-label" style={{ display: 'block', marginBottom: '.4rem' }}>SLURM Partition</label>
           <div style={{ display: 'flex', gap: '.5rem', flexWrap: 'wrap' }}>
-            {(partitions.length > 0 ? partitions : [
-              { partition: 'lux' }, { partition: 'rad' }
-            ]).map(p => (
+            {(partitions.length > 0 ? partitions
+              : (partition ? [{ partition }] : [])).map(p => (
               <button key={p.partition}
                 className={`btn ${partition === p.partition ? 'btn-primary' : 'btn-ghost'}`}
                 style={{ fontSize: '.78rem', padding: '.3rem .7rem' }}

@@ -108,7 +108,7 @@ class LaunchRequest(BaseModel):
     mode: str = "demo"           # "demo" or "live"
     prompt: str
     params: dict[str, Any] = {}
-    partition: str = "lux"
+    partition: str = ""          # empty = AI4S_SLURM_PARTITION (see studio/.env.example)
 
 @app.post("/api/jobs")
 def launch_job(body: LaunchRequest, request: Request):
@@ -125,6 +125,15 @@ def launch_job(body: LaunchRequest, request: Request):
     # disables them; this also blocks direct API calls from running dummy paths).
     if not prompts.prompt_allowed_in_mode(body.slug, body.prompt, body.mode):
         raise HTTPException(422, "This prompt is not available in the selected mode.")
+    # Live runs need site settings (shared dir, partition). Fail with a clear
+    # message naming the missing variable rather than submitting a broken job.
+    if body.mode == "live":
+        import site_config
+        try:
+            site_config.shared_dir()
+            site_config.slurm_partition(body.partition)
+        except site_config.SiteConfigError as e:
+            raise HTTPException(400, str(e))
     run_id = jobs.launch(
         slug=body.slug,
         domain=body.domain,
@@ -203,7 +212,9 @@ def telemetry_live(run_id: str, keys: str | None = None):
 
 @app.get("/api/slurm/partitions")
 def get_partitions():
-    return slurm.partitions()
+    import site_config
+    # `default` is the site partition (AI4S_SLURM_PARTITION) the UI preselects.
+    return {**slurm.partitions(), "default": site_config.default_partition()}
 
 
 @app.get("/api/slurm/queue")

@@ -55,7 +55,8 @@ export const useStore = create((set, get) => ({
     runId: null, runState: 'idle', result: null, outputFiles: [] })),
 
   // SLURM
-  partition: 'lux',
+  // Empty = use the backend default (AI4S_SLURM_PARTITION), filled in by the Run step.
+  partition: '',
   setPartition: (p) => set({ partition: p }),
 
   // Run

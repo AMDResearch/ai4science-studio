@@ -189,7 +189,7 @@ def job_state(job_id: str, ssh_host: str | None = None) -> dict:
 def _first_node(nodelist: str) -> str | None:
     """First hostname from a SLURM NodeList (single-node runs → the node).
 
-    Handles 'lux-mi355x-a2', 'lux-mi355x-a[2-5]', 'a2,a3'. Uses `scontrol show
+    Handles 'node-a2', 'node-a[2-5]', 'a2,a3'. Uses `scontrol show
     hostnames` when available for correctness on ranges; falls back to a simple parse.
     """
     nodelist = (nodelist or "").strip()
