@@ -5,20 +5,23 @@
 # telemetry sbatch is launched with OMNISTAT_KERNEL_TRACE=1, giving per-kernel
 # dispatch counts + durations (per-epoch structure) in the telemetry panel.
 #
-# Run once:  sbatch studio/telemetry/build_kernel_trace_amd.sh
-# Output:    /shared/spannala/perf-tools/omnistat-src/build-trace/libomnistat_trace.so
+# Run once (from studio/telemetry, so logs/ resolves):
+#   PERF_TOOLS_DIR=... sbatch build_kernel_trace_amd.sh
+# Output:    $PERF_TOOLS_DIR/omnistat-src/build-trace/libomnistat_trace.so
+#            (PERF_TOOLS_DIR defaults to $AI4S_SHARED_DIR/perf-tools)
 #SBATCH --job-name=kt-build
-#SBATCH --partition=lux
-#SBATCH --account=vultr_lux
+#SBATCH --partition=YOUR_PARTITION_HERE
+#SBATCH --account=YOUR_ACCOUNT_HERE
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1
 #SBATCH --ntasks-per-node=1
 #SBATCH --time=00:20:00
-#SBATCH --output=/shared/spannala/models/HydraGNN/train_work/logs/kt_build_%j.log
-#SBATCH --error=/shared/spannala/models/HydraGNN/train_work/logs/kt_build_%j.log
+#SBATCH --output=logs/kt_build_%j.log
+#SBATCH --error=logs/kt_build_%j.log
 set -uo pipefail
 
-SRC=/shared/spannala/perf-tools/omnistat-src
+PERF_TOOLS_DIR="${PERF_TOOLS_DIR:-${AI4S_SHARED_DIR:?set AI4S_SHARED_DIR or PERF_TOOLS_DIR}/perf-tools}"
+SRC="${PERF_TOOLS_DIR}/omnistat-src"
 export ROCM_PATH="${ROCM_PATH:-/opt/rocm}"
 export CMAKE_PREFIX_PATH="/opt/rocm:/opt/rocm/lib/cmake:${CMAKE_PREFIX_PATH:-}"
 export PATH="/opt/rocm/bin:$PATH"

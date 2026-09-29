@@ -2,15 +2,19 @@
 # -----------------------------------------------------------------------------
 # build_perf_tools.sh
 #
-# Build a fresh, SELF-OWNED AMD Omnistat performance-monitoring venv on the lux
-# MI355X cluster login node (rad-vultr-login) under /shared/spannala, so we no
-# longer depend on a colleague's non-relocatable copy at
-# /shared/omnihub/tools/omnistat/venv (whose shebangs are hardcoded to
-# /shared/omnihub and therefore cannot be moved/reused).
+# Build a fresh, SELF-OWNED AMD Omnistat performance-monitoring venv on the
+# cluster login node under $PERF_TOOLS_DIR, instead of reusing someone else's
+# venv (venv shebangs are absolute, so a venv cannot be moved or shared).
+#
+# Env:
+#   PERF_TOOLS_DIR    install root (default: $AI4S_SHARED_DIR/perf-tools)
+#   OMNISTAT_REF_SRC  optional known-good omnistat source tree to copy, so the
+#                     build matches a commit already validated on this cluster
+#   OMNISTAT_COMMIT   optional commit to check out when cloning from GitHub
 #
 # WHAT IT PRODUCES
-#   /shared/spannala/perf-tools/omnistat-venv        -- the venv
-#   /shared/spannala/perf-tools/omnistat-src         -- omnistat source checkout
+#   $PERF_TOOLS_DIR/omnistat-venv        -- the venv
+#   $PERF_TOOLS_DIR/omnistat-src         -- omnistat source checkout
 #   .../omnistat-venv/bin/omnistat-usermode          -- launcher (pure Python)
 #
 # ROCPROFILER-SDK C-EXTENSION (REQUIRED for FP64/HBM counters)
@@ -32,14 +36,15 @@
 # -----------------------------------------------------------------------------
 set -euo pipefail
 
-PERF_ROOT="/shared/spannala/perf-tools"
+PERF_TOOLS_DIR="${PERF_TOOLS_DIR:-${AI4S_SHARED_DIR:?set AI4S_SHARED_DIR or PERF_TOOLS_DIR}/perf-tools}"
+PERF_ROOT="${PERF_TOOLS_DIR}"
 VENV="${PERF_ROOT}/omnistat-venv"
 SRC="${PERF_ROOT}/omnistat-src"
 USERMODE="${VENV}/bin/omnistat-usermode"
 
-# Reference source tree owned by the colleague (READ-ONLY; used only to pin the
-# exact commit so our build matches what is known-good on this cluster).
-REF_SRC="/shared/omnihub/tools/omnistat-src"
+# Optional known-good reference source tree (READ-ONLY; used only to pin the
+# exact commit so the build matches what is known-good on this cluster).
+REF_SRC="${OMNISTAT_REF_SRC:-}"
 OMNISTAT_REPO="https://github.com/ROCm/omnistat.git"
 
 # --- idempotency check -------------------------------------------------------
@@ -58,9 +63,11 @@ echo "[build_perf_tools] using ${PY} (Python ${PYVER})"
 mkdir -p "${PERF_ROOT}"
 
 # --- determine the commit to build ------------------------------------------
-# Match the commit aaji's known-good tree is on, if we can read it.
-PIN_COMMIT=""
-if git -C "${REF_SRC}" rev-parse HEAD >/dev/null 2>&1; then
+# Match the commit the reference tree is on, if one is given and readable.
+PIN_COMMIT="${OMNISTAT_COMMIT:-}"
+if [[ -z "${REF_SRC}" ]]; then
+    :
+elif git -C "${REF_SRC}" rev-parse HEAD >/dev/null 2>&1; then
     PIN_COMMIT="$(git -C "${REF_SRC}" rev-parse HEAD)"
 else
     # 'dubious ownership' guard: register the read-only tree as safe, then retry.
@@ -70,16 +77,16 @@ fi
 echo "[build_perf_tools] target commit: ${PIN_COMMIT:-<unknown, will use repo default>}"
 
 # --- obtain source ----------------------------------------------------------
-# NOTE: the reference tree (aaji's) sits on a LOCAL commit (v1.12.0-18-g65ea9ac)
+# NOTE: a reference tree may sit on a LOCAL commit (e.g. v1.12.0-18-g65ea9ac)
 # that was never pushed to the public ROCm/omnistat remote, so a fresh clone
-# CANNOT reproduce that exact commit. To honor "same commit as aaji's tree" we
-# therefore COPY the reference tree (stripping its build artifacts). If the
-# reference tree is unreadable, we fall back to a fresh public clone.
+# CANNOT reproduce that exact commit. To honor "same commit as the reference
+# tree" we therefore COPY it (stripping its build artifacts). Without a readable
+# reference tree we use a fresh public clone.
 copy_reference_tree() {
     rm -rf "${SRC}"
     cp -r "${REF_SRC}" "${SRC}"
     chmod -R u+w "${SRC}"
-    # Strip the colleague's build artifacts so it rebuilds clean.
+    # Strip the reference tree's build artifacts so it rebuilds clean.
     rm -rf "${SRC}/build" "${SRC}/build-trace" "${SRC}"/*.egg-info \
            "${SRC}/omnistat.egg-info"
     echo "[build_perf_tools] copied reference tree into ${SRC} at $(git -C "${SRC}" rev-parse HEAD 2>/dev/null || echo '?')"
@@ -98,11 +105,12 @@ fresh_clone() {
 
 get_source() {
     # Prefer an exact-commit copy of the known-good reference tree.
-    if git -C "${REF_SRC}" cat-file -t "${PIN_COMMIT}" >/dev/null 2>&1; then
+    if [[ -n "${REF_SRC}" ]] && git -C "${REF_SRC}" cat-file -t "${PIN_COMMIT}" >/dev/null 2>&1; then
         copy_reference_tree && return 0
     fi
     # Otherwise try a fresh public clone; if THAT fails, copy as last resort.
     if fresh_clone; then return 0; fi
+    [[ -n "${REF_SRC}" ]] || { echo "[build_perf_tools] clone failed and no OMNISTAT_REF_SRC given." >&2; return 1; }
     echo "[build_perf_tools] clone failed; copying reference tree as fallback." >&2
     copy_reference_tree
 }

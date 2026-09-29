@@ -1,7 +1,7 @@
 #!/bin/bash
 # 8-GPU HydraGNN DDP training on Alexandria DFT, wrapped with AMD Omnistat GPU
-# telemetry. Self-owned: every tool + dataset path lives under /shared/spannala,
-# so this does NOT depend on /shared/aaji or /shared/omnihub.
+# telemetry. Self-owned: every tool + dataset path lives under $AI4S_SHARED_DIR
+# (or the explicit overrides below), so it does not depend on anyone else's tree.
 #
 # Merges two proven pieces:
 #   - the production 8-GPU launch from train_work/scripts/hg_ddp8_v3.sbatch
@@ -12,30 +12,36 @@
 # Telemetry lands in $HG_OUTPUT_DIR/omnistat-db (a VictoriaMetrics TSDB) and a
 # manifest.json the studio backend reads to range-query the metrics after the run.
 #
-# Env (all have defaults; studio backend overrides the first three):
-#   PERF_TOOLS_DIR   /shared/spannala/perf-tools           (omnistat venv + VM binary)
-#   HG_DATA_DIR      /shared/spannala/models/HydraGNN/weights
+# Env (AI4S_SHARED_DIR is required unless every path below is set explicitly;
+# the studio backend sets the first four):
+#   AI4S_SHARED_DIR  site shared directory
+#   PERF_TOOLS_DIR   $AI4S_SHARED_DIR/perf-tools           (omnistat venv + VM binary)
+#   HG_DATA_DIR      $HG_BASE/weights                      (Alexandria dataset)
+#   HG_BASE          $AI4S_SHARED_DIR/models/HydraGNN      (work tree, overlay, infer repo)
+#   HG_SIF           $AI4S_SHARED_DIR/images/pytorch_rocm7.2.2_...sif
 #   HG_NUM_EPOCH     200                                   (studio epochs slider)
 #   HG_OUTPUT_DIR    <work>/perf-runs/<jobid>              (per-run telemetry dir)
 #   N_SAMPLES        600000
 #SBATCH --job-name=hg-tele8
-#SBATCH --partition=lux
-#SBATCH --account=vultr_lux
+#SBATCH --partition=YOUR_PARTITION_HERE
+#SBATCH --account=YOUR_ACCOUNT_HERE
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:8
 #SBATCH --ntasks-per-node=8
 #SBATCH --cpus-per-task=16
 #SBATCH --time=01:00:00
-#SBATCH --output=/shared/spannala/models/HydraGNN/train_work/logs/hg_tele8_%j.log
-#SBATCH --error=/shared/spannala/models/HydraGNN/train_work/logs/hg_tele8_%j.log
+#SBATCH --output=logs/hg_tele8_%j.log
+#SBATCH --error=logs/hg_tele8_%j.log
 
 set -uo pipefail
 
 # ── Self-owned paths ────────────────────────────────────────────────────────
-PERF_TOOLS_DIR="${PERF_TOOLS_DIR:-/shared/spannala/perf-tools}"
+_SHARED() { echo "${AI4S_SHARED_DIR:?set AI4S_SHARED_DIR (see studio/.env.example)}"; }
+PERF_TOOLS_DIR="${PERF_TOOLS_DIR:-$(_SHARED)/perf-tools}"
 OMNISTAT_VENV="${OMNISTAT_VENV:-${PERF_TOOLS_DIR}/omnistat-venv}"
-WORK=/shared/spannala/models/HydraGNN/train_work
-HG_DATA_DIR="${HG_DATA_DIR:-/shared/spannala/models/HydraGNN/weights}"
+HG_BASE="${HG_BASE:-$(_SHARED)/models/HydraGNN}"
+WORK="${HG_WORK:-${HG_BASE}/train_work}"
+HG_DATA_DIR="${HG_DATA_DIR:-${HG_BASE}/weights}"
 HG_DATASET_BP="${HG_DATASET_BP:-${HG_DATA_DIR}/Alexandria-v2.bp}"
 HG_NUM_EPOCH="${HG_NUM_EPOCH:-200}"
 # Precision: fp32 = production-accuracy model (default); fp64 = double precision
@@ -44,10 +50,15 @@ HG_PRECISION="${HG_PRECISION:-fp32}"
 N_SAMPLES="${N_SAMPLES:-600000}"
 SCAN_LIMIT="${SCAN_LIMIT:-1500000}"
 HG_OUTPUT_DIR="${HG_OUTPUT_DIR:-${WORK}/perf-runs/${SLURM_JOB_ID:-$$}}"
-# Omnistat config template. SLURM copies this script into its spool dir before
-# running, so BASH_SOURCE does NOT point at the repo — use an absolute default.
-# A self-contained copy lives beside this script in studio/telemetry/.
-OMNISTAT_TEMPLATE="${OMNISTAT_TEMPLATE:-/home/spannala/Projects/ai4science-studio/studio/telemetry/omnistat.config.template}"
+# Omnistat config template (a self-contained copy lives beside this script).
+# When the studio bash-calls this script BASH_SOURCE points at the repo; under a
+# direct sbatch, SLURM runs a spool copy, so recover the submitted path via scontrol.
+_SELF_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+if [[ ! -f "${_SELF_DIR}/omnistat.config.template" && -n "${SLURM_JOB_ID:-}" ]]; then
+  _SUBMITTED=$(scontrol show job "$SLURM_JOB_ID" | sed -n 's/.*Command=\(\S\+\).*/\1/p')
+  [[ -n "$_SUBMITTED" ]] && _SELF_DIR=$(cd "$(dirname "$_SUBMITTED")" && pwd)
+fi
+OMNISTAT_TEMPLATE="${OMNISTAT_TEMPLATE:-${_SELF_DIR}/omnistat.config.template}"
 OMNISTAT_USERMODE_INTERVAL="${OMNISTAT_USERMODE_INTERVAL:-1}"
 # Push frequency (MINUTES) into VictoriaMetrics. Omnistat HARD-FLOORS this at 1 min
 # ("[ERROR]: Please set data_frequency_mins >= 1 minute" — the exporter refuses to
@@ -57,9 +68,9 @@ OMNISTAT_USERMODE_INTERVAL="${OMNISTAT_USERMODE_INTERVAL:-1}"
 # see telemetry.harvest_live() — which reflects the fast --interval sampling.
 OMNISTAT_PUSH_INTERVAL="${OMNISTAT_PUSH_INTERVAL:-1}"
 
-export HG_SIF=/shared/spannala/images/pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif
-export HG_OVERLAY=/shared/spannala/models/HydraGNN/overlays/hydragnn-overlay.img
-export HG_INFER_REPO=/shared/spannala/models/HydraGNN/outputs/HydraGNN-infer
+export HG_SIF="${HG_SIF:-$(_SHARED)/images/pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif}"
+export HG_OVERLAY="${HG_OVERLAY:-${HG_BASE}/overlays/hydragnn-overlay.img}"
+export HG_INFER_REPO="${HG_INFER_REPO:-${HG_BASE}/outputs/HydraGNN-infer}"
 
 mkdir -p "$HG_OUTPUT_DIR" "$WORK/logs" "$WORK/scripts"
 
@@ -143,7 +154,8 @@ export LOCAL_RANK=$SLURM_LOCALID
 export HYDRAGNN_MASTER_ADDR=127.0.0.1
 export HYDRAGNN_MASTER_PORT=8899
 export HYDRAGNN_BACKEND=nccl
-cd /shared/spannala/models/HydraGNN/train_work/training
+# TRAIN_CONFIG (passed via --env) lives in the training dir.
+cd "$(dirname "$TRAIN_CONFIG")"
 python3 hg_train_ddp.py
 RANKEOF
 chmod +x "$WORK/scripts/tele8_rank.sh"
@@ -183,7 +195,7 @@ srun --ntasks=8 --gpus-per-node=8 --mpi=pmix --cpu-bind=none \
   --env MODEL_OUT="${HG_OUTPUT_DIR}/hg_model.pk" \
   --env SCAN_LIMIT="$SCAN_LIMIT" \
   --env N_SAMPLES="$N_SAMPLES" \
-  --env PYTHONPATH=/shared/spannala/models/HydraGNN/outputs/HydraGNN-infer:/opt/hydragnn-pkgs \
+  --env PYTHONPATH="${HG_INFER_REPO}:/opt/hydragnn-pkgs" \
   --env LD_LIBRARY_PATH=/opt/hydragnn-pkgs/adios2:/opt/venv/lib/python3.12/site-packages/torch/lib \
   "$HG_SIF" bash "$WORK/scripts/tele8_rank.sh"
 

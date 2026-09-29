@@ -6,8 +6,11 @@ Omnistat VictoriaMetrics DB and write the full `training_telemetry` result objec
 studio/backend/assets/hydragnn_telemetry_8gpu.json, which the demo replays verbatim.
 
 Usage:
-    export PERF_TOOLS_DIR=/shared/spannala/perf-tools
-    python bake_telemetry_asset.py /shared/spannala/models/HydraGNN/train_work/perf-runs/<jobid>
+    export PERF_TOOLS_DIR=<perf-tools dir>   # or AI4S_SHARED_DIR (PERF_TOOLS_DIR = $AI4S_SHARED_DIR/perf-tools)
+    python bake_telemetry_asset.py <train_work>/perf-runs/<jobid>
+
+The training log is read from <train_work>/logs/hg_tele8_<jobid>.log unless
+HG_TRAIN_LOG points elsewhere.
 
 Scientific integrity: this ONLY reads real measured telemetry. It never fabricates.
 """
@@ -32,7 +35,12 @@ def main() -> int:
     if not manifest.exists():
         print(f"ERROR: manifest not found: {manifest}", file=sys.stderr)
         return 2
-    os.environ.setdefault("PERF_TOOLS_DIR", "/shared/spannala/perf-tools")
+    if not os.environ.get("PERF_TOOLS_DIR"):
+        shared = os.environ.get("AI4S_SHARED_DIR")
+        if not shared:
+            print("ERROR: set PERF_TOOLS_DIR or AI4S_SHARED_DIR", file=sys.stderr)
+            return 2
+        os.environ["PERF_TOOLS_DIR"] = f"{shared.rstrip('/')}/perf-tools"
 
     tel = telemetry.harvest(manifest)
     if not tel:
@@ -57,7 +65,8 @@ def main() -> int:
     # Parse the per-epoch loss curve from the training log (for the Results tab).
     import re
     jobid = json.loads((perf_dir / "manifest.json").read_text()).get("jobid", perf_dir.name)
-    log = Path(f"/shared/spannala/models/HydraGNN/train_work/logs/hg_tele8_{jobid}.log")
+    log = Path(os.environ.get("HG_TRAIN_LOG")
+               or perf_dir.resolve().parents[1] / "logs" / f"hg_tele8_{jobid}.log")
     if log.exists():
         pat = re.compile(r"Epoch:\s*(\d+),\s*Train Loss:\s*([\d.eE+-]+),\s*"
                          r"Val Loss:\s*([\d.eE+-]+),\s*Test Loss:\s*([\d.eE+-]+)")

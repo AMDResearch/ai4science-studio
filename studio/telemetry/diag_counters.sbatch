@@ -1,15 +1,16 @@
 #!/bin/bash
 #SBATCH --job-name=cnt-diag
-#SBATCH --partition=lux
-#SBATCH --account=vultr_lux
+#SBATCH --partition=YOUR_PARTITION_HERE
+#SBATCH --account=YOUR_ACCOUNT_HERE
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:8
 #SBATCH --ntasks-per-node=1
 #SBATCH --time=00:08:00
-#SBATCH --output=/shared/spannala/models/HydraGNN/train_work/logs/cnt_diag_%j.log
-#SBATCH --error=/shared/spannala/models/HydraGNN/train_work/logs/cnt_diag_%j.log
+#SBATCH --output=logs/cnt_diag_%j.log
+#SBATCH --error=logs/cnt_diag_%j.log
 set -uo pipefail
-VENV=/shared/spannala/perf-tools/omnistat-venv
+PERF_TOOLS_DIR="${PERF_TOOLS_DIR:-${AI4S_SHARED_DIR:?set AI4S_SHARED_DIR or PERF_TOOLS_DIR}/perf-tools}"
+VENV="${PERF_TOOLS_DIR}/omnistat-venv"
 export PATH=/opt/rocm/bin:$PATH
 
 echo "=== node $(hostname), gfx: $(/opt/rocm/llvm/bin/amdgpu-arch 2>/dev/null | head -1) ==="
@@ -29,8 +30,8 @@ torch.cuda.synchronize()
 print("fp64 matmul done", c.sum().item())
 PY
 echo "FETCH_SIZE SQ_INSTS_VALU_MFMA_MOPS_F64 SQ_INSTS_VALU_ADD_F64 SQ_INSTS_VALU_MUL_F64 SQ_INSTS_VALU_FMA_F64" > /tmp/counters.txt
-SIF=/shared/spannala/images/pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif
-OVL=/shared/spannala/models/HydraGNN/overlays/hydragnn-overlay.img
+SIF="${HG_SIF:-${AI4S_SHARED_DIR:?set AI4S_SHARED_DIR or HG_SIF}/images/pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif}"
+OVL="${HG_OVERLAY:-${AI4S_SHARED_DIR:?set AI4S_SHARED_DIR or HG_OVERLAY}/models/HydraGNN/overlays/hydragnn-overlay.img}"
 _U=(); while IFS= read -r v; do _U+=(-u "$v"); done < <(env | grep -oE '^(PMIX_|PMI_|OMPI_)[A-Za-z0-9_]+')
 srun --ntasks=1 --gpus-per-node=8 --mpi=pmix --cpu-bind=none \
   env "${_U[@]}" apptainer exec --rocm --overlay "${OVL}:ro" \

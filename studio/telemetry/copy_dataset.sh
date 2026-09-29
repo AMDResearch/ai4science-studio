@@ -1,12 +1,17 @@
 #!/usr/bin/env bash
-# Copy the Alexandria-v2.bp HydraGNN training dataset (~23 GB) from the colleague's
-# tree into spannala-owned storage, so live training does not depend on /shared/aaji.
+# Copy the Alexandria-v2.bp HydraGNN training dataset (~23 GB) from an existing
+# staged copy into your own storage, so live training does not depend on someone
+# else's tree.
+#
+# Env:
+#   HG_DATASET_SRC  existing Alexandria-v2.bp directory to copy from (required)
+#   HG_DATA_DIR     destination directory (default: $AI4S_SHARED_DIR/models/HydraGNN/weights)
 #
 # Idempotent: rsync only transfers changed/missing files. Safe to re-run.
 set -euo pipefail
 
-SRC="/shared/aaji/models/HydraGNN/weights/Alexandria-v2.bp"
-DST_DIR="/shared/spannala/models/HydraGNN/weights"
+SRC="${HG_DATASET_SRC:?set HG_DATASET_SRC to an existing Alexandria-v2.bp directory}"
+DST_DIR="${HG_DATA_DIR:-${AI4S_SHARED_DIR:?set AI4S_SHARED_DIR or HG_DATA_DIR}/models/HydraGNN/weights}"
 DST="${DST_DIR}/Alexandria-v2.bp"
 
 [[ -d "$SRC" ]] || { echo "ERROR: source dataset missing: $SRC" >&2; exit 2; }

@@ -1,15 +1,16 @@
 #!/bin/bash
 #SBATCH --job-name=tele-diag
-#SBATCH --partition=lux
-#SBATCH --account=vultr_lux
+#SBATCH --partition=YOUR_PARTITION_HERE
+#SBATCH --account=YOUR_ACCOUNT_HERE
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:8
 #SBATCH --ntasks-per-node=1
 #SBATCH --time=00:05:00
-#SBATCH --output=/shared/spannala/models/HydraGNN/train_work/logs/tele_diag_%j.log
-#SBATCH --error=/shared/spannala/models/HydraGNN/train_work/logs/tele_diag_%j.log
+#SBATCH --output=logs/tele_diag_%j.log
+#SBATCH --error=logs/tele_diag_%j.log
 set -uo pipefail
-VENV=/shared/spannala/perf-tools/omnistat-venv
+PERF_TOOLS_DIR="${PERF_TOOLS_DIR:-${AI4S_SHARED_DIR:?set AI4S_SHARED_DIR or PERF_TOOLS_DIR}/perf-tools}"
+VENV="${PERF_TOOLS_DIR}/omnistat-venv"
 echo "=== node: $(hostname) ==="
 echo "--- /opt/rocm present on bare node? ---"
 ls -d /opt/rocm*/share/amd_smi/amdsmi 2>&1 | head
