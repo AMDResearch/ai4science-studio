@@ -2,14 +2,16 @@
 
 | Field | Value |
 |---|---|
-| Status | Draft v0.1, open for team review |
+| Status | Draft v0.2, open for team review |
 | Authors | _TBD_ |
-| Reviewers | _TBD_ |
+| Reviewers | Workstream reviewers; see section 6.1 |
 | Last updated | 2026-09-30 |
 | Supersedes | Earlier planning notes (not in the repository) |
 | Follow-up ADRs | 0001 thin harness, 0002 LLM gateway, 0003 SLURM to k8s, 0004 agent spec and messaging |
 
-The document follows a conventional design-doc layout: context, goals, requirements, design, alternatives, rollout and open questions. Four parts are specific to agent systems: tool contracts (section 7.2), the isolation and threat model (section 9), the agent inventory (section 8.1) and the evaluation strategy (section 11). Please comment inline or open a pull request against this file, and record agreed changes in section 16.
+The document follows a conventional design-doc layout: context, goals, requirements, design, alternatives, rollout and open questions. Four parts are specific to agent systems: tool contracts (section 7.2), the isolation and threat model (section 9), the agent inventory (section 8.1) and the evaluation strategy (section 11).
+
+Section 6.1 maps work already underway onto this substrate. Each workstream has a declared interface, a section, and open questions for its owner. Please comment on the row and section that match your work. Agreed changes go in section 16. Only efforts with a public repository are named; others are described by the capability they contribute, and the name and link are added when the repository is published.
 
 ---
 
@@ -24,7 +26,7 @@ AI4Science Studio is currently a catalog of AI-for-science recipes that coding a
 5. An **on-prem LLM layer**: LiteLLM in front of vLLM on ROCm, with hosted APIs optional.
 6. A first application: an **automatic post-job performance report** in which every finding cites telemetry, produced by a team of spec-defined agents.
 
-External agent frameworks, such as ORNL matsim-agents (LangGraph), can call Studio's tools directly, join a Studio team through an adapter, or be ported onto the Studio runtime (section 10.1).
+External agent frameworks, such as ORNL matsim-agents (LangGraph), can call Studio's tools directly, join a Studio team through an adapter, or be ported onto the Studio runtime (section 10.1). Domain applications, a cofolding workflow, and the HPC Assistant sit on the same interfaces (section 6.1).
 
 ## 2. Context and problem
 
@@ -84,6 +86,10 @@ External agent frameworks, such as ORNL matsim-agents (LangGraph), can call Stud
   *Relevance:* it overlaps Studio's HydraGNN recipe and is the first integration target (section 10.1). Studio's tool layer and Executor cover two items on its roadmap.
 - **UK Isambard-AI "Agentic Ops."** Skills generated from site documentation, and a service-desk agent.
   *Relevance:* skills are becoming a portable unit across agent tools, so Studio should export its skills to the locations other tools read (`.agents/skills`, `.opencode/skills`).
+- **[HPC Assistant](https://github.com/silogen/hpc-assistant).** An agent-agnostic assistant for AMD GPU login nodes. It ships site skills for SLURM, resource and quota commands, `rocprofv3`, and Omnistat energy profiling; a RAG knowledge base served over MCP; and a LiteLLM proxy that translates Anthropic requests to an OpenAI-compatible backend. Skills are markdown and work with Claude Code and OpenCode. Python dependencies run inside Singularity or Apptainer.
+  *Relevance:* this is an interactive coding-agent host, not a headless runtime. Studio exports skills into its skill directories, runs the Studio MCP server beside its RAG MCP, and shares an alias convention with its LiteLLM proxy (section 10.2).
+- **Cofolding drug-discovery agents.** A conductor LLM, reached through an OpenAI- or Anthropic-compatible API, coordinates molecular generation and structure evaluation. Typical tools are REINVENT over MCP, REST services for cofolding models such as Boltz-2 and OpenFold3, pose checks, interaction profiling, and property models, packaged as containers.
+  *Relevance:* this overlaps Studio's REINVENT4 recipe and is the first candidate to populate the empty protein-folding domain. Integration follows the same three paths as matsim-agents (section 10.5). The repository is not linked here until it is public.
 
 ### 4.2 Performance agents
 
@@ -117,6 +123,8 @@ From these we adopt auditability: every run keeps a ledger that links conclusion
 | ORNL matsim-agents | LangGraph planner, executor, UQ gate and analyst; pluggable LLM factory; HydraGNN, UMA or MACE relaxation; DFT active learning | First integration partner; LangGraph adapter, then a native port (M6); the same set of LLM providers |
 | PerfAdvisor, IOAgent, Omnistat agent skills | Preprocess traces into summaries, give agents on-demand tools, grade against labeled benchmarks | Deterministic pitfall detectors, and an LLM that ranks and explains with required citations |
 | OpenHands, OpenCode | Headless coding agents against vLLM through LiteLLM | Export skills to `.agents/skills` and `.opencode/skills`; adapters later |
+| HPC Assistant | Login-node skills, RAG over MCP, LiteLLM proxy, Apptainer packaging | Interactive host; shared skill export and alias convention (section 10.2) |
+| Cofolding drug-discovery agents | Conductor LLM plus MCP and REST tools for generation and cofolding | Same integration paths as matsim-agents; protein-folding recipes (section 10.5) |
 | Edison Kosmos, Sakana AI Scientist v2 | Auditable claims; experiment manager | Run ledger; tree search explicitly deferred |
 | SchedMD Slinky | SLURM operator in k8s (hybrid) | Path from SLURM to k8s |
 
@@ -139,6 +147,10 @@ From these we adopt auditability: every run keeps a ledger that links conclusion
 | F11 | Tools can charge named budget counters, such as `dft_calculations` or `node_hours`, which the broker caps (M6) |
 | F12 | `result.json` accepts optional `validations`, `provenance` and namespaced app fields (M6) |
 | F13 | A run can resume from its ledger and mailbox state after a failure or walltime limit (M6) |
+| F14 | LLM aliases resolve through a routing policy, and agents may declare hints such as latency or quality tier (section 7.7) |
+| F15 | The ledger records the tokenomics fields in section 7.11, and a run can emit a tokenomics summary |
+| F16 | The Executor can relaunch a step inside an existing allocation, and a supervisor may apply only an allowlisted remediation (section 7.12) |
+| F17 | An external agent can replace a built-in agent when it accepts the same input schema and emits the same output schema |
 
 ### 5.2 Non-functional
 
@@ -198,6 +210,59 @@ flowchart TB
 - Endpoints (LLM, OmniHub, MCP) are discovered from cluster config, never hardcoded.
 - State lives under `$AI4S_SHARED_DIR` in run directories. An object store comes later.
 
+### 6.1 Workstreams and interfaces
+
+Several efforts are already underway. Each one keeps its own implementation and joins through the interface in the table. The owner of that work reviews the row.
+
+```mermaid
+flowchart TB
+  subgraph apps [Applications]
+    AgentSci["AI-scientist app"]
+    Quantum["Quantum app"]
+    Hcls["HCLS app"]
+    Cofold["Cofolding agent"]
+    Matsim["matsim-agents"]
+  end
+  subgraph substrate [Studio agent substrate]
+    Specs["agent.yaml and team.yaml"]
+    Broker["Runtime and broker"]
+    Router["LLM model routing"]
+    Tokenomics["Tokenomics"]
+    Heal["Self-healing supervisor"]
+  end
+  subgraph toolsLayer [Tools and agents]
+    Recipes["Recipe tools"]
+    OmnistatAgent["Omnistat agent"]
+    PerfTeam["Perf-report team"]
+  end
+  subgraph infra [Orchestration]
+    Slurm["SLURM Executor"]
+    K8s["k8s and Slinky"]
+  end
+  Hosts["Coding-agent hosts"]
+  apps --> Specs
+  Specs --> Broker
+  Broker --> Router
+  Broker --> Tokenomics
+  Broker --> toolsLayer
+  Heal --> Slurm
+  toolsLayer --> infra
+  Hosts -->|"MCP"| toolsLayer
+```
+
+| Workstream | Contributes | Interface | Section | Status |
+|---|---|---|---|---|
+| Orchestration (SLURM and k8s) | Executors and the deployment patterns | `Executor` | 7.9, 7.10 | Specified; needs owner review |
+| Omnistat agent | Telemetry analysis, and energy samples for tokenomics | `claims` schema, via `ai4s.agents` or A2A | 8.3 | Proposed interface |
+| Self-healing | Fix a failed step without leaving the queue | `Executor.step` and an allowlist | 7.12 | Proposed; good to have |
+| Tokenomics | Latency, accuracy, throughput and energy | Ledger fields and a per-run summary | 7.11 | Proposed interface |
+| Model routing | Choose an endpoint for an alias | `llm.aliases`, `llm.hints`, ledger | 7.7 | Proposed interface |
+| Domain applications | AI-scientist, quantum and HCLS teams | Paths A, B and C | 10.4 | Proposed interface |
+| Cofolding agent | Generation, cofolding and scoring | Paths A, B and C; protein-folding recipes | 10.5 | Proposed interface |
+| HPC Assistant | Login-node skills, RAG and an inference proxy | Skill export and MCP | 10.2 | Specified; needs owner review |
+| matsim-agents | Materials workflows | Paths A, B and C | 10.1 | Specified |
+| Perf-report team | First built-in team | `team.yaml` | 8 | Specified |
+
 ## 7. Detailed design
 
 ### 7.1 Contract layer extensions
@@ -246,7 +311,7 @@ validation: {status: synthetic_ok, app_eval: none}
 | `recipes.cancel` | cancel | Only jobs this run submitted |
 | `perf.omnistat_inspect`, `perf.tracelens_summary`, `perf.fom`, `perf.pitfalls` | read | Read-only over perf-run directories and OmniHub processed data |
 
-- **Executor interface.** Methods: `submit`, `status`, `cancel`, `logs`. The `slurm` implementation ships first; `local` and `k8s` come later.
+- **Executor interface.** Methods: `submit`, `status`, `cancel`, `logs`, and `step`. The `slurm` implementation ships first; `local` and `k8s` come later. `step` relaunches work inside an allocation the run already holds, and is what the self-healing supervisor uses (section 7.12).
 - **Parameter validation requires manifest cleanup.** Today some manifests list the variable names used inside the container, while the SLURM scripts read prefixed names. For example, MatterGen's `model.yaml` lists `BATCH_SIZE`, but `sbatch_inference_amd.sh` reads `MG_BATCH_SIZE`. Before `recipes.submit` can validate parameters, `env_vars` must declare the variables of each entry point, or record the mapping between the two names.
 
 ### 7.3 Agent spec (`agent.yaml`)
@@ -373,12 +438,18 @@ The envelope (`schemas/message.schema.json`) is modeled on A2A messages and task
   - gpt-oss-20b, and gpt-oss-120b for higher quality. Each fits on one GPU; tensor parallelism across more GPUs is only for throughput. Both are served with the `openai` tool-call parser.
   - Optional: Nemotron-Nano and OLMo.
   - Optional hosted APIs: OpenAI and Anthropic. With Ollama, this covers the providers matsim-agents supports.
-- **Cluster config.** An `llm:` block in `.cluster-config.example.yaml` holds `aliases`, `endpoint_file`, `idle_exit_s` and `gpu.login_has_gpu`, and is checked by the validator.
+- **Cluster config.** An `llm:` block in `.cluster-config.example.yaml` holds `aliases`, `endpoint_file`, `idle_exit_s`, `gpu.login_has_gpu` and `routing`, and is checked by the validator.
+- **Model routing.** An alias does not have to name a single endpoint. The routing workstream owns the policy; this spec owns the interface. Policies, in increasing order of complexity:
+  - static: one endpoint per alias, which is the v1 default;
+  - rule-based: choose by agent role or by context length;
+  - fallback: try the next endpoint after an error or a timeout;
+  - cost- or latency-aware: choose using the tokenomics summary from recent runs (section 7.11).
+  An agent may set `llm.hints`, for example `max_latency_s` or `quality_tier`. The broker records the alias, the endpoint actually used, and the reason in the ledger. On-prem endpoints are the default. A hosted API is used when the policy's fallback rule selects it.
 - **Placement on shared SLURM** is covered in section 7.9.
 
 ### 7.8 Observability and provenance
 
-- **Ledger.** `ledger.jsonl` in each run directory, with one entry per message, tool call (arguments, result digest, duration), LLM call (alias, token counts, latency) and policy decision (allowed or refused). Secret values are redacted.
+- **Ledger.** `ledger.jsonl` in each run directory, with one entry per message, tool call (arguments, result digest, duration), LLM call and policy decision (allowed or refused). An LLM entry records the alias, the endpoint chosen, token counts, time to first token and end-to-end latency. Section 7.11 adds the energy fields. Secret values are redacted.
 - **Run manifest.** Git SHA, spec versions, LLM aliases resolved to concrete models, cluster profile name, and input references.
 - **Optional Flowcept exporter** to PROV-AGENT.
 - **Perf evidence.** Omnistat, TraceLens and OmniHub outputs are referenced from claims by `run://` URI.
@@ -433,6 +504,35 @@ The following rules keep the move to k8s limited to relocating components:
   - Compute-side agents stay in the SLURM allocation or on the login node.
   - Science jobs remain `sbatch`.
 
+The orchestration workstream owns the `slurm` and `k8s` Executor implementations and the deployment patterns above. Open questions for that workstream are in section 15.
+
+### 7.11 Tokenomics
+
+Tokenomics measures what an agent run costs in time, quality, throughput and energy, so routing (section 7.7) and later model choice have evidence. It does not change the science workload.
+
+| Family | Metrics | Source |
+|---|---|---|
+| Latency | Time to first token; end-to-end run time; queue wait, recorded separately from compute time | Ledger; SLURM timestamps |
+| Accuracy | Scores from the eval tracks in section 11 | Eval runner |
+| Throughput | Tokens per second; completed runs per hour | Ledger; vLLM metrics |
+| Energy | Joules for the run, split between LLM serving and the science job | Omnistat on the vLLM job and on the science job |
+
+Derived views, computed from those fields rather than collected separately:
+
+- tokens per verified finding, and joules per verified finding;
+- GPU-hours spent on LLM serving compared with GPU-hours spent on the science job.
+
+A run writes `tokenomics.json` next to the ledger. The Omnistat agent (section 8.3) and the HPC Assistant energy skill are two consumers of the same energy samples. The attribution method, for example joules per GPU versus joules per node, is open question 10.
+
+### 7.12 Self-healing within an allocation
+
+A long science job should be able to recover from a known failure while it still holds its allocation. This is good to have, and M4 does not depend on it.
+
+- A supervisor process stays inside the allocation. When an `srun` step fails, a `job_doctor` agent classifies the failure against a catalog of known failures. The catalog starts from the ROCm lessons already recorded for this repository, such as a missing bind mount, a dependency that replaced the container's torch, or a bad node.
+- The doctor may apply only a remediation on the allowlist: change an environment variable, reduce the batch size, drop a node, or resume from the last checkpoint. It then calls `Executor.step`, which relaunches the step in the same allocation.
+- Retries are bounded by the team budget. Anything outside the allowlist becomes a human gate. The doctor leaves the allocation in place.
+- Every classification and remediation is a ledger entry. The fault-injection bundles in section 13.4 are the eval set: the doctor must apply the expected remediation and must refuse one that is not allowlisted.
+
 ## 8. First product: the perf-report team
 
 ### 8.1 Agent inventory
@@ -454,6 +554,12 @@ The following rules keep the move to k8s limited to relocating components:
 - **Model-agnostic.** The playbooks move to `agents/perf/*` and read model-specific details from the `perf` block in `model.yaml`. The existing `recipes/perf-analysis/agents/*.md` files become pointers, so Cursor and Claude sessions keep working.
 - **Automatic trigger.** With `AI4S_AUTO_REPORT=1`, `sbatch_train_perf_amd.sh` submits a dependent CPU job (`afterany`) that runs the team. The Docker path gets the same hook.
 - **Diagnosis only.** The report recommends a next diagnostic for a human to review. It never launches an optimization experiment.
+
+### 8.3 Omnistat agent
+
+Omnistat 1.14 already ships agent skills over `omnistat-inspect`. If that work becomes an agent with the same input schema (`perf_run_ref`) and the same output schema (`claims`), it can replace `omnistat_analyst`. Registration is through `ai4s.agents` now and A2A later (F17). The verifier and the synthesizer stay in the Studio team, so a substituted analyst is still checked against raw telemetry.
+
+The same agent can supply the energy samples in section 7.11. The HPC Assistant energy-profiling skill is a separate consumer of Omnistat, not a second implementation of this agent.
 
 ## 9. Isolation and security model
 
@@ -536,9 +642,36 @@ This mapping is based on matsim-agents `main` as of September 2026. Most matsim 
 
 Cursor and Claude Code continue to use the existing skills and commands, and can also connect to the MCP server. Skills are also exported to `.agents/skills` and `.opencode/skills` for other agent tools.
 
+[HPC Assistant](https://github.com/silogen/hpc-assistant) is the login-node host for the same skills. A person starts OpenCode or Claude Code on the login node. The headless runtime in section 7.6 is a separate component, used when no one is at the terminal. Three integration points:
+
+- Studio skills install into the skill directory its setup already copies for OpenCode and Claude Code.
+- The Studio MCP server is registered next to its RAG MCP server, so a login-node session can call `recipes.submit` and `recipes.result`.
+- Its LiteLLM proxy and Studio's gateway use the same alias names. A site can point the assistant at the on-prem vLLM endpoint instead of a hosted API.
+
 ### 10.3 Academy (later)
 
 An adapter runs a Studio agent worker as an Academy agent. The broker stays the policy point.
+
+### 10.4 Applications on the substrate
+
+An application is a set of agents and teams that use Studio tools. It is not a fork of the runtime. The same pattern covers an AI-scientist application, a quantum application, and a healthcare and life sciences application:
+
+- Ship `agent.yaml` and `team.yaml` through `ai4s.agents`, or keep them on a user path.
+- Call Studio tools for recipes, validation and the perf-report team. Register application-specific tools through `ai4s.tools`.
+- Choose Path A (tools only), Path B (one agent inside a Studio team) or Path C (a native port, section 10.1).
+- Declare gates on any step that spends a large allocation or changes a model.
+
+Healthcare and life sciences applications follow the repository rule: research and engineering use only, with no patient-identifiable data and no clinical claims. The quantum application needs a scope decision before its tools are specified (open question 13): quantum chemistry on the existing materials recipes, or a quantum-computing workload, which Studio does not have recipes for today.
+
+### 10.5 Cofolding agent
+
+A cofolding workflow is the second external application, after matsim-agents, and the one that gives the protein-folding domain a recipe. The agent's own harness stays upstream. Studio provides the AMD HPC path.
+
+- **Path A.** Its MCP server for molecular generation and its REST services for cofolding, pose checks and property models register as tools. Studio adds SLURM and Apptainer recipes for Boltz-2 and OpenFold3 under `protein_folding/`, following the same pattern as the other domains. REINVENT is already a Studio recipe.
+- **Path B.** Wrap the conductor harness as one `langgraph` or `python` agent and place it in a team with the perf-report synthesizer.
+- **Path C.** A later port onto the runtime, using the same gaps and requirements as section 10.1.1.
+
+A demonstration team, once the recipes exist: REINVENT4 or SemlaFlow proposes molecules, the cofolding tools score them, and the perf-report team reports on the GPU job. The public repository link is added here when the project is published (open question 14).
 
 ## 11. Evaluation strategy
 
@@ -600,7 +733,7 @@ Each milestone ends with `make check` green and its skills and docs updated.
 5. **Interop and provenance.** `make fix` also generates Genesis/A2A agent cards from `agent.yaml` and `model.yaml`. An optional Flowcept exporter writes the ledger as PROV-AGENT.
 6. **Science campaigns** (after M5). Declarative `campaigns/*.yaml` files compose recipes and teams, with a human gate at every step and a perf report from every stage. Candidates:
    - MatterGen generation, then HydraGNN screening, then DFT active learning through matsim-agents
-   - REINVENT4 or GP-MoLFormer, then SemlaFlow
+   - REINVENT4 or SemlaFlow, then cofolding and scoring (section 10.5)
    - ORBIT-2 downscaling, then evaluation
 7. **SLURM plus k8s.** Helm or kustomize for the control plane, documentation of the Slinky hybrid, and a `k8s` Executor (section 7.10).
 
@@ -621,6 +754,23 @@ Each milestone ends with `make check` green and its skills and docs updated.
 A model-agnostic, system-level fault-injection study will produce labeled frozen bundles for the same eval runner. Candidate faults: power or clock caps, CPU contention, network throttling, an I/O-throttled data loader, and a stuck kernel.
 
 The protocol is blind: ground truth is read only at scoring time, and agent prompts are not tuned with knowledge of the injection mechanism.
+
+The same bundles are the eval set for the self-healing supervisor (section 7.12). That study stays separate from the perf-report product.
+
+### 13.5 Parallel workstream tracks
+
+These tracks proceed beside M1 to M6. A track starts once the interface it depends on exists. None of them blocks M4.
+
+| Track | First integration | Depends on | Exit criteria |
+|---|---|---|---|
+| Orchestration | `slurm` Executor in M2; `k8s` Executor later | M2, section 7.10 | A recipe submitted through the Executor matches a hand-written `sbatch` run |
+| Omnistat agent | Substitute for `omnistat_analyst` | M1 schemas, M4 perf team | A stand-in agent emits `claims` and the verifier accepts them |
+| Model routing | Static aliases in M4; fallback and hints after | M4 LLM serving | Ledger shows the endpoint chosen; a failed endpoint falls over to the next |
+| Tokenomics | Ledger fields in M4; energy when Omnistat is on the vLLM job | M3 ledger, M4 | `tokenomics.json` for a perf-report run, with latency and token counts; energy filled when samples exist |
+| Self-healing | `Executor.step` and `job_doctor` | M2 Executor, section 13.4 bundles | On a fault bundle, the doctor applies the expected allowlisted fix and refuses one that is not listed |
+| HPC Assistant | Skill export and MCP registration | M2 MCP server | A login-node session calls `recipes.submit` through the assistant |
+| Domain applications | One example team per application, Path A or B | M3, M5 | The team's dry-run passes `make check` with a fake LLM |
+| Cofolding agent | Path A tools, plus Boltz-2 and OpenFold3 recipes | M2, M5 | A dry-run team chains generation to a cofolding tool and reads `result.json` |
 
 ## 14. Alternatives considered
 
@@ -643,6 +793,12 @@ The protocol is blind: ground truth is read only at scoring time, and agent prom
 6. Message schema versioning, and compatibility with A2A revisions.
 7. Who owns the matsim-agents integration on each side, and which science campaign comes first: MatterGen to HydraGNN screening, or HydraGNN plus DFT active learning? Are the maintainers willing to host the Path C port upstream, or should it live in a separate package?
 8. Verify Academy's current isolation and authentication model against its latest docs before finalizing section 9.3.
+9. Should model routing live inside LiteLLM, or in the broker with LiteLLM as a single upstream?
+10. How should tokenomics attribute energy: joules per GPU, joules per node, or joules per job? Which Omnistat counters are the source?
+11. Which remediations belong on the self-healing allowlist, and which must always be a human gate?
+12. Does the Omnistat agent replace `omnistat_analyst`, or does it sit beside it and only supply energy samples?
+13. Is the quantum application quantum chemistry on the materials recipes, or a quantum-computing workload that needs new recipes?
+14. When is the cofolding agent's repository public, and which path comes first: tools only, a wrapped harness, or a native port?
 
 ## 16. Decision log
 
@@ -652,6 +808,8 @@ The protocol is blind: ground truth is read only at scoring time, and agent prom
 | 2026-09-30 | Perf report is rebuilt as the first team on the agent spec | Avoids a throwaway harness |
 | 2026-09-30 | Isolation is runtime-enforced; `container` is the default for user code | User-supplied agent code must not exceed its declared permissions, regardless of prompt behavior |
 | 2026-09-30 | Fault injection is a separate study; no optimizer-loop integration | Keeps the first release scoped to diagnosis |
+| 2026-09-30 | Name only efforts that already have a public repository | This repository is public. Unpublished efforts are described by capability until their repository is published |
+| 2026-09-30 | Workstreams join through a declared interface | Orchestration, telemetry, routing, tokenomics, self-healing and applications can move on their own schedule without changing the substrate |
 
 ## 17. Glossary
 
@@ -664,3 +822,6 @@ The protocol is blind: ground truth is read only at scoring time, and agent prom
 - **FOM:** figure of merit, the primary performance metric of a workload.
 - **Perf bundle:** a frozen set of telemetry, traces, logs and expected findings used for replay evals.
 - **`synthetic_ok` / `gated`:** recipe validation status. The recipe either runs on synthetic inputs, or it is blocked on data, credentials or weights.
+- **Router:** the policy that resolves an LLM alias to an endpoint. Agents name aliases; they do not name endpoints.
+- **Tokenomics:** the per-run record of latency, accuracy, throughput and energy, written to `tokenomics.json`.
+- **Job doctor:** the agent that classifies a failed step and applies an allowlisted remediation inside the current allocation.
