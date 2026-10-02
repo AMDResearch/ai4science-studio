@@ -1,8 +1,10 @@
 # Design spec: Agents for Science in AI4Science Studio
 
+> **Superseded.** This exploratory draft is kept for reference only. The current design and roadmap are in [`../ai4science-studio-on-lux.md`](../ai4science-studio-on-lux.md).
+
 | Field | Value |
 |---|---|
-| Status | Draft v0.2, open for team review |
+| Status | Superseded exploratory draft (v0.2) |
 | Authors | _TBD_ |
 | Reviewers | Workstream reviewers; see section 6.1 |
 | Last updated | 2026-09-30 |
@@ -34,12 +36,12 @@ Studio is a layer in a stack (section 6). Applications such as an AI Scientist, 
 
 - **Contract layer:**
   - The root `models.yaml` index is generated from each model's `model.yaml`.
-  - [`schemas/model.schema.json`](../../schemas/model.schema.json) defines the manifest.
+  - [`schemas/model.schema.json`](../../../schemas/model.schema.json) defines the manifest.
   - Skills live under `.cursor/skills/`, and Claude commands under `.claude/commands/`.
-  - [`tools/ai4s_validate`](../../tools/ai4s_validate/README.md) is importable and returns structured `Finding` objects. `make check` runs it.
+  - [`tools/ai4s_validate`](../../../tools/ai4s_validate/README.md) is importable and returns structured `Finding` objects. `make check` runs it.
 - **Recipes:** 15 models across earth science, materials science, healthcare and physics simulation (the protein-folding domain is an empty placeholder). Scripts in each model's `examples/` directory are configured through environment variables. All 15 models have a Docker launcher and a preflight check. Ten also have SLURM plus Apptainer scripts; Aurora, GenCast, PanguWeather, REINVENT4 and SemlaFlow do not yet.
 - **Perf analysis:** available for HydraGNN and ORBIT-2 only. It is driven by Markdown playbooks in `recipes/perf-analysis/agents/*.md`: a launcher, two analysts (Omnistat and TraceLens), two matching verifiers and a synthesizer. Each playbook declares its inputs and outputs and ends with a `STATUS` line. Evidence comes from Omnistat, TraceLens and figure-of-merit (FOM) extraction (`run_fom_extractor.py`).
-- **Evals:** [`evals/`](../../evals/README.md) contains three contract cases and no runner.
+- **Evals:** [`evals/`](../../../evals/README.md) contains three contract cases and no runner.
 
 ### 2.2 What is missing
 
