@@ -1,6 +1,6 @@
 # Design spec: Agents for Science in AI4Science Studio
 
-> **Superseded.** This exploratory draft is kept for reference only. The current design and roadmap are in [`../ai4science-studio-on-lux.md`](../ai4science-studio-on-lux.md).
+> **Superseded.** This exploratory draft is kept for reference only. The current design and roadmap are in [`../agents-for-science.md`](../agents-for-science.md).
 
 | Field | Value |
 |---|---|

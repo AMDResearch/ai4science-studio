@@ -1,15 +1,15 @@
-# AI4Science Studio on Lux: design and roadmap
+# Agents for Science in AI4Science Studio: design and roadmap
 
 | Field | Value |
 |---|---|
 | Status | Draft v0.3, for team review |
-| Target | Lux (single site) |
+| Target | One AI factory (single site) |
 | Replaces | [`archive/agents-for-science-v0.2.md`](archive/agents-for-science-v0.2.md) |
 | Last updated | 2026-10-02 |
 
 ## 1. Objective
 
-Run AI4Science Studio agents on Lux without a person at the terminal, using open LLMs served on Lux.
+Run AI4Science Studio (AI4S Studio) agents on an AI factory without a person at the terminal, using open LLMs served on the same AI factory.
 
 The first product is an automatic performance report for an ORBIT-2 or HydraGNN training job. Each claim in the report cites telemetry or tool output.
 
@@ -19,6 +19,7 @@ Later phases add provenance export, model routing and declarative campaigns. App
 
 | Term | Meaning |
 |---|---|
+| AI factory | An HPC cluster with AMD Instinct GPUs, SLURM, Apptainer and shared storage |
 | Agent | A folder with `agent.yaml` (settings) and `playbook.md` (instructions) |
 | Engine | The program that executes a playbook with an LLM: OpenCode or Claude Code |
 | Model alias | A name such as `ai4s/small` that LiteLLM maps to a served model |
@@ -29,13 +30,13 @@ Later phases add provenance export, model routing and declarative campaigns. App
 
 ## 3. Scope
 
-**In scope:** Lux only; SLURM and Apptainer; models with a validated Lux recipe; OpenCode and Claude Code as engines.
+**In scope:** one AI factory; SLURM and Apptainer; models with a validated recipe on that AI factory; OpenCode and Claude Code as engines.
 
 **Out of scope:**
-- multi-facility agents;
+- agents that span several sites;
 - Kubernetes;
 - agent-to-agent messaging and A2A;
-- a Studio-owned LLM loop, unless Phase 1 shows the engines cannot do the job;
+- an AI4S Studio-owned LLM loop, unless Phase 1 shows the engines cannot do the job;
 - self-healing of running jobs;
 - network isolation.
 
@@ -50,13 +51,13 @@ Later phases add provenance export, model routing and declarative campaigns. App
 | F5 | Every run writes a run record: inputs, git commit, engine, model, commands and outputs, token counts, timings, `result.json`, status | 1 |
 | F6 | An agent may only use the tools and commands in its `allow` list; SLURM actions are limited to the user's own jobs | 1 |
 | F7 | A SLURM job serves gpt-oss-20b and gpt-oss-120b with vLLM, with a LiteLLM sidecar and the endpoint written to shared storage | 1 |
-| F8 | Each agent names one model alias; the mapping lives in the gitignored cluster config | 1 |
+| F8 | Each agent names one model alias; the site maps aliases to served models | 1 |
 | F9 | The `perf-report` agent produces `perf_report.md` and `findings.json` for an ORBIT-2 or HydraGNN job; deterministic checks run first, and the LLM ranks and explains them | 1 |
 | F10 | Each report is appended to a per-model index, so past runs can be compared | 1 |
 | F11 | An eval runner grades the perf report against recorded benchmark runs, alongside the existing contract cases | 1 |
 | F12 | The same functions are available as a stdio MCP server for Cursor, Claude Code, OpenCode and HPC Assistant | 1 |
 | F13 | Run records export to Flowcept | 2 |
-| F14 | `result.json` covers all models with a validated Lux recipe; an application eval track uses the metrics those recipes compute | 2 |
+| F14 | `result.json` covers all models with a validated recipe; an application eval track uses the metrics those recipes compute | 2 |
 | F15 | Model routing picks an alias per request; routing choices are evaluated with F11 | 2 |
 | F16 | The optimizer agent ships, with a human approval before each job it launches | 2 |
 | F17 | `ai4s campaign run`, `status`, `approve` execute a campaign file; steps pass values through `result.json` | 3 |
@@ -66,65 +67,64 @@ Later phases add provenance export, model routing and declarative campaigns. App
 
 | ID | Requirement |
 |---|---|
-| N1 | On-prem by default; hosted models only when the cluster config enables them |
+| N1 | On-prem models by default; hosted models only when the site enables them |
 | N2 | No long-running service on the login node; LLM serving and agent runs are SLURM jobs |
 | N3 | The run record is written by the launcher, not by the LLM |
-| N4 | No secrets in run records or transcripts |
-| N5 | No site-specific values (paths, partitions, accounts, node names, job IDs) in the repository; they live in the gitignored cluster config |
-| N6 | `make check` validates agents and runs one report with a recorded LLM reply; no GPU needed |
-| N7 | The engine can be replaced without changing the CLI, MCP tools, `agent.yaml` or the run record |
+| N4 | `make check` validates agents and runs one report with a recorded LLM reply; no GPU needed |
+| N5 | The engine can be replaced without changing the CLI, MCP tools, `agent.yaml` or the run record |
 
 ## 6. Architecture
 
 ```mermaid
 flowchart TB
-  subgraph entry [Entry points]
-    Cli["ai4s CLI: people and SLURM jobs"]
-    Mcp["stdio MCP: Cursor, Claude Code, OpenCode, HPC Assistant"]
-    Apps["Applications, after Phase 3"]
+  Users["People and coding agents: Cursor, Claude Code, OpenCode, HPC Assistant"]
+  subgraph ai4s [AI4S Studio]
+    Interfaces["CLI and MCP server"]
+    Launcher["Agent launcher"]
+    RecipeRunner["Recipe runner"]
+    Registry["Agent registry"]
+    Records["Run records and result.json"]
   end
-  subgraph studio [AI4Science Studio]
-    Registry["Agent registry: list, show, new, validate"]
-    Launcher["Launcher and run records"]
-    RecipeRunner["Recipe runner and result.json"]
-    CampaignRunner["Campaign runner, Phase 3"]
-    Skills["Skills"]
+  Engine["Agent engine: OpenCode or Claude Code"]
+  subgraph llm [LLM service]
+    Gateway["LiteLLM"]
+    Models["vLLM: gpt-oss-20b and 120b"]
   end
-  subgraph engines [Engines]
-    OpenCode["OpenCode"]
-    ClaudeCode["Claude Code"]
+  subgraph factory [AI factory: SLURM and Apptainer]
+    Jobs["Science jobs: ORBIT-2, HydraGNN"]
+    Telemetry["Telemetry and traces: Omnistat, TraceLens"]
   end
-  subgraph llm [LLM serving SLURM job]
-    LiteLLM["LiteLLM"]
-    Vllm["vLLM: gpt-oss-20b and 120b"]
-  end
-  subgraph compute [Lux compute]
-    Science["Science jobs: ORBIT-2, HydraGNN"]
-    Omnistat["Omnistat telemetry"]
-  end
-  Shared[("Shared storage: endpoint file, run records, report index")]
-  entry --> studio
-  Launcher --> engines
-  engines --> LiteLLM
-  LiteLLM --> Vllm
-  RecipeRunner --> Science
-  Science --> Omnistat
-  CampaignRunner --> Launcher
-  CampaignRunner --> RecipeRunner
-  studio --> Shared
-  llm --> Shared
+  Users --> Interfaces
+  Interfaces --> Launcher
+  Interfaces --> RecipeRunner
+  Launcher -->|"loads agent"| Registry
+  Launcher -->|"starts"| Engine
+  Engine --> Gateway
+  Gateway --> Models
+  Engine -->|"reads"| Telemetry
+  RecipeRunner -->|"sbatch"| Jobs
+  Jobs --> Telemetry
+  Launcher --> Records
+  RecipeRunner --> Records
 ```
+
+The diagram shows Phase 1. The LLM service and every agent run are SLURM jobs on the same AI factory; they are drawn apart only for clarity.
 
 Flow for the first product:
 
 1. `ai4s recipe run ORBIT-2:perf-analysis --then perf-report` submits the training job with Omnistat on.
 2. When the job ends, SLURM starts the report run as a CPU job.
-3. The launcher starts the engine in Apptainer, pointed at LiteLLM, with the agent's allow list.
-4. The agent reads telemetry and traces, and writes `perf_report.md` and `findings.json` into the run record.
+3. The launcher loads `perf-report` from the registry and starts the engine in Apptainer, pointed at LiteLLM, with the agent's allow list.
+4. The engine reads the job's telemetry and traces, and writes `perf_report.md` and `findings.json` into the run record.
 
-Studio ships as one Python package with three entry points: the CLI, the stdio MCP server, and the skills. The MCP server is started by the host for each session, so nothing runs on the login node between sessions. Installation is with `uv` from git, or as an Lmod module.
+Where later phases attach:
 
-## 7. Agents shipped with Studio
+- Phase 2: a model router sits in front of LiteLLM; run records export to Flowcept.
+- Phase 3: a campaign runner sits above the launcher and the recipe runner, and calls both.
+
+AI4S Studio ships as one Python package with three entry points: the CLI, the stdio MCP server, and the skills. The MCP server is started by the host for each session, so nothing runs on the login node between sessions. Installation is with `uv` from git, or as an Lmod module.
+
+## 7. Agents shipped with AI4S Studio
 
 | Agent | Purpose | Phase |
 |---|---|---|
@@ -149,7 +149,7 @@ Provenance is recorded by the launcher (N3), not by an agent.
 | Entry points | CLI, stdio MCP server, skills |
 
 Exit criteria:
-- An ORBIT-2 and a HydraGNN training job on Lux each produce a report automatically, using an on-prem model.
+- An ORBIT-2 and a HydraGNN training job each produce a report automatically, using an on-prem model.
 - Every claim in each report cites telemetry or tool output.
 - The report finds the known problem in each benchmark run, and raises no high-severity finding on the healthy runs.
 - The same report can be started from the CLI and from an MCP host.
@@ -159,7 +159,7 @@ Exit criteria:
 | Item | Work |
 |---|---|
 | Provenance | Flowcept export of run records |
-| Coverage | `result.json` for every model with a validated Lux recipe; application eval track |
+| Coverage | `result.json` for every model with a validated recipe; application eval track |
 | Model routing | Per-request alias choice, measured against the eval runner |
 | Agents | `optimizer` with human approval |
 
@@ -175,7 +175,7 @@ Exit criteria:
 | Entry agents | Cursor, Claude Code or HPC Assistant writes a campaign file and launches it through MCP |
 | Agent cards | Only once a consumer for them exists |
 
-Exit criterion: a campaign of training, report, human review and optimization runs end to end on Lux.
+Exit criterion: a campaign of training, report, human review and optimization runs end to end.
 
 ### After Phase 3
 
@@ -184,7 +184,7 @@ Applications such as an AI Scientist, a cofolding agent or a co-scientist build 
 ## 9. Open questions
 
 1. LLM serving: one shared serving job with an idle timeout, or one serving job per report run? The trade-off is GPU allocation against queue wait.
-2. Can a Lux login node reach a compute node over HTTP? If not, interactive MCP sessions on the login node need another route to the endpoint.
-3. Do OpenCode and Claude Code call tools reliably with gpt-oss through LiteLLM? This decides whether a Studio-owned loop is ever needed (N7).
+2. Can a login node reach a compute node over HTTP? If not, interactive MCP sessions on the login node need another route to the endpoint.
+3. Do OpenCode and Claude Code call tools reliably with gpt-oss through LiteLLM? This decides whether an AI4S Studio-owned loop is ever needed (N5).
 4. Where does the per-model report index live, and who can read it?
 5. Which benchmark runs are recorded first, and who records them?
