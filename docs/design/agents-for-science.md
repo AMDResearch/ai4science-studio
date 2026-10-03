@@ -22,7 +22,8 @@ Later phases add provenance export, model routing and declarative campaigns. App
 | AI factory | An HPC cluster with AMD Instinct GPUs, ROCm, SLURM, Apptainer and shared storage |
 | Agent | A folder in the agent registry with `agent.yaml` (settings) and, if it uses an LLM, `playbook.md` (instructions) |
 | `llm` | The agent setting that names one model alias, or `none` |
-| Recipe | An existing, validated script in a model's `examples/` folder |
+| Recipe | A script in a model's `examples/` folder |
+| Validated recipe | A recipe whose documented validation succeeds and whose expected outputs have been confirmed on the target AI factory |
 | Model agent | An agent that runs one recipe of one model, named `<model>:<task>`; `llm: none` by default |
 | Engine | The program that executes a playbook with an LLM: OpenCode or Claude Code |
 | Agent runner | Runs one agent, as a SLURM job or as a step inside an existing allocation |
@@ -61,12 +62,13 @@ Later phases add provenance export, model routing and declarative campaigns. App
 | F12 | Each report is appended to a per-model index, so past runs can be compared | 1 |
 | F13 | An eval runner grades the perf report against recorded benchmark runs, alongside the existing contract cases | 1 |
 | F14 | The same functions are available as a stdio MCP server for Cursor, Claude Code, OpenCode and HPC Assistant | 1 |
-| F15 | Run records export to Flowcept | 2 |
-| F16 | A model agent exists for every model with a validated recipe; an application eval track uses the metrics in `result.json` | 2 |
-| F17 | A model router in the LLM sidecar picks an alias per request; routing choices are evaluated with F13 | 2 |
-| F18 | The `optimizer` agent ships, with a human approval before each job it launches | 2 |
-| F19 | `ai4s campaign run`, `status`, `approve` execute a campaign file; steps pass values through `result.json` | 3 |
-| F20 | An entry agent can write a campaign file and launch it through the MCP server | 3 |
+| F15 | A model agent exists for every model with a recipe validated on the target AI factory by the Phase 1 exit; coverage is checked with `ai4s agent validate` | 1 |
+| F16 | Run records export to Flowcept | 2 |
+| F17 | An application eval track uses the metrics in `result.json` | 2 |
+| F18 | A model router in the LLM sidecar picks an alias per request; routing choices are evaluated with F13 | 2 |
+| F19 | The `optimizer` agent ships, with a human approval before each job it launches | 2 |
+| F20 | `ai4s campaign run`, `status`, `approve` execute a campaign file; steps pass values through `result.json` | 3 |
+| F21 | An entry agent can write a campaign file and launch it through the MCP server | 3 |
 
 ## 5. Non-functional requirements
 
@@ -115,7 +117,7 @@ AI4S Studio ships as one Python package with three entry points: the CLI, the st
 | Agent | Purpose | LLM | Phase |
 |---|---|---|---|
 | `perf-report` | Post-job performance report, from the existing analyst, verifier and synthesizer playbooks | Yes | 1 |
-| Model agents (for example `ORBIT-2:train`, `HydraGNN:train`, `MatterGen:generate`) | Run one recipe and write `result.json`; an LLM can be enabled to choose parameters or diagnose a failure | Optional | 1 |
+| Model agents (for example `ORBIT-2:train`, `HydraGNN:train`, `MatterGen:generate`) | Run one recipe and write `result.json`; one is provided for every model with a recipe validated on the target AI factory by the Phase 1 exit | Optional | 1 |
 | `optimizer` | Proposes and runs the next configuration, from the existing perf-optimizer-loop recipes; human approval per job | Yes | 2 |
 | `tempering` | Takes an existing runbook, playbook or recipe skill and hardens it for a target system in a tight loop | Yes | Later |
 
@@ -129,7 +131,7 @@ Provenance is recorded by the agent runner (N3), not by an agent.
 |---|---|
 | Headless runtime | CLI, agent runner (job or step), `llm: none`, run record, allow lists, OpenCode and Claude Code engines, `--then` |
 | On-prem LLMs | vLLM serving with LiteLLM sidecar; `ai4s llm start`, `status`, `stop`; endpoint file; two aliases |
-| Model agents | ORBIT-2 and HydraGNN model agents with `result.json` |
+| Model agents | A model-agent wrapper with `result.json` for every model with a recipe validated on the target AI factory by the Phase 1 exit |
 | Performance report | `perf-report` agent; per-model report index |
 | Evaluation | Three to five recorded benchmark runs; eval runner; existing contract cases |
 | Entry points | CLI, stdio MCP server, skills |
@@ -139,6 +141,7 @@ Exit criteria:
 - Every claim in each report cites telemetry or tool output.
 - The report finds the known problem in each benchmark run, and raises no high-severity finding on the healthy runs.
 - A model agent with `llm: none` runs with no LLM service up.
+- Every model with a recipe validated on the target AI factory by the Phase 1 exit has a wrapper that passes `ai4s agent validate`.
 - The same report can be started from the CLI and from an MCP host.
 
 ### Phase 2: provenance, coverage, routing
@@ -146,7 +149,7 @@ Exit criteria:
 | Item | Work |
 |---|---|
 | Provenance | Flowcept export of run records |
-| Coverage | Model agents for every model with a validated recipe; application eval track |
+| Coverage | Add model agents for recipes validated after the Phase 1 cutoff; application eval track |
 | Model routing | Model router in the LLM sidecar, measured against the eval runner |
 | Agents | `optimizer` with human approval |
 
