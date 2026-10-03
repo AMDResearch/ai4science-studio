@@ -15,18 +15,20 @@
   </style>
 
   <!-- Top row -->
-  <rect class="box" x="20" y="35" width="140" height="44" rx="6" fill="#f3f4f6"/>
-  <text class="c" x="90" y="57">Claude Code</text>
-  <rect class="box" x="176" y="35" width="140" height="44" rx="6" fill="#f3f4f6"/>
-  <text class="c" x="246" y="57">OpenCode</text>
-  <rect class="box" x="332" y="35" width="140" height="44" rx="6" fill="#f3f4f6"/>
-  <text class="c" x="402" y="57">HPC Assistant</text>
-  <rect class="box" x="488" y="35" width="140" height="44" rx="6" fill="#f3f4f6"/>
-  <text class="c" x="558" y="57">Cofolding agent</text>
-  <rect class="box" x="644" y="35" width="140" height="44" rx="6" fill="#f3f4f6"/>
-  <text class="c" x="714" y="57">matsim-agents</text>
-  <rect class="box" x="800" y="35" width="140" height="44" rx="6" fill="#f3f4f6"/>
-  <text class="c" x="870" y="57">&#8230;</text>
+  <rect class="box" x="20" y="35" width="120" height="44" rx="6" fill="#f3f4f6"/>
+  <text class="c" x="80" y="57" font-size="13">Claude Code</text>
+  <rect class="box" x="153" y="35" width="120" height="44" rx="6" fill="#f3f4f6"/>
+  <text class="c" x="213" y="57" font-size="13">OpenCode</text>
+  <rect class="box" x="287" y="35" width="120" height="44" rx="6" fill="#f3f4f6"/>
+  <text class="c" x="347" y="57" font-size="13">HPC Assistant</text>
+  <rect class="box" x="420" y="35" width="120" height="44" rx="6" fill="#f3f4f6"/>
+  <text class="c" x="480" y="57" font-size="13">Cofolding agent</text>
+  <rect class="box" x="553" y="35" width="120" height="44" rx="6" fill="#f3f4f6"/>
+  <text class="c" x="613" y="57" font-size="13">matsim-agents</text>
+  <rect class="box" x="687" y="35" width="120" height="44" rx="6" fill="#f3f4f6"/>
+  <text class="c" x="747" y="57" font-size="13">Co-scientist</text>
+  <rect class="box" x="820" y="35" width="120" height="44" rx="6" fill="#f3f4f6"/>
+  <text class="c" x="880" y="57">&#8230;</text>
 
   <!-- AI4S Studio -->
   <rect class="band" x="20" y="120" width="920" height="145" rx="8" fill="#e8f0fe" stroke="#3b6fd4"/>

@@ -85,7 +85,7 @@ Later phases add provenance export, model routing and declarative campaigns. App
 
 The diagram shows Phase 1. The model router (dashed) is Phase 2.
 
-- **Top row:** coding agents (Claude Code, OpenCode), HPC Assistant, and science agents such as the cofolding agent and matsim-agents. Each uses AI4S Studio through the CLI or the MCP server.
+- **Top row:** coding agents (Claude Code, OpenCode), HPC Assistant, and science agents such as the cofolding agent, matsim-agents and a co-scientist. Each uses AI4S Studio through the CLI or the MCP server.
 - **AI4S Studio** holds the CLI, the MCP server, the agent runner and the agent registry.
 - **Agent interfaces** are skills, MCP tools and recipes. Agents use the tools and the platform only through them. AI4S Studio ships the recipes and its own skills; tool teams can ship interfaces for their tools.
 - **LLM sidecar** runs on the same GPUs. Only agents with an LLM use it.
