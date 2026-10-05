@@ -238,3 +238,4 @@ Applications such as an AI Scientist, the cofolding agent, matsim-agents or a co
 4. Where does the per-model report index live, and who can read it?
 5. Which benchmark runs are recorded first, and who records them?
 6. Does an AIM container run under Apptainer on SLURM (entrypoint, GPU binding, writable model cache, read-only image)? Until it does, plain vLLM is the backend.
+7. How do we reconcile a model's recipe with its AIM when both exist? Open: which one a task runs by default, and how the two stay consistent.
