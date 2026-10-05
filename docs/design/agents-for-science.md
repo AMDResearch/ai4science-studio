@@ -53,7 +53,7 @@ This design describes how that middleware enables autonomous execution, energy e
 | F8 | The `perf-report` agent produces `perf_report.md` and `findings.json` from recorded telemetry and traces. Deterministic checks run first; the LLM ranks and explains them. It submits and cancels no jobs | 1a: ORBIT-2; 1b: HydraGNN |
 | F9 | An eval runner grades the perf report against recorded benchmark runs, alongside the existing contract cases | 1a |
 | F10 | Report runs are immutable; a per-model report index is rebuilt from the run records | 1b |
-| F11 | The LLM service runs vLLM with gpt-oss-20b and gpt-oss-120b from a pinned image and model revision, with LiteLLM as the endpoint, written to shared storage. `ai4s llm start`, `status`, `stop` manage it; the site maps aliases to served models | 1b |
+| F11 | The LLM service runs vLLM, or an AIM container once it is validated under Apptainer, with gpt-oss-20b and gpt-oss-120b from a pinned image and model revision, with LiteLLM as the endpoint, written to shared storage. `ai4s llm start`, `status`, `stop` manage it; the site maps aliases to served models | 1b |
 | F12 | If the site enables a hosted provider and the agent or run opts in, the LLM service routes an alias to a hosted model when the on-prem model is unavailable. The run record names the model that served each request | 1b |
 | F13 | A task exists for every model with a recipe validated on the target AI factory by the Phase 1b exit; coverage is checked with `ai4s agent validate` | 1b |
 | F14 | The `assist` agent wraps any task, to choose its parameters or diagnose a failure | 1b |
@@ -87,9 +87,9 @@ The diagram shows Phase 1. Dashed boxes are Phase 2 or later.
 
 - **Top row:** coding agents (Claude Code, OpenCode), HPC Assistant, and science agents such as the cofolding agent, matsim-agents and a co-scientist. Each uses AI4S Studio through the CLI or the MCP server.
 - **AI4S Studio** holds the CLI, the MCP server, the agent runner, the registry and the agent interfaces.
-- **Agent interfaces** are recipes, skills and, later, MCP tools. Tasks and agents use the tools and the platform only through them. AI4S Studio ships them; tool teams can contribute interfaces for their own tools.
+- **Agent interfaces** are recipes, skills and, later, MCP tools and AIM recipes. Tasks and agents use the tools and the platform only through them. AI4S Studio ships them; tool teams can contribute interfaces for their own tools.
 - **AI hardware/software stack** is the AI factory: tools, platform software and hardware. AI4S Studio does not ship any of it.
-- **LLM service:** vLLM runs on GPUs; LiteLLM is a CPU process next to it and is the only endpoint agents see. Tasks never use it.
+- **LLM service:** vLLM runs on GPUs; LiteLLM is a CPU process next to it and is the only endpoint agents see. Tasks never use it. AIM (AMD Inference Microservice) is an alternative to plain vLLM, shown dashed: AMD-maintained containers with per-GPU profiles that serve the same OpenAI-compatible API. AI4S Studio ships only the launch setting for it, not the container.
 
 How a run executes:
 
@@ -161,6 +161,7 @@ Campaign gates in Phase 3 use the same budgets.
 | `assist` | Agent | Wraps any task, to choose its parameters or diagnose a failure | 1b |
 | `optimizer` | Agent | Proposes and runs the next configuration, from the existing perf-optimizer-loop recipes. Job submits and cancels run under an action budget | 2 |
 | `tempering` | Agent | Hardens an existing runbook, playbook or recipe skill for a target system in a tight loop, and retries after a known failure. Trial-job submits run under an action budget | 2 |
+| `aim-agent` | Agent | Helps build AIMs. Job submits run under an action budget | Later |
 
 Provenance is recorded by the agent runner (N3), not by an agent.
 
@@ -187,7 +188,7 @@ Exit criteria:
 
 | Item | Work |
 |---|---|
-| LLM service | `ai4s llm start`, `status`, `stop`; pinned vLLM image and model revision; aliases; opt-in hosted routing |
+| LLM service | `ai4s llm start`, `status`, `stop`; pinned vLLM image and model revision; aliases; opt-in hosted routing. AIM as a second backend once validated under Apptainer; otherwise Phase 2 |
 | Tasks | HydraGNN, and every model with a recipe validated on the target AI factory, with per-model checks. Some recipes print outputs without checking them today, so their checks must be written |
 | Report | HydraGNN support; report index rebuilt from run records |
 | Engines | Claude Code: experimental with gpt-oss, supported with a hosted Claude model |
@@ -236,3 +237,4 @@ Applications such as an AI Scientist, the cofolding agent, matsim-agents or a co
 3. Does OpenCode call tools reliably with gpt-oss through LiteLLM? This decides whether an AI4S Studio-owned loop is ever needed (N8).
 4. Where does the per-model report index live, and who can read it?
 5. Which benchmark runs are recorded first, and who records them?
+6. Does an AIM container run under Apptainer on SLURM (entrypoint, GPU binding, writable model cache, read-only image)? Until it does, plain vLLM is the backend.

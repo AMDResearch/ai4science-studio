@@ -51,12 +51,14 @@
 
   <rect x="40" y="268" width="640" height="60" rx="6" fill="#f7faff" stroke="#3b6fd4"/>
   <text class="label" x="55" y="302">Agent interfaces</text>
-  <rect class="box" x="190" y="278" width="150" height="40" rx="4"/>
-  <text class="c" x="265" y="298">Recipes</text>
-  <rect class="box" x="355" y="278" width="150" height="40" rx="4"/>
-  <text class="c" x="430" y="298">Skills</text>
-  <rect class="box dashed" x="520" y="278" width="150" height="40" rx="4"/>
-  <text class="c" x="595" y="298">MCP tools</text>
+  <rect class="box" x="170" y="278" width="115" height="40" rx="4"/>
+  <text class="c" x="227" y="298">Recipes</text>
+  <rect class="box" x="295" y="278" width="115" height="40" rx="4"/>
+  <text class="c" x="352" y="298">Skills</text>
+  <rect class="box dashed" x="420" y="278" width="115" height="40" rx="4"/>
+  <text class="c" x="477" y="298">MCP tools</text>
+  <rect class="box dashed" x="545" y="278" width="115" height="40" rx="4"/>
+  <text class="c" x="602" y="298">AIM recipes</text>
 
   <!-- AI hardware/software stack -->
   <rect x="20" y="370" width="920" height="260" rx="8" fill="#f7f7f7" stroke="#888" stroke-width="1.5"/>
@@ -89,8 +91,10 @@
   <text class="c" x="810" y="448">Model router</text>
   <rect class="box" x="725" y="468" width="170" height="28" rx="4"/>
   <text class="c" x="810" y="482">LiteLLM</text>
-  <rect class="box" x="725" y="502" width="170" height="28" rx="4"/>
-  <text class="c" x="810" y="516">vLLM</text>
+  <rect class="box" x="725" y="502" width="80" height="28" rx="4"/>
+  <text class="c" x="765" y="516">vLLM</text>
+  <rect class="box dashed" x="815" y="502" width="80" height="28" rx="4"/>
+  <text class="c" x="855" y="516">AIM</text>
 
   <rect x="40" y="552" width="880" height="60" rx="6" fill="#e6e6e6" stroke="#999"/>
   <text class="label" x="55" y="586">Hardware</text>
