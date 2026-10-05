@@ -1,11 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="960" height="720" viewBox="0 0 960 720" font-family="Helvetica, Arial, sans-serif" font-size="14" fill="#222">
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="680" viewBox="0 0 960 680" font-family="Helvetica, Arial, sans-serif" font-size="14" fill="#222">
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
     </marker>
   </defs>
   <style>
-    .band { stroke-width: 1.5; rx: 8; }
     .box { fill: #fff; stroke: #555; stroke-width: 1.2; }
     .title { font-weight: bold; font-size: 15px; }
     .label { font-size: 13px; fill: #444; }
@@ -31,7 +30,7 @@
   <text class="c" x="880" y="57">&#8230;</text>
 
   <!-- AI4S Studio -->
-  <rect class="band" x="20" y="120" width="920" height="145" rx="8" fill="#e8f0fe" stroke="#3b6fd4"/>
+  <rect x="20" y="120" width="920" height="220" rx="8" fill="#e8f0fe" stroke="#3b6fd4" stroke-width="1.5"/>
   <text class="title" x="40" y="143">AI4S Studio</text>
   <rect class="box" x="40" y="155" width="160" height="40" rx="4"/>
   <text class="c" x="120" y="175">CLI</text>
@@ -40,7 +39,7 @@
   <rect class="box" x="290" y="180" width="160" height="45" rx="4" stroke="#3b6fd4" stroke-width="2"/>
   <text class="c" x="370" y="202" font-weight="bold">Agent runner</text>
   <rect x="520" y="140" width="400" height="110" rx="6" fill="#f7faff" stroke="#3b6fd4"/>
-  <text class="label" x="535" y="162">Agent registry</text>
+  <text class="label" x="535" y="162">Registry</text>
   <rect class="box" x="535" y="185" width="85" height="40" rx="4"/>
   <text class="c" x="577" y="205" font-size="13">perf-report</text>
   <rect class="box" x="630" y="185" width="85" height="40" rx="4"/>
@@ -50,62 +49,67 @@
   <rect class="box" x="820" y="185" width="85" height="40" rx="4"/>
   <text class="c" x="862" y="205">&#8230;</text>
 
+  <rect x="40" y="268" width="640" height="60" rx="6" fill="#f7faff" stroke="#3b6fd4"/>
+  <text class="label" x="55" y="302">Agent interfaces</text>
+  <rect class="box" x="190" y="278" width="150" height="40" rx="4"/>
+  <text class="c" x="265" y="298">Recipes</text>
+  <rect class="box" x="355" y="278" width="150" height="40" rx="4"/>
+  <text class="c" x="430" y="298">Skills</text>
+  <rect class="box dashed" x="520" y="278" width="150" height="40" rx="4"/>
+  <text class="c" x="595" y="298">MCP tools</text>
+
   <!-- AI hardware/software stack -->
-  <rect class="band" x="20" y="300" width="920" height="370" rx="8" fill="#f7f7f7" stroke="#888"/>
-  <text class="title" x="40" y="324">AI hardware/software stack</text>
+  <rect x="20" y="370" width="920" height="260" rx="8" fill="#f7f7f7" stroke="#888" stroke-width="1.5"/>
+  <text class="title" x="40" y="394">AI hardware/software stack</text>
 
-  <rect x="40" y="340" width="640" height="60" rx="6" fill="#fff" stroke="#bbb"/>
-  <text class="label" x="55" y="374">Agent interfaces</text>
-  <rect class="box" x="190" y="350" width="150" height="40" rx="4"/>
-  <text class="c" x="265" y="370">Skills</text>
-  <rect class="box" x="355" y="350" width="150" height="40" rx="4"/>
-  <text class="c" x="430" y="370">MCP tools</text>
-  <rect class="box" x="520" y="350" width="150" height="40" rx="4"/>
-  <text class="c" x="595" y="370">Recipes</text>
+  <rect x="40" y="408" width="640" height="60" rx="6" fill="#fff" stroke="#bbb"/>
+  <text class="label" x="55" y="442">Tools</text>
+  <rect class="box" x="150" y="418" width="120" height="40" rx="4"/>
+  <text class="c" x="210" y="438">rocprof</text>
+  <rect class="box" x="282" y="418" width="120" height="40" rx="4"/>
+  <text class="c" x="342" y="438">Omnistat</text>
+  <rect class="box" x="414" y="418" width="120" height="40" rx="4"/>
+  <text class="c" x="474" y="438">TraceLens</text>
+  <rect class="box" x="546" y="418" width="120" height="40" rx="4"/>
+  <text class="c" x="606" y="438">Hyperloom</text>
 
-  <rect x="40" y="412" width="640" height="60" rx="6" fill="#fff" stroke="#bbb"/>
-  <text class="label" x="55" y="446">Tools</text>
-  <rect class="box" x="190" y="422" width="150" height="40" rx="4"/>
-  <text class="c" x="265" y="442">PyTorch</text>
-  <rect class="box" x="355" y="422" width="150" height="40" rx="4"/>
-  <text class="c" x="430" y="442">Omnistat</text>
-  <rect class="box" x="520" y="422" width="150" height="40" rx="4"/>
-  <text class="c" x="595" y="442">TraceLens</text>
+  <rect x="40" y="480" width="640" height="60" rx="6" fill="#fff" stroke="#bbb"/>
+  <text class="label" x="55" y="514">Platform</text>
+  <rect class="box" x="150" y="490" width="120" height="40" rx="4"/>
+  <text class="c" x="210" y="510">ROCm</text>
+  <rect class="box" x="282" y="490" width="120" height="40" rx="4"/>
+  <text class="c" x="342" y="510">SLURM</text>
+  <rect class="box" x="414" y="490" width="120" height="40" rx="4"/>
+  <text class="c" x="474" y="510">Apptainer</text>
 
-  <rect x="40" y="484" width="640" height="60" rx="6" fill="#fff" stroke="#bbb"/>
-  <text class="label" x="55" y="518">Platform</text>
-  <rect class="box" x="190" y="494" width="150" height="40" rx="4"/>
-  <text class="c" x="265" y="514">SLURM</text>
-  <rect class="box" x="355" y="494" width="150" height="40" rx="4"/>
-  <text class="c" x="430" y="514">Apptainer</text>
-  <rect class="box" x="520" y="494" width="150" height="40" rx="4"/>
-  <text class="c" x="595" y="514">Shared storage</text>
+  <!-- LLM service -->
+  <rect x="700" y="408" width="220" height="132" rx="6" fill="#fff7e6" stroke="#d48806"/>
+  <text class="label" x="715" y="426">LLM service</text>
+  <rect class="box dashed" x="725" y="434" width="170" height="28" rx="4"/>
+  <text class="c" x="810" y="448">Model router</text>
+  <rect class="box" x="725" y="468" width="170" height="28" rx="4"/>
+  <text class="c" x="810" y="482">LiteLLM</text>
+  <rect class="box" x="725" y="502" width="170" height="28" rx="4"/>
+  <text class="c" x="810" y="516">vLLM</text>
 
-  <!-- LLM sidecar -->
-  <rect x="700" y="340" width="220" height="204" rx="6" fill="#fff7e6" stroke="#d48806"/>
-  <text class="label" x="715" y="362">LLM sidecar</text>
-  <rect class="box dashed" x="725" y="375" width="170" height="40" rx="4"/>
-  <text class="c" x="810" y="395">Model router</text>
-  <rect class="box" x="725" y="427" width="170" height="40" rx="4"/>
-  <text class="c" x="810" y="447">LiteLLM</text>
-  <rect class="box" x="725" y="479" width="170" height="40" rx="4"/>
-  <text class="c" x="810" y="499">vLLM</text>
-
-  <rect x="40" y="556" width="880" height="44" rx="6" fill="#e6e6e6" stroke="#999"/>
-  <text class="c" x="480" y="578">ROCm</text>
-  <rect x="40" y="612" width="880" height="44" rx="6" fill="#d4d4d4" stroke="#888"/>
-  <text class="c" x="480" y="634">AMD Instinct GPUs</text>
+  <rect x="40" y="552" width="880" height="60" rx="6" fill="#e6e6e6" stroke="#999"/>
+  <text class="label" x="55" y="586">Hardware</text>
+  <rect class="box" x="150" y="562" width="530" height="40" rx="4" fill="#d4d4d4"/>
+  <text class="c" x="415" y="582">AMD Instinct GPUs</text>
+  <rect class="box" x="700" y="562" width="205" height="40" rx="4" fill="#d4d4d4"/>
+  <text class="c" x="802" y="582">Shared storage</text>
 
   <!-- Edges -->
-  <path class="edge" d="M480,90 L480,118"/>
+  <path class="edge" d="M480,79 L480,118"/>
   <path class="edge" d="M200,175 L288,195"/>
   <path class="edge" d="M200,230 L288,212"/>
   <path class="edge" d="M520,202 L452,202"/>
-  <path class="edge" d="M370,225 L370,338"/>
-  <path class="edge dashed" d="M430,225 L430,282 L810,282 L810,338"/>
-  <text class="label" x="620" y="276" text-anchor="middle">LLM agents only</text>
+  <path class="edge" d="M370,225 L370,266"/>
+  <path class="edge" d="M360,328 L360,406"/>
+  <path class="edge dashed" d="M430,225 L430,258 L810,258 L810,406"/>
+  <text class="label" x="820" y="360">Agents only</text>
 
   <!-- Legend -->
-  <rect class="box dashed" x="40" y="686" width="28" height="16" rx="3"/>
-  <text class="label" x="76" y="699">Phase 2</text>
+  <rect class="box dashed" x="40" y="646" width="28" height="16" rx="3"/>
+  <text class="label" x="76" y="659">Phase 2 or later</text>
 </svg>
