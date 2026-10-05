@@ -10,7 +10,7 @@
 
 AI4Science Studio (AI4S Studio) is middleware that connects AI agents to scientific computing. It provides a common foundation for discovering, configuring and running scientific models and workflows across domains such as earth science, materials science, protein folding and healthcare.
 
-This design describes how that middleware enables autonomous execution, energy efficiency, provenance, human oversight and composable scientific campaigns. The goal is to bridge agentic applications and scientific computing so systems such as AI Scientists, cofolding agents and materials simulation agents can run complex workflows through consistent agentic interfaces instead of rebuilding integrations with models, schedulers and accelerators.
+This design describes how that middleware enables autonomous execution, energy efficiency, provenance, human oversight and composable scientific campaigns. The goal is to bridge agentic applications and scientific computing so systems such as agentic scientists, cofolding agents and materials simulation agents can run complex workflows through consistent agentic interfaces instead of rebuilding integrations with models, schedulers and accelerators.
 
 ## 2. Terms
 
@@ -85,10 +85,10 @@ This design describes how that middleware enables autonomous execution, energy e
 
 The diagram shows Phase 1. Dashed boxes are Phase 2 or later.
 
-- **Top row:** coding agents (Claude Code, OpenCode), HPC Assistant, and science agents such as the cofolding agent, matsim-agents and a co-scientist. Each uses AI4S Studio through the CLI or the MCP server.
-- **AI4S Studio** holds the CLI, the MCP server, the agent runner, the registry and the agent interfaces.
+- **Top row:** coding agents (Claude Code, OpenCode), HPC Assistant, and science agents such as the cofolding agent, matsim-agents and an agentic scientist. Each uses AI4S Studio through the CLI or the MCP server.
+- **AI4S Studio** holds the CLI, the MCP server, the eval runner, the agent runner, the registry and the agent interfaces. The campaign runner (Phase 3) sits above the agent runner. The registry's dashed entries (`optimizer`, `tempering`, `aim-agent`) are Phase 2 agents.
 - **Agent interfaces** are recipes, skills and, later, MCP tools and AIM recipes. Tasks and agents use the tools and the platform only through them. AI4S Studio ships them; tool teams can contribute interfaces for their own tools.
-- **AI hardware/software stack** is the AI factory: tools, platform software and hardware. AI4S Studio does not ship any of it.
+- **AI hardware/software stack** is the AI factory: tools, platform software and hardware (AMD CPUs, GPUs and network). The dashed Provenance box is the Phase 2 export of run records (Flowcept). AI4S Studio does not ship any of it.
 - **LLM service:** vLLM runs on GPUs; LiteLLM is a CPU process next to it and is the only endpoint agents see. Tasks never use it. AIM (AMD Inference Microservice) is an alternative to plain vLLM, shown dashed: AMD-maintained containers with per-GPU profiles that serve the same OpenAI-compatible API. AI4S Studio ships only the launch setting for it, not the container.
 
 How a run executes:
@@ -228,7 +228,7 @@ Exit criterion: a campaign of training, report, human review and optimization ru
 
 ### After Phase 3
 
-Applications such as an AI Scientist, the cofolding agent, matsim-agents or a co-scientist build their own tasks and agents with AI4S Studio, and launch campaigns through the CLI or MCP.
+Applications such as an agentic scientist, the cofolding agent or matsim-agents build their own tasks and agents with AI4S Studio, and launch campaigns through the CLI or MCP.
 
 ## 11. Open questions
 
