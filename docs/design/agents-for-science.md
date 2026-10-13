@@ -4,7 +4,7 @@
 |---|---|
 | Status | Draft v0.4 |
 | Target | AMD AI factories |
-| Last updated | 2026-10-05 |
+| Last updated | 2026-10-13 |
 
 ## 1. Objective
 
@@ -22,19 +22,19 @@ This design describes how that middleware enables autonomous execution, energy e
 | Agent | An engine running a playbook against an LLM. It may call tasks and tools |
 | Recipe | A script in a model's `examples/` folder |
 | Tool | A command or an MCP tool an agent is allowed to call |
-| Engine | The harness that runs a playbook: OpenCode (default) or Claude Code |
+| Engine | The harness that runs a playbook: OpenCode first, Claude Code later |
 | Run | One execution of a task or an agent |
 | Approval | A budget on actions that spend cluster resources: usually submitting or cancelling a job. Not a review of the agent's reasoning |
 | Campaign | An ordered set of tasks and agents, with possible approval gates |
 
 ## 3. Scope
 
-**Phase 1:** one AI factory; SLURM and Apptainer; models with a validated recipe (training or inference) on that AI factory; performance measurement and analysis; OpenCode as the default engine; Claude Code as an experimental engine with on-prem models.
+**Phase 1:** one AI factory; SLURM and Apptainer; models with a validated recipe (training or inference) on that AI factory; performance measurement and analysis; OpenCode as the only engine; no agent submits jobs.
 
-**Future Work (Phase 2 and beyond):**
-- composable scientific campaigns
+**Later phases (section 10):** action budgets, provenance, model eval, model and hosted routing, Claude Code, and composable scientific campaigns.
+
+**Not yet scheduled:**
 - agents that span several sites;
-- provenance;
 - Kubernetes support;
 - agent-to-agent (A2A) messaging;
 - network isolation and sandboxing beyond the user's own permissions.
@@ -44,27 +44,28 @@ This design describes how that middleware enables autonomous execution, energy e
 | ID | Requirement | Phase |
 |---|---|---|
 | F1 | `ai4s agent list`, `show`, `new`, `validate` manage tasks and agents from the repo and from a user directory | 1a |
-| F2 | `ai4s run <name>` runs one task or agent as a SLURM job, or reuses the current allocation as a step only when it satisfies the requested run's resource requirements; otherwise it submits a separate job. Agent-triggered submissions use the budgeted path in section 8 | 1a |
-| F3 | A task submits its recipe and a check job that depends on it; the check job writes `result.json`. The runner uses steps only when the current allocation satisfies the recipe's resource requirements; otherwise it submits separate jobs. Agent-triggered submissions use the budgeted path in section 8. A task starts no engine and calls no LLM | 1a |
-| F4 | An agent runs its engine non-interactively, inside Apptainer, as a CPU job or step, with its playbook, allow list and model alias | 1a |
-| F5 | `--then <name>` runs a follow-on task or agent when the current run ends, as a SLURM dependency job or as a step only when the current allocation satisfies its resource requirements | 1a |
+| F2 | `ai4s run <name>` runs one task or agent as a SLURM job. No agent submits jobs in Phase 1. From Phase 2, a job an agent submits is always a separate SLURM job sized to the task, never a step in the agent's own CPU allocation, and only under an action budget (section 8) | 1a |
+| F3 | A task submits its recipe job and a check job that depends on it; the check job writes `result.json`. A task starts no engine and calls no LLM | 1a |
+| F4 | An agent runs its engine non-interactively, inside Apptainer, as a CPU job, with its playbook, allow list and model alias | 1a |
+| F5 | `--then <name>` runs a follow-on task or agent when the current run ends, as a SLURM dependency job | 1a |
 | F6 | Every run writes a run record, and every task writes `result.json`, in the formats of section 7; the runner validates both | 1a |
 | F7 | An agent's allow list limits the tools and commands its engine may use; SLURM actions are limited to the user's own jobs | 1a |
 | F8 | The `perf-report` agent produces `perf_report.md` and `findings.json` from recorded telemetry and traces. Deterministic checks run first; the LLM ranks and explains them. It submits and cancels no jobs | 1a: ORBIT-2; 1b: HydraGNN |
 | F9 | An eval runner grades the perf report against recorded benchmark runs, alongside the existing contract cases | 1a |
-| F10 | Report runs are immutable; a per-model report index is rebuilt from the run records | 1b |
-| F11 | The LLM service runs vLLM, or an AIM container once it is validated under Apptainer, with gpt-oss-20b and gpt-oss-120b from a pinned image and model revision, with LiteLLM as the endpoint, written to shared storage. `ai4s llm start`, `status`, `stop` manage it; the site maps aliases to served models | 1b |
-| F12 | If the site enables a hosted provider and the agent or run opts in, the LLM service routes an alias to a hosted model when the on-prem model is unavailable. The run record names the model that served each request | 1b |
-| F13 | A task exists for every model with a recipe validated on the target AI factory by the Phase 1b exit; coverage is checked with `ai4s agent validate` | 1b |
-| F14 | The `assist` agent wraps any task to choose its parameters or diagnose a failure; it may launch the task only with user authorization and within the resource envelope declared for that assist run | 1b |
+| F10 | A per-model report index is rebuilt from the run records | 2 |
+| F11 | The LLM service runs vLLM with gpt-oss-20b and gpt-oss-120b from a pinned image and model revision, with LiteLLM as the endpoint, written to shared storage. `ai4s llm start`, `status`, `stop` manage it; the site maps aliases to served models | 1b |
+| F12 | If the site enables a hosted provider and the agent or run opts in, the LLM service routes an alias to a hosted model when the on-prem model is unavailable. The run record names the model that served each request | 2 |
+| F13 | A task exists for every model with a recipe validated on the target AI factory by the Phase 1b exit; its checks cover exit status and expected outputs. Coverage is checked with `ai4s agent validate` | 1b |
+| F14 | The `assist` agent is advisory: it wraps any task to recommend its parameters or diagnose a failure, and the user starts the task. It submits no job | 1b |
 | F15 | The same functions are available as a stdio MCP server for Cursor, Claude Code, OpenCode and HPC Assistant | 1b |
 | F16 | Run records export to Flowcept | 2 |
 | F17 | Model eval scores the scientific run from metrics the recipe writes to `result.json`. Training records the loss curve. Inference records the metric the model owner defines in the recipe, such as an uncertainty measure | 2 |
 | F18 | A model router in the LLM service picks an alias per request; routing choices are evaluated with F9 | 2 |
-| F19 | The `assist` agent submits a task only under the per-run user authorization and resource envelope in section 8; other job-submitting agents require a standing or one-off action budget | 1b: assist; 2: other agents |
+| F19 | Action budgets, as in section 8: an agent that submits or cancels jobs may only do so under a standing approval | 2 |
 | F20 | `optimizer` and `tempering` ship, and so does any later agent that submits work. Each runs under an action budget (section 8) | 2 |
-| F21 | `ai4s campaign run`, `status`, `approve` execute a campaign file; steps pass values through `result.json` | 3 |
+| F21 | `ai4s campaign run`, `status`, `approve` execute a campaign file; steps pass values through `result.json`. Inside the campaign's allocation, a step runs as an `srun` step when the allocation satisfies its resource requirements, and as a separate job otherwise | 3 |
 | F22 | An entry agent can write a campaign file and launch it through the MCP server | 3 |
+| F23 | One-off approval requests, as in section 8 | Later |
 
 ## 5. Non-functional requirements
 
@@ -93,10 +94,10 @@ The diagram shows Phase 1. Dashed boxes are Phase 2 or later.
 
 How a run executes:
 
-- **Task, outside an allocation.** The runner submits the recipe job and a check job with an `afterany` dependency on it. The check job verifies the outputs and writes `result.json`. No process waits.
-- **Task, inside an allocation.** When the allocation satisfies the recipe's resource requirements, the recipe runs as an `srun` step and the check runs after it. Otherwise, the runner submits separate recipe and check jobs through the separate submission path; agent-triggered submissions require the budget in section 8. The recipe never submits a nested `sbatch`.
-- **Agent.** The runner starts the engine as a CPU job or step. An agent that needs a model run calls `ai4s run <task>`, which follows the rules above. An `assist` run must be authorized for a specific task and resource envelope; its task submissions are limited to that envelope (section 8).
-- **Follow-on.** `--then` becomes an `afterany` dependency, or the next step inside an allocation that satisfies the follow-on task's resource requirements.
+- **Task.** The runner submits the recipe job and a check job with an `afterany` dependency on it. The check job verifies the outputs and writes `result.json`. No process waits.
+- **Agent.** The runner starts the engine as a CPU job. In Phase 1 no agent submits jobs: `assist` recommends a task and its parameters, and the user runs it. From Phase 2, an agent that needs a model run calls `ai4s run <task>`; the runner submits it as a separate job sized to the task, under an action budget (section 8).
+- **Follow-on.** `--then` becomes an `afterany` dependency.
+- **Inside a campaign's allocation (Phase 3).** A run is an `srun` step when the allocation satisfies its resource requirements, and a separate job otherwise. A recipe never submits a nested `sbatch`.
 
 Flow for the first product:
 
@@ -104,7 +105,7 @@ Flow for the first product:
 2. When the check job ends, the `perf-report` agent runs.
 3. Its engine runs the deterministic checks on the recorded telemetry and traces, uses the LLM to rank and explain the findings, and writes `perf_report.md` and `findings.json` into the run record.
 
-Hosted models (F12). LiteLLM can list a hosted deployment, such as a frontier model, behind the same alias as the on-prem model. The hosted route is used only when all of the following hold:
+Hosted models (F12, Phase 2). LiteLLM can list a hosted deployment, such as a frontier model, behind the same alias as the on-prem model. The hosted route is used only when all of the following hold:
 - the site has enabled the provider;
 - the agent sets `hosted: allowed`, or the run passes `--allow-hosted`;
 - the on-prem model is not reachable, or the LLM service cannot start within a site-set wait.
@@ -113,7 +114,7 @@ The user's own API key is used. Otherwise the run waits or fails with a clear er
 
 Where later phases attach:
 
-- Phase 2: the model router in the LLM service; Flowcept export; action budgets in the agent runner.
+- Phase 2: action budgets in the agent runner; Flowcept export; hosted routing and the model router in the LLM service.
 - Phase 3: a campaign runner above the agent runner.
 
 AI4S Studio ships as one Python package with three interfaces: the CLI, the stdio MCP server, and the skills. The MCP server is started by the host for each session, so nothing runs on the login node between sessions. Installation is with `uv` from git, or as an Lmod module.
@@ -126,31 +127,33 @@ Each format carries `schema_version`. The agent runner validates `agent.yaml` be
 |---|---|
 | `agent.yaml`, all | `schema_version`, `name`, `kind` (`task` or `agent`), `version`, `description`, `inputs` (name, type, default), `outputs` |
 | `agent.yaml`, task | `model`, `recipe` (script path), `checks` |
-| `agent.yaml`, agent | `llm` (model alias), `engine`, `playbook`, `allow` (tools and commands), `hosted` (`allowed` or `forbidden`, default `forbidden`), `approval` (actions that spend resources and need a budget) |
-| Run record (`run.json` plus files) | `run_id`, `parent_run_id`, `name`, `kind`, `version`, `state`, `user`, SLURM job and step IDs, start and end times, git commit and dirty-tree patch, container digest, model weight revisions, resolved inputs, nodes and GPUs, tool versions, engine and version, model used per request (on-prem or hosted), token counts with source (reported, estimated or unavailable), approvals; plus transcript, logs and `result.json` |
+| `agent.yaml`, agent | `llm` (model alias), `engine`, `playbook`, `allow` (tools and commands); from Phase 2, `hosted` (`allowed` or `forbidden`, default `forbidden`) and `approval` (actions that spend resources and need a budget) |
+| Run record (`run.json` plus files) | `run_id`, `parent_run_id`, `name`, `kind`, `version`, `state`, `user`, SLURM job IDs, start and end times, git commit, container digest, model weight revisions, resolved inputs, nodes and GPUs, engine and version, model alias; plus transcript, logs and `result.json`. Phase 2 adds the model that served each request (on-prem or hosted), token counts with source (reported, estimated or unavailable), tool versions and approvals |
 | `result.json` | `run_id`, `name`, `status` (`pass`, `fail` or `error`), `checks` (name, status, detail), `metrics` (name, value, unit), `artifacts` (path, SHA-256), `error` (type, message) |
 
-Run states: `queued`, `running`, `awaiting_approval`, `succeeded`, `failed`, `cancelled`. A run record does not change after the run ends.
+Run states: `queued`, `running`, `succeeded`, `failed`, `cancelled`; `awaiting_approval` is added with one-off requests. A run record does not change after the run ends.
 
-## 8. Action budgets (Phase 1b for assist; Phase 2 for other agents)
+## 8. Action budgets (Phase 2)
 
-Approval is a budget on actions that spend cluster resources, not a review of every agent step. The agent proposes configurations, reads telemetry and edits playbooks freely. It may submit or cancel a job only when that action is covered by a budget. A task that a user starts directly needs no budget: the user already asked for that job.
+Approval is a budget on actions that spend cluster resources, not a review of every agent step. The agent proposes configurations, reads telemetry and edits playbooks freely. It may submit or cancel a job only when that action is covered by a budget. A task that a user starts directly needs no budget: the user already asked for that job. In Phase 1 no agent submits jobs, so no budget is needed.
 
-In Phase 1b, the user starts `assist` with a specific task and authorizes a resource envelope for that run. The envelope sets the maximum job count, nodes, GPUs and wall time per job, total node-hours, and allowed parameter ranges. Before each submission, the runner verifies that the task configuration and scheduler request fit the envelope; the agent cannot expand it. A submission outside the envelope requires new user authorization, and is denied until authorized. The `assist` engine itself remains CPU-only.
-
-For `optimizer` and `tempering`, and for any later agent that submits work, the budgeted actions are submitting and cancelling jobs. Those agents normally run under a standing approval so the loop stays autonomous.
+For `optimizer` and `tempering`, and for any later agent that submits work, the budgeted actions are submitting and cancelling jobs. Those agents run under a standing approval so the loop stays autonomous.
 
 | Aspect | Rule |
 |---|---|
-| Standing approval | The usual mode. Per run or campaign: maximum jobs, maximum node-hours per job and in total, allowed parameter ranges, and an end date. Actions inside the limits are approved by the runner and recorded. The loop stops when a limit is hit |
-| One-off request | Used when there is no standing approval, or when an action falls outside it. The runner stops the action and writes a request to the run record: the exact job script and parameters, their SHA-256, the estimated node-hours, and the agent's reason. The run moves to `awaiting_approval` |
+| Standing approval | Per run or campaign: maximum jobs, maximum node-hours per job and in total, allowed parameter ranges, and an end date. Actions inside the limits are approved by the runner and recorded. The loop stops when a limit is hit, and an action outside the limits is denied |
+| Who | The run owner sets it |
+| Audit | The standing-approval id, the time, and each submitted job's SHA-256 and decision are written to the run record |
+
+**One-off requests (later, F23).** For an action outside a standing approval, the runner would stop the action and ask:
+
+| Aspect | Rule |
+|---|---|
+| Request | The runner writes the exact job script and parameters, their SHA-256, the estimated node-hours, and the agent's reason to the run record. The run moves to `awaiting_approval` |
 | No idle allocation | The agent saves its state and its job ends. On approval, the runner submits the approved job and resumes the agent as a new run linked by `parent_run_id` |
-| Who | The run owner by default; the site can name an approver group |
-| How | `ai4s approve <request>` or `ai4s reject <request> --reason`, from the CLI or the MCP server. A rejection reason is passed to the agent when it resumes |
-| Binding | An approval is valid only for that SHA-256. Any change to the script or parameters needs a new request |
-| Expiry | A one-off request expires after a site-set time, 24 hours by default, and counts as rejected |
+| Who and how | The run owner, or a site-named approver group, with `ai4s approve <request>` or `ai4s reject <request> --reason`, from the CLI or the MCP server. A rejection reason is passed to the agent when it resumes |
+| Binding and expiry | An approval is valid only for that SHA-256; any change needs a new request. A request expires after a site-set time, 24 hours by default, and counts as rejected |
 | Notification | `ai4s status` and the MCP server list pending requests; the site can add an email or chat hook |
-| Audit | Approver or standing-approval id, time, SHA-256 and decision are written to the run record |
 
 Campaign gates in Phase 3 use the same budgets.
 
@@ -158,9 +161,9 @@ Campaign gates in Phase 3 use the same budgets.
 
 | Name | Kind | Purpose | Phase |
 |---|---|---|---|
-| Model tasks (for example `ORBIT-2:train`, `HydraGNN:train`, `MatterGen:generate`) | Task | Run one recipe and write `result.json`; one for every model with a recipe validated on the target AI factory | 1a: ORBIT-2; 1b: the rest |
+| Model tasks (for example `ORBIT-2:train`, `HydraGNN:train`, `MatterGen:generate`) | Task | Run one recipe and write `result.json` with exit-status and output checks; one for every model with a recipe validated on the target AI factory | 1a: ORBIT-2; 1b: the rest |
 | `perf-report` | Agent | Read-only post-job performance report, from the existing analyst, verifier and synthesizer playbooks with their job-submitting probes removed | 1a: ORBIT-2; 1b: HydraGNN |
-| `assist` | Agent | Wraps any task, to choose its parameters or diagnose a failure | 1b |
+| `assist` | Agent | Advisory. Wraps any task to recommend its parameters or diagnose a failure; the user starts the task | 1b |
 | `optimizer` | Agent | Proposes and runs the next configuration, from the existing perf-optimizer-loop recipes. Job submits and cancels run under an action budget | 2 |
 | `tempering` | Agent | Hardens an existing runbook, playbook or recipe skill for a target system in a tight loop, and retries after a known failure. Trial-job submits run under an action budget | 2 |
 | `aim-agent` | Agent | Helps build AIMs. Job submits run under an action budget | Later |
@@ -173,7 +176,7 @@ Provenance is recorded by the agent runner (N3), not by an agent.
 
 | Item | Work |
 |---|---|
-| Runtime | CLI, agent runner (job or step), tasks, run record and formats, allow lists, OpenCode engine, `--then` |
+| Runtime | CLI, agent runner (SLURM jobs), tasks, run record and formats, allow lists, OpenCode engine, `--then` |
 | LLM | An LLM endpoint that the site already runs, set in site configuration |
 | Tasks | ORBIT-2 tasks with checks and `result.json` |
 | Report | Read-only `perf-report` for ORBIT-2 |
@@ -190,42 +193,48 @@ Exit criteria:
 
 | Item | Work |
 |---|---|
-| LLM service | `ai4s llm start`, `status`, `stop`; pinned vLLM image and model revision; aliases; opt-in hosted routing. AIM as a second backend once validated under Apptainer; otherwise Phase 2 |
-| Tasks | HydraGNN, and every model with a recipe validated on the target AI factory, with per-model checks. Some recipes print outputs without checking them today, so their checks must be written |
-| Report | HydraGNN support; report index rebuilt from run records |
-| Engines | Claude Code: experimental with gpt-oss, supported with a hosted Claude model |
-| Agents | `assist` |
+| LLM service | `ai4s llm start`, `status`, `stop`; pinned vLLM image and model revision; aliases |
+| Tasks | HydraGNN, and every model with a recipe validated on the target AI factory, with checks for exit status and expected outputs. Scientific checks come with model eval (Phase 2) |
+| Report | HydraGNN support |
+| Agents | `assist` (advisory) |
 | Interfaces | stdio MCP server; skills |
 
 Exit criteria:
 - A HydraGNN training job produces a report automatically.
 - The same report can be started from the CLI and from an MCP host.
-- Every model with a recipe validated on the target AI factory has a task that passes `ai4s agent validate`.
-- `assist` submits a task only after user authorization and within its declared resource envelope; out-of-envelope submissions are denied.
-- Hosted routing is used only when opted in, and the run record shows it.
+- Every model with a recipe validated on the target AI factory has a task that passes `ai4s agent validate` and writes `result.json`.
+- `assist` recommends parameters for a task and diagnoses a failed run, and submits no job.
 
-### Phase 2: provenance, routing, action budgets
+### Phase 2a: action budgets and optimization
 
 | Item | Work |
 |---|---|
-| Provenance | Flowcept export of run records |
-| Model eval | Score each scientific run from `result.json`: the loss curve for training, and a recipe-defined metric for inference |
-| Model routing | Model router in the LLM service, measured against the eval runner |
-| Action budgets | Standing and one-off budgets for job-submitting agents other than `assist`; `assist` authorization and resource envelopes ship in Phase 1b |
+| Action budgets | Standing approval (section 8) |
 | Agents | `optimizer`, `tempering`, and any later agent that submits a job |
+
+Exit criterion: an `optimizer` session and a `tempering` run each submit several jobs under a standing approval. Every submitted job is inside the budget and matches its recorded SHA-256.
+
+### Phase 2b: provenance, model eval and routing
+
+| Item | Work |
+|---|---|
+| Provenance | Flowcept export of run records; the run record gains the per-request model, token counts and tool versions |
+| Model eval | Score each scientific run from `result.json`: the loss curve for training, and a recipe-defined metric for inference |
+| LLM service | Opt-in hosted routing (F12) and the model router (F18), measured against the eval runner |
+| Engines | Claude Code: experimental with gpt-oss, supported with a hosted Claude model |
+| Reports | Per-model report index rebuilt from run records (F10) |
 
 Exit criteria:
 - Run records appear in Flowcept.
+- Hosted routing is used only when opted in, and the run record shows it.
 - Routing beats the static aliases on the eval set at equal or lower cost.
-- An `optimizer` session and a `tempering` run each submit several jobs under a standing approval. Every submitted job is inside the budget and matches its recorded SHA-256.
 
 ### Phase 3: campaigns
 
 | Item | Work |
 |---|---|
-| Campaign runner | Campaign files with steps, order, action budgets, and values passed through `result.json` |
+| Campaign runner | Campaign files with steps, order, action budgets, and values passed through `result.json`; steps run as `srun` steps inside the campaign's allocation when it fits their resource requirements |
 | Entry agents | Cursor, Claude Code or HPC Assistant writes a campaign file and launches it through MCP |
-| Agent cards | Only once a consumer for them exists |
 
 Exit criterion: a campaign of training, report, human review and optimization runs end to end.
 
@@ -238,7 +247,7 @@ Applications such as an agentic scientist, the cofolding agent or matsim-agents 
 1. LLM serving placement. The Phase 1b default is one shared serving job with an idle timeout. Open: the timeout value, and whether a serving step inside a campaign's allocation is also needed.
 2. Can a login node reach a compute node over HTTP? Headless runs only need compute nodes to reach the LLM service; this matters for interactive MCP sessions on the login node.
 3. Does OpenCode call tools reliably with gpt-oss through LiteLLM? This decides whether an AI4S Studio-owned loop is ever needed (N8).
-4. Where does the per-model report index live, and who can read it?
+4. Phase 2b: where does the per-model report index live, and who can read it?
 5. Which benchmark runs are recorded first, and who records them?
 6. Does an AIM container run under Apptainer on SLURM (entrypoint, GPU binding, writable model cache, read-only image)? Until it does, plain vLLM is the backend.
 7. How do we reconcile a model's recipe with its AIM when both exist? Open: which one a task runs by default, and how the two stay consistent.
