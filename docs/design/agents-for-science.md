@@ -51,7 +51,7 @@ This design describes how that middleware enables autonomous execution, energy e
 | F6 | Every run writes a run record, and every task writes `result.json`, in the formats of section 7; the runner validates both | 1a |
 | F7 | An agent's allow list limits the tools and commands its engine may use; SLURM actions are limited to the user's own jobs | 1a |
 | F8 | The `perf-report` agent produces `perf_report.md` and `findings.json` from recorded telemetry and traces. Deterministic checks run first; the LLM ranks and explains them. It submits and cancels no jobs | 1a: ORBIT-2; 1b: HydraGNN |
-| F9 | An eval runner grades the perf report against recorded benchmark runs, alongside the existing contract cases | 1a |
+| F9 | Recorded benchmark runs, each with expected findings, live in `evals/`. A script grades the perf report against them, alongside the existing contract cases | 1a |
 | F10 | A per-model report index is rebuilt from the run records | 2 |
 | F11 | The LLM service runs vLLM with gpt-oss-20b and gpt-oss-120b from a pinned image and model revision, with LiteLLM as the endpoint, written to shared storage. `ai4s llm start`, `status`, `stop` manage it; the site maps aliases to served models | 1b |
 | F12 | If the site enables a hosted provider and the agent or run opts in, the LLM service routes an alias to a hosted model when the on-prem model is unavailable. The run record names the model that served each request | 2 |
@@ -60,7 +60,7 @@ This design describes how that middleware enables autonomous execution, energy e
 | F15 | The same functions are available as a stdio MCP server for Cursor, Claude Code, OpenCode and HPC Assistant | 1b |
 | F16 | Run records export to Flowcept | 2 |
 | F17 | Model eval scores the scientific run from metrics the recipe writes to `result.json`. Training records the loss curve. Inference records the metric the model owner defines in the recipe, such as an uncertainty measure | 2 |
-| F18 | A model router in the LLM service picks an alias per request; routing choices are evaluated with F9 | 2 |
+| F18 | A model router in the LLM service picks an alias per request; routing choices are evaluated against the F9 cases | 2 |
 | F19 | Action budgets, as in section 8: an agent that submits or cancels jobs may only do so under a standing approval | 2 |
 | F20 | `optimizer` and `tempering` ship, and so does any later agent that submits work. Each runs under an action budget (section 8) | 2 |
 | F21 | `ai4s campaign run`, `status`, `approve` execute a campaign file; steps pass values through `result.json`. Inside the campaign's allocation, a step runs as an `srun` step when the allocation satisfies its resource requirements, and as a separate job otherwise | 3 |
@@ -78,7 +78,7 @@ This design describes how that middleware enables autonomous execution, energy e
 | N5 | Every run executes as the submitting user, with that user's permissions. Allow lists are reactive policy and audit, not a proactive sandbox |
 | N6 | Agent runs hold no GPUs. An agent waiting for approval holds no allocation |
 | N7 | `make check` validates tasks, agents and the formats in section 7, and runs one report with a recorded LLM reply; no GPU needed |
-| N8 | The CLI, `agent.yaml` and the run record stay the same when the engine changes. A new engine must pass the eval runner; its behaviour may still differ |
+| N8 | The CLI, `agent.yaml` and the run record stay the same when the engine changes. A new engine must pass the evals; its behaviour may still differ |
 
 ## 6. Architecture
 
@@ -87,7 +87,7 @@ This design describes how that middleware enables autonomous execution, energy e
 The diagram shows Phase 1. Dashed boxes are Phase 2 or later.
 
 - **Top row:** coding agents (Claude Code, OpenCode), HPC Assistant, and science agents such as the cofolding agent, matsim-agents and an agentic scientist. Each uses AI4S Studio through the CLI or the MCP server.
-- **AI4S Studio** holds the CLI, the MCP server, the eval runner, the agent runner, the registry and the agent interfaces. The campaign runner (Phase 3) sits above the agent runner. The registry's dashed entries (`optimizer`, `tempering`, `aim-agent`) are Phase 2 agents.
+- **AI4S Studio** holds the CLI, the MCP server, the agent runner, the registry and the agent interfaces. The campaign runner (Phase 3) sits above the agent runner. The registry's dashed entries (`optimizer`, `tempering`, `aim-agent`) are Phase 2 agents.
 - **Agent interfaces** are recipes, skills and, later, MCP tools and AIM recipes. Tasks and agents use the tools and the platform only through them. AI4S Studio ships them; tool teams can contribute interfaces for their own tools.
 - **AI hardware/software stack** is the AI factory: tools, platform software and hardware (AMD CPUs, GPUs and network). The dashed Provenance box is the Phase 2 export of run records (Flowcept). AI4S Studio does not ship any of it.
 - **LLM service:** vLLM runs on GPUs; LiteLLM is a CPU process next to it and is the only endpoint agents see. Tasks never use it. AIM (AMD Inference Microservice) is an alternative to plain vLLM, shown dashed: AMD-maintained containers with per-GPU profiles that serve the same OpenAI-compatible API. AI4S Studio ships only the launch setting for it, not the container.
@@ -180,7 +180,7 @@ Provenance is recorded by the agent runner (N3), not by an agent.
 | LLM | An LLM endpoint that the site already runs, set in site configuration |
 | Tasks | ORBIT-2 tasks with checks and `result.json` |
 | Report | Read-only `perf-report` for ORBIT-2 |
-| Evaluation | Recorded ORBIT-2 benchmark runs; eval runner; existing contract cases |
+| Evaluation | Recorded ORBIT-2 benchmark runs with expected findings in `evals/`; existing contract cases |
 
 Exit criteria:
 - An ORBIT-2 training job produces a report automatically, using an on-prem model.
@@ -220,14 +220,14 @@ Exit criterion: an `optimizer` session and a `tempering` run each submit several
 |---|---|
 | Provenance | Flowcept export of run records; the run record gains the per-request model, token counts and tool versions |
 | Model eval | Score each scientific run from `result.json`: the loss curve for training, and a recipe-defined metric for inference |
-| LLM service | Opt-in hosted routing (F12) and the model router (F18), measured against the eval runner |
+| LLM service | Opt-in hosted routing (F12) and the model router (F18), measured against the evals |
 | Engines | Claude Code: experimental with gpt-oss, supported with a hosted Claude model |
 | Reports | Per-model report index rebuilt from run records (F10) |
 
 Exit criteria:
 - Run records appear in Flowcept.
 - Hosted routing is used only when opted in, and the run record shows it.
-- Routing beats the static aliases on the eval set at equal or lower cost.
+- Routing beats the static aliases on the eval cases at equal or lower cost.
 
 ### Phase 3: campaigns
 

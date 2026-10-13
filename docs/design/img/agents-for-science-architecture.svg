@@ -32,12 +32,10 @@
   <!-- AI4S Studio -->
   <rect x="20" y="120" width="920" height="260" rx="8" fill="#e8f0fe" stroke="#3b6fd4" stroke-width="1.5"/>
   <text class="title" x="40" y="143">AI4S Studio</text>
-  <rect class="box" x="40" y="150" width="160" height="36" rx="4"/>
-  <text class="c" x="120" y="168">CLI</text>
-  <rect class="box" x="40" y="196" width="160" height="36" rx="4"/>
-  <text class="c" x="120" y="214">MCP server</text>
-  <rect class="box" x="40" y="242" width="160" height="36" rx="4"/>
-  <text class="c" x="120" y="260">Eval runner</text>
+  <rect class="box" x="40" y="165" width="160" height="36" rx="4"/>
+  <text class="c" x="120" y="183">CLI</text>
+  <rect class="box" x="40" y="215" width="160" height="36" rx="4"/>
+  <text class="c" x="120" y="233">MCP server</text>
 
   <rect class="box dashed" x="290" y="145" width="160" height="36" rx="4"/>
   <text class="c" x="370" y="163">Campaign runner</text>
@@ -122,9 +120,8 @@
 
   <!-- Edges -->
   <path class="edge" d="M480,79 L480,118"/>
-  <path class="edge" d="M200,168 L288,215"/>
-  <path class="edge" d="M200,214 L288,228"/>
-  <path class="edge" d="M200,260 L288,242"/>
+  <path class="edge" d="M200,183 L288,215"/>
+  <path class="edge" d="M200,233 L288,235"/>
   <path class="edge" d="M370,181 L370,198"/>
   <path class="edge" d="M520,227 L452,227"/>
   <path class="edge" d="M370,255 L370,298"/>
