@@ -56,12 +56,12 @@ This design describes how that middleware enables autonomous execution, energy e
 | F11 | The LLM service runs vLLM, or an AIM container once it is validated under Apptainer, with gpt-oss-20b and gpt-oss-120b from a pinned image and model revision, with LiteLLM as the endpoint, written to shared storage. `ai4s llm start`, `status`, `stop` manage it; the site maps aliases to served models | 1b |
 | F12 | If the site enables a hosted provider and the agent or run opts in, the LLM service routes an alias to a hosted model when the on-prem model is unavailable. The run record names the model that served each request | 1b |
 | F13 | A task exists for every model with a recipe validated on the target AI factory by the Phase 1b exit; coverage is checked with `ai4s agent validate` | 1b |
-| F14 | The `assist` agent wraps any task, to choose its parameters or diagnose a failure | 1b |
+| F14 | The `assist` agent wraps any task to choose its parameters or diagnose a failure; it may launch the task only with user authorization and within the resource envelope declared for that assist run | 1b |
 | F15 | The same functions are available as a stdio MCP server for Cursor, Claude Code, OpenCode and HPC Assistant | 1b |
 | F16 | Run records export to Flowcept | 2 |
 | F17 | Model eval scores the scientific run from metrics the recipe writes to `result.json`. Training records the loss curve. Inference records the metric the model owner defines in the recipe, such as an uncertainty measure | 2 |
 | F18 | A model router in the LLM service picks an alias per request; routing choices are evaluated with F9 | 2 |
-| F19 | Action budgets, as in section 8: an agent that submits or cancels jobs may only do so under a standing approval or a one-off approval | 2 |
+| F19 | The `assist` agent submits a task only under the per-run user authorization and resource envelope in section 8; other job-submitting agents require a standing or one-off action budget | 1b: assist; 2: other agents |
 | F20 | `optimizer` and `tempering` ship, and so does any later agent that submits work. Each runs under an action budget (section 8) | 2 |
 | F21 | `ai4s campaign run`, `status`, `approve` execute a campaign file; steps pass values through `result.json` | 3 |
 | F22 | An entry agent can write a campaign file and launch it through the MCP server | 3 |
@@ -95,7 +95,7 @@ How a run executes:
 
 - **Task, outside an allocation.** The runner submits the recipe job and a check job with an `afterany` dependency on it. The check job verifies the outputs and writes `result.json`. No process waits.
 - **Task, inside an allocation.** When the allocation satisfies the recipe's resource requirements, the recipe runs as an `srun` step and the check runs after it. Otherwise, the runner submits separate recipe and check jobs through the separate submission path; agent-triggered submissions require the budget in section 8. The recipe never submits a nested `sbatch`.
-- **Agent.** The runner starts the engine as a CPU job or step. An agent that needs a model run calls `ai4s run <task>`, which follows the rules above.
+- **Agent.** The runner starts the engine as a CPU job or step. An agent that needs a model run calls `ai4s run <task>`, which follows the rules above. An `assist` run must be authorized for a specific task and resource envelope; its task submissions are limited to that envelope (section 8).
 - **Follow-on.** `--then` becomes an `afterany` dependency, or the next step inside an allocation that satisfies the follow-on task's resource requirements.
 
 Flow for the first product:
@@ -132,9 +132,11 @@ Each format carries `schema_version`. The agent runner validates `agent.yaml` be
 
 Run states: `queued`, `running`, `awaiting_approval`, `succeeded`, `failed`, `cancelled`. A run record does not change after the run ends.
 
-## 8. Action budgets (Phase 2)
+## 8. Action budgets (Phase 1b for assist; Phase 2 for other agents)
 
 Approval is a budget on actions that spend cluster resources, not a review of every agent step. The agent proposes configurations, reads telemetry and edits playbooks freely. It may submit or cancel a job only when that action is covered by a budget. A task that a user starts directly needs no budget: the user already asked for that job.
+
+In Phase 1b, the user starts `assist` with a specific task and authorizes a resource envelope for that run. The envelope sets the maximum job count, nodes, GPUs and wall time per job, total node-hours, and allowed parameter ranges. Before each submission, the runner verifies that the task configuration and scheduler request fit the envelope; the agent cannot expand it. A submission outside the envelope requires new user authorization, and is denied until authorized. The `assist` engine itself remains CPU-only.
 
 For `optimizer` and `tempering`, and for any later agent that submits work, the budgeted actions are submitting and cancelling jobs. Those agents normally run under a standing approval so the loop stays autonomous.
 
@@ -199,6 +201,7 @@ Exit criteria:
 - A HydraGNN training job produces a report automatically.
 - The same report can be started from the CLI and from an MCP host.
 - Every model with a recipe validated on the target AI factory has a task that passes `ai4s agent validate`.
+- `assist` submits a task only after user authorization and within its declared resource envelope; out-of-envelope submissions are denied.
 - Hosted routing is used only when opted in, and the run record shows it.
 
 ### Phase 2: provenance, routing, action budgets
@@ -208,7 +211,7 @@ Exit criteria:
 | Provenance | Flowcept export of run records |
 | Model eval | Score each scientific run from `result.json`: the loss curve for training, and a recipe-defined metric for inference |
 | Model routing | Model router in the LLM service, measured against the eval runner |
-| Action budgets | Section 8 |
+| Action budgets | Standing and one-off budgets for job-submitting agents other than `assist`; `assist` authorization and resource envelopes ship in Phase 1b |
 | Agents | `optimizer`, `tempering`, and any later agent that submits a job |
 
 Exit criteria:
