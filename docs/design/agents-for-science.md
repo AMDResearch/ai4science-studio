@@ -44,10 +44,10 @@ This design describes how that middleware enables autonomous execution, energy e
 | ID | Requirement | Phase |
 |---|---|---|
 | F1 | `ai4s agent list`, `show`, `new`, `validate` manage tasks and agents from the repo and from a user directory | 1a |
-| F2 | `ai4s run <name>` runs one task or agent as a SLURM job, or as a step when called inside an existing allocation | 1a |
-| F3 | A task submits its recipe and a check job that depends on it; the check job writes `result.json`. Inside an allocation, the recipe runs as a step. A task starts no engine and calls no LLM | 1a |
+| F2 | `ai4s run <name>` runs one task or agent as a SLURM job, or reuses the current allocation as a step only when it satisfies the requested run's resource requirements; otherwise it submits a separate job. Agent-triggered submissions use the budgeted path in section 8 | 1a |
+| F3 | A task submits its recipe and a check job that depends on it; the check job writes `result.json`. The runner uses steps only when the current allocation satisfies the recipe's resource requirements; otherwise it submits separate jobs. Agent-triggered submissions use the budgeted path in section 8. A task starts no engine and calls no LLM | 1a |
 | F4 | An agent runs its engine non-interactively, inside Apptainer, as a CPU job or step, with its playbook, allow list and model alias | 1a |
-| F5 | `--then <name>` runs a follow-on task or agent when the current run ends, as a SLURM dependency job or as the next step | 1a |
+| F5 | `--then <name>` runs a follow-on task or agent when the current run ends, as a SLURM dependency job or as a step only when the current allocation satisfies its resource requirements | 1a |
 | F6 | Every run writes a run record, and every task writes `result.json`, in the formats of section 7; the runner validates both | 1a |
 | F7 | An agent's allow list limits the tools and commands its engine may use; SLURM actions are limited to the user's own jobs | 1a |
 | F8 | The `perf-report` agent produces `perf_report.md` and `findings.json` from recorded telemetry and traces. Deterministic checks run first; the LLM ranks and explains them. It submits and cancels no jobs | 1a: ORBIT-2; 1b: HydraGNN |
@@ -94,9 +94,9 @@ The diagram shows Phase 1. Dashed boxes are Phase 2 or later.
 How a run executes:
 
 - **Task, outside an allocation.** The runner submits the recipe job and a check job with an `afterany` dependency on it. The check job verifies the outputs and writes `result.json`. No process waits.
-- **Task, inside an allocation.** The recipe runs as an `srun` step, and the check runs after it. No nested `sbatch`.
+- **Task, inside an allocation.** When the allocation satisfies the recipe's resource requirements, the recipe runs as an `srun` step and the check runs after it. Otherwise, the runner submits separate recipe and check jobs through the separate submission path; agent-triggered submissions require the budget in section 8. The recipe never submits a nested `sbatch`.
 - **Agent.** The runner starts the engine as a CPU job or step. An agent that needs a model run calls `ai4s run <task>`, which follows the rules above.
-- **Follow-on.** `--then` becomes an `afterany` dependency, or the next step inside an allocation.
+- **Follow-on.** `--then` becomes an `afterany` dependency, or the next step inside an allocation that satisfies the follow-on task's resource requirements.
 
 Flow for the first product:
 
