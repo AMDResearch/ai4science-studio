@@ -49,6 +49,42 @@ Confirmed working: MI250X, MI300X, MI350X (rocm7.2.2 image). Covers 1-GPU and 8-
 
 Outputs typically include low-resolution inputs, high-resolution predictions, and comparison plots as described upstream.
 
+## Inference + Omnistat (perf)
+
+Allocation-neutral runner: [`../../examples/run_infer_perf_amd.sh`](../../examples/run_infer_perf_amd.sh)  
+Thin sbatch wrapper: [`../../examples/sbatch_infer_perf_amd.sh`](../../examples/sbatch_infer_perf_amd.sh)  
+FOM extractor: [`../../examples/run_infer_fom_extractor.py`](../../examples/run_infer_fom_extractor.py)
+
+```bash
+export AI4S_SHARED_DIR=/path/to/shared
+export PERF_TOOLS_DIR=/path/to/perf-tools
+export ORBIT2_ROOT=/path/to/ORBIT-2-clone
+export ORBIT2_USE_SYNTHETIC=1
+sbatch ../../examples/sbatch_infer_perf_amd.sh
+```
+
+Artifacts land under `$AI4S_SHARED_DIR/models/ORBIT-2/infer-perf-runs/<run-id>/`:
+
+- `manifest.json` — job metadata, timing, workload=`visualize`
+- `foms.json` — `inference_wall_seconds`, repeats; throughput left unset until sample/rank semantics are validated
+- `omnistat-db/`, `omnistat.config` — user-mode telemetry (started immediately before timed inference)
+
+Ordinary inference logic lives in [`../../examples/run_infer_amd.sh`](../../examples/run_infer_amd.sh); sbatch scripts are thin wrappers (no duplicated bodies).
+
+### Campaign (inference → perf-report)
+
+End-to-end LangGraph campaign (repo root):
+
+```bash
+export AI4S_SHARED_DIR=/path/to/shared
+export PERF_TOOLS_DIR=/path/to/perf-tools
+export ORBIT2_ROOT=/path/to/ORBIT-2-clone
+# optional: export AI4S_LLM_ENDPOINT=https://.../v1
+sbatch campaigns/orbit2-infer-perf/sbatch_amd.sh
+```
+
+See [`../../../../../campaigns/orbit2-infer-perf/campaign.yaml`](../../../../../campaigns/orbit2-infer-perf/campaign.yaml).
+
 ## Inference latency (expectations)
 
 The ORBIT-2 paper reports that **after training**, inference can be very fast relative to dynamical downscaling: for example, **milliseconds per global sample** for a small-parameter model and **sub-second** scale for a 10B-parameter model on an 8-GPU setup for a stated ERA5→ERA5 benchmark (see paper tables). Your hardware and batching will differ—treat these as **order-of-magnitude** guidance, not guarantees.

@@ -74,6 +74,19 @@ SCRIPT_DIR=$(cd "$(dirname "$(scontrol show job "$SLURM_JOB_ID" | grep -oP 'Comm
 
 Applies to both Docker and Apptainer sbatch scripts.
 
+**Nested runners:** when a thin `sbatch_*.sh` (or campaign wrapper) `exec`s/`bash`es an allocation-neutral `run_*.sh`, that inner script must prefer `BASH_SOURCE` unless it itself is the spool copy. Blindly using `scontrol Command=` inside the nested script resolves to the *outer* sbatch path and breaks sibling lookups. Pattern used by ORBIT-2 `run_infer_amd.sh` / `run_infer_perf_amd.sh`:
+
+```bash
+_SRC="${BASH_SOURCE[0]:-}"
+if [[ -n "$_SRC" && "$_SRC" != *"/var/spool/slurmd/"* && "$_SRC" != *"/spool/slurmd/"* ]]; then
+  SCRIPT_DIR=$(cd "$(dirname "$_SRC")" && pwd)
+elif [[ -n "${SLURM_JOB_ID:-}" ]]; then
+  SCRIPT_DIR=$(cd "$(dirname "$(scontrol show job "$SLURM_JOB_ID" | sed -n 's/.*Command=\(\S\+\).*/\1/p')")" && pwd)
+else
+  SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+fi
+```
+
 ## Python version compatibility
 
 The canonical image is **py3.12**. Some upstream models pin older deps that lack cp312 binary wheels:

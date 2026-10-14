@@ -15,8 +15,13 @@ recipes:
   - task: inference
     description: Inference and visualization with optional synthetic smoke test
     recipe_path: recipes/inference/
-    script: examples/run_visualize.py
+    script: examples/run_infer_amd.sh
     slurm: examples/sbatch_infer_amd.sh
+  - task: inference-perf
+    description: Inference with Omnistat telemetry and inference FOMs (allocation-neutral runner; thin sbatch wrapper)
+    recipe_path: recipes/inference/
+    script: examples/run_infer_perf_amd.sh
+    slurm: examples/sbatch_infer_perf_amd.sh
   - task: perf-analysis
     description: Training perf analysis (default 1 node × 8 GPU) with Omnistat + PyTorch profiler; default template **edm_8m_era5_1x8.yaml** (Bayes-CAST EDM, `fsdp=8`/`simple_ddp=1`); override with `interm_8m_era5.yaml`
     recipe_path: recipes/perf-analysis/

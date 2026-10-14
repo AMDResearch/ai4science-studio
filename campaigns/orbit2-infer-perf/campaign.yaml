@@ -1,0 +1,73 @@
+schema_version: "1"
+name: orbit2-infer-perf
+description: >
+  Two-stage campaign: instrumented ORBIT-2 inference (task), then read-only
+  perf-report (reusable agent). Runs inside one SLURM allocation via the
+  LangGraph campaign runner.
+
+inputs:
+  AI4S_SHARED_DIR:
+    type: path
+    required: true
+    env: AI4S_SHARED_DIR
+    description: Shared filesystem root for artifacts and optional registry.
+  PERF_TOOLS_DIR:
+    type: path
+    required: true
+    env: PERF_TOOLS_DIR
+    description: Omnistat / VictoriaMetrics tools root.
+  ORBIT2_ROOT:
+    type: path
+    required: true
+    env: ORBIT2_ROOT
+    description: Path to ORBIT-2 (or Bayes-CAST) clone.
+  ORBIT2_SIF:
+    type: path
+    required: false
+    env: ORBIT2_SIF
+    description: Apptainer SIF for ROCm PyTorch.
+  ORBIT2_OVERLAY:
+    type: path
+    required: false
+    env: ORBIT2_OVERLAY
+  ORBIT2_CHECKPOINT:
+    type: path
+    required: false
+    env: ORBIT2_CHECKPOINT
+  ORBIT2_USE_SYNTHETIC:
+    type: string
+    required: false
+    default: "1"
+    env: ORBIT2_USE_SYNTHETIC
+  ORBIT2_INFER_REPEATS:
+    type: string
+    required: false
+    default: "1"
+    env: ORBIT2_INFER_REPEATS
+
+llm:
+  mode: auto
+  api_key_env: OPENAI_API_KEY
+  # auto → Ocp-Apim-Subscription-Key when endpoint host is llm-api.amd.com
+  auth_style: auto
+  # OpenAI-compatible path on AMD MAG (not /Anthropic). Use gpt-* here;
+  # Claude works on https://llm-api.amd.com/Anthropic/v1/messages (different API).
+  model: gpt-4o
+  # endpoint: set AI4S_LLM_ENDPOINT=https://llm-api.amd.com/OpenAI
+
+  local:
+    # image/model required only when mode=local or auto with no endpoint
+    port: 8000
+    gpus: 1
+
+stages:
+  - id: orbit_inference
+    kind: task
+    ref: ORBIT-2:inference-perf
+    required_for_next:
+      - manifest
+      - foms
+  - id: perf_report
+    kind: agent
+    ref: perf-report
+    required_for_next: []

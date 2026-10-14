@@ -106,16 +106,27 @@ def main() -> None:
 
     orbit2_root = _resolve_orbit2_root(args.orbit2_root)
     examples_dir = orbit2_root / "examples"
-    vis = examples_dir / "visualize.py"
-    util = examples_dir / "utils.py"
-    for need, label in ((vis, "visualize.py"), (util, "utils.py")):
-        if not need.is_file():
-            print(
-                f"error: missing {label} under {examples_dir} "
-                "(clone https://github.com/XiaoWang-Github/ORBIT-2 and pip install -e .)",
-                file=sys.stderr,
-            )
-            sys.exit(2)
+    # Upstream moved visualize.py under examples/downscaling/; keep legacy examples/ fallback.
+    candidates = [
+        examples_dir / "downscaling",
+        examples_dir,
+    ]
+    work_dir = None
+    vis = util = None
+    for d in candidates:
+        v = d / "visualize.py"
+        u = d / "utils.py"
+        if v.is_file() and u.is_file():
+            work_dir, vis, util = d, v, u
+            break
+    if work_dir is None or vis is None:
+        tried = ", ".join(str(d / "visualize.py") for d in candidates)
+        print(
+            f"error: missing visualize.py/utils.py (tried: {tried}). "
+            "Clone https://github.com/XiaoWang-Github/ORBIT-2 and pip install -e .",
+            file=sys.stderr,
+        )
+        sys.exit(2)
 
     config_path = _resolve_config(orbit2_root, args.config)
 
@@ -140,7 +151,7 @@ def main() -> None:
     if args.checkpoint is not None:
         child_argv.extend(["--checkpoint", args.checkpoint])
 
-    os.chdir(examples_dir)
+    os.chdir(work_dir)
     os.execvpe(sys.executable, child_argv, env)
 
 

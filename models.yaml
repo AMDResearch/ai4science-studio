@@ -51,7 +51,7 @@ models:
     license: See upstream model card
     summary: Global weather and climate downscaling
     task: Global weather and climate downscaling (vision foundation model)
-    tasks_available: [inference, perf-analysis, train]
+    tasks_available: [inference, inference-perf, perf-analysis, train]
     path: earth_science/models/ORBIT-2
 
   - slug: PanguWeather

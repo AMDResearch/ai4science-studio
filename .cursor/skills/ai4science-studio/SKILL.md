@@ -11,6 +11,7 @@ description: Applies when working in the AI4Science Studio repository. Use for d
 - **Models:** `<domain>/models/<model-slug>/` with a `README.md` per model and `recipes/` for that model only.
 - **Model index:** Root [`models.yaml`](../../../models.yaml) — **generated** list of all models. Read this first for discovery. Do not edit it by hand.
 - **Per-model manifest:** `<domain>/models/<model-slug>/model.yaml` — source of truth (HF id, license, recipes, env vars, hardware). Schema: [`schemas/model.schema.json`](../../../schemas/model.schema.json).
+- **Campaign runtime:** [`tools/ai4s/`](../../../tools/ai4s/) builds a LangGraph from `campaigns/*/campaign.yaml`. Reusable agents live under [`agents/`](../../../agents/); cluster overlays under `${AI4S_SHARED_DIR}/registry`. Model tasks stay model-local (`Model:task` from `model.yaml`).
 - **Human index:** Root [`README.md`](../../../README.md).
 
 ## Model slug rule

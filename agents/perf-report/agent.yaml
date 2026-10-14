@@ -1,0 +1,29 @@
+schema_version: "1"
+name: perf-report
+kind: agent
+version: "0.1.0"
+description: >
+  Read-only performance report agent. Runs deterministic checks on recorded
+  telemetry/FOMs first, then optionally ranks and explains findings with an LLM.
+  Never submits or cancels jobs.
+llm:
+  required: false
+  model_alias: default
+entry: "ai4s.agents.perf_report:run"
+playbook: playbook.md
+allow:
+  tools: []
+  commands: []
+  submit_jobs: false
+inputs:
+  job_dir:
+    type: path
+    required: false
+    description: Directory with manifest.json / foms.json / omnistat-db (usually from prior stage artifacts).
+outputs:
+  findings:
+    type: path
+    description: findings.json
+  perf_report:
+    type: path
+    description: perf_report.md
