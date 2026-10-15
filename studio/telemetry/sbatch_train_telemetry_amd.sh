@@ -1,0 +1,226 @@
+#!/bin/bash
+# 8-GPU HydraGNN DDP training on Alexandria DFT, wrapped with AMD Omnistat GPU
+# telemetry. Self-owned: every tool + dataset path lives under $AI4S_SHARED_DIR
+# (or the explicit overrides below), so it does not depend on anyone else's tree.
+#
+# Merges two proven pieces:
+#   - the production 8-GPU launch from train_work/scripts/hg_ddp8_v3.sbatch
+#     (Alexandria-only, corr 0.89 — the model the studio demo tells its story about)
+#   - the Omnistat user-mode start/stop lifecycle + per-job VictoriaMetrics DB
+#     from material_science/models/HydraGNN/examples/sbatch_train_perf_amd.sh
+#
+# Telemetry lands in $HG_OUTPUT_DIR/omnistat-db (a VictoriaMetrics TSDB) and a
+# manifest.json the studio backend reads to range-query the metrics after the run.
+#
+# Env (AI4S_SHARED_DIR is required unless every path below is set explicitly;
+# the studio backend sets the first four):
+#   AI4S_SHARED_DIR  site shared directory
+#   PERF_TOOLS_DIR   $AI4S_SHARED_DIR/perf-tools           (omnistat venv + VM binary)
+#   HG_DATA_DIR      $HG_BASE/weights                      (Alexandria dataset)
+#   HG_BASE          $AI4S_SHARED_DIR/models/HydraGNN      (work tree, overlay, infer repo)
+#   HG_SIF           $AI4S_SHARED_DIR/images/pytorch_rocm7.2.2_...sif
+#   HG_NUM_EPOCH     200                                   (studio epochs slider)
+#   HG_OUTPUT_DIR    <work>/perf-runs/<jobid>              (per-run telemetry dir)
+#   N_SAMPLES        600000
+#SBATCH --job-name=hg-tele8
+#SBATCH --partition=YOUR_PARTITION_HERE
+#SBATCH --account=YOUR_ACCOUNT_HERE
+#SBATCH --nodes=1
+#SBATCH --gres=gpu:8
+#SBATCH --ntasks-per-node=8
+#SBATCH --cpus-per-task=16
+#SBATCH --time=01:00:00
+#SBATCH --output=logs/hg_tele8_%j.log
+#SBATCH --error=logs/hg_tele8_%j.log
+
+set -uo pipefail
+
+# ── Self-owned paths ────────────────────────────────────────────────────────
+_SHARED() { echo "${AI4S_SHARED_DIR:?set AI4S_SHARED_DIR (see studio/.env.example)}"; }
+PERF_TOOLS_DIR="${PERF_TOOLS_DIR:-$(_SHARED)/perf-tools}"
+OMNISTAT_VENV="${OMNISTAT_VENV:-${PERF_TOOLS_DIR}/omnistat-venv}"
+HG_BASE="${HG_BASE:-$(_SHARED)/models/HydraGNN}"
+WORK="${HG_WORK:-${HG_BASE}/train_work}"
+HG_DATA_DIR="${HG_DATA_DIR:-${HG_BASE}/weights}"
+HG_DATASET_BP="${HG_DATASET_BP:-${HG_DATA_DIR}/Alexandria-v2.bp}"
+HG_NUM_EPOCH="${HG_NUM_EPOCH:-200}"
+# Precision: fp32 = production-accuracy model (default); fp64 = double precision
+# to exercise the MI355X FP64 units and populate the FP64 telemetry tile.
+HG_PRECISION="${HG_PRECISION:-fp32}"
+N_SAMPLES="${N_SAMPLES:-600000}"
+SCAN_LIMIT="${SCAN_LIMIT:-1500000}"
+HG_OUTPUT_DIR="${HG_OUTPUT_DIR:-${WORK}/perf-runs/${SLURM_JOB_ID:-$$}}"
+# Omnistat config template (a self-contained copy lives beside this script).
+# When the studio bash-calls this script BASH_SOURCE points at the repo; under a
+# direct sbatch, SLURM runs a spool copy, so recover the submitted path via scontrol.
+_SELF_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+if [[ ! -f "${_SELF_DIR}/omnistat.config.template" && -n "${SLURM_JOB_ID:-}" ]]; then
+  _SUBMITTED=$(scontrol show job "$SLURM_JOB_ID" | sed -n 's/.*Command=\(\S\+\).*/\1/p')
+  [[ -n "$_SUBMITTED" ]] && _SELF_DIR=$(cd "$(dirname "$_SUBMITTED")" && pwd)
+fi
+OMNISTAT_TEMPLATE="${OMNISTAT_TEMPLATE:-${_SELF_DIR}/omnistat.config.template}"
+OMNISTAT_USERMODE_INTERVAL="${OMNISTAT_USERMODE_INTERVAL:-1}"
+# Push frequency (MINUTES) into VictoriaMetrics. Omnistat HARD-FLOORS this at 1 min
+# ("[ERROR]: Please set data_frequency_mins >= 1 minute" — the exporter refuses to
+# start below that). So VictoriaMetrics only gets minute-resolution batches, which
+# is fine for the post-run harvest. For sub-second LIVE plots the studio scrapes the
+# exporter's Prometheus /metrics endpoint (port from the config, 8101) directly —
+# see telemetry.harvest_live() — which reflects the fast --interval sampling.
+OMNISTAT_PUSH_INTERVAL="${OMNISTAT_PUSH_INTERVAL:-1}"
+
+export HG_SIF="${HG_SIF:-$(_SHARED)/images/pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif}"
+export HG_OVERLAY="${HG_OVERLAY:-${HG_BASE}/overlays/hydragnn-overlay.img}"
+export HG_INFER_REPO="${HG_INFER_REPO:-${HG_BASE}/outputs/HydraGNN-infer}"
+
+mkdir -p "$HG_OUTPUT_DIR" "$WORK/logs" "$WORK/scripts"
+
+echo "=== HydraGNN 8-GPU DDP training + Omnistat telemetry ==="
+echo "Node        : $(hostname)"
+echo "Date        : $(date)"
+echo "JobID       : ${SLURM_JOB_ID:-n/a}"
+echo "Epochs      : $HG_NUM_EPOCH"
+echo "Precision   : $HG_PRECISION"
+echo "N_SAMPLES   : $N_SAMPLES"
+echo "Dataset     : $HG_DATASET_BP"
+echo "PerfTools   : $PERF_TOOLS_DIR"
+echo "OutputDir   : $HG_OUTPUT_DIR"
+echo ""
+
+# ── Preflight ───────────────────────────────────────────────────────────────
+for p in "$HG_SIF" "$HG_OVERLAY" "$HG_DATASET_BP" "$OMNISTAT_TEMPLATE"; do
+  [[ -e "$p" ]] || { echo "ERROR: required path missing: $p" >&2; exit 2; }
+done
+_TELEMETRY_ON=1
+if [[ ! -x "${OMNISTAT_VENV}/bin/omnistat-usermode" ]]; then
+  echo "WARN: omnistat-usermode not found at ${OMNISTAT_VENV}/bin — running WITHOUT telemetry" >&2
+  _TELEMETRY_ON=0
+fi
+
+# ── Kernel tracing (opt-in via OMNISTAT_KERNEL_TRACE=1) ──────────────────────
+# Per-kernel dispatch counts + durations (per-epoch structure). Requires the
+# libomnistat_trace.so built once on a compute node (build_kernel_trace_amd.sh)
+# and loaded into the workload via ROCP_TOOL_LIBRARIES. Degrades gracefully: if
+# the lib is missing we warn and keep the run going with counters-only telemetry.
+OMNISTAT_KERNEL_TRACE="${OMNISTAT_KERNEL_TRACE:-0}"
+OMNISTAT_TRACE_LIB="${OMNISTAT_TRACE_LIB:-${PERF_TOOLS_DIR}/omnistat-src/build-trace/libomnistat_trace.so}"
+_KTRACE_ON=0
+if [[ "$OMNISTAT_KERNEL_TRACE" == "1" ]]; then
+  if [[ -f "$OMNISTAT_TRACE_LIB" ]]; then
+    _KTRACE_ON=1
+    echo "--- Kernel tracing ENABLED (lib: $OMNISTAT_TRACE_LIB) ---"
+  else
+    echo "WARN: OMNISTAT_KERNEL_TRACE=1 but trace lib missing ($OMNISTAT_TRACE_LIB); build it with build_kernel_trace_amd.sh. Continuing without kernel trace." >&2
+  fi
+fi
+
+# ── Render per-job omnistat config (substitute @JOB_DIR@ + @PERF_TOOLS_DIR@) ──
+OMNISTAT_CONFIG="${HG_OUTPUT_DIR}/omnistat.config"
+if [[ "$_TELEMETRY_ON" == "1" ]]; then
+  sed -e "s|@JOB_DIR@|${HG_OUTPUT_DIR}|g" \
+      -e "s|@PERF_TOOLS_DIR@|${PERF_TOOLS_DIR}|g" \
+      "$OMNISTAT_TEMPLATE" > "$OMNISTAT_CONFIG"
+  # Flip kernel tracing on in the rendered config when the lib is present.
+  [[ "$_KTRACE_ON" == "1" ]] && sed -i 's/^enable_kernel_trace = False/enable_kernel_trace = True/' "$OMNISTAT_CONFIG"
+  echo "--- Starting Omnistat user-mode (interval=${OMNISTAT_USERMODE_INTERVAL}s, push=${OMNISTAT_PUSH_INTERVAL}min) ---"
+  export PATH="${OMNISTAT_VENV}/bin:${PATH}"
+  "${OMNISTAT_VENV}/bin/omnistat-usermode" --configfile "$OMNISTAT_CONFIG" \
+      --start --interval "$OMNISTAT_USERMODE_INTERVAL" --pushinterval "$OMNISTAT_PUSH_INTERVAL" \
+      2>&1 | tee "${HG_OUTPUT_DIR}/omnistat_start.log" || {
+    echo "WARN: omnistat-usermode --start returned nonzero; continuing without telemetry" >&2
+    _TELEMETRY_ON=0
+  }
+fi
+
+cleanup_omnistat() {
+  [[ "$_TELEMETRY_ON" == "1" ]] || return 0
+  echo "--- Stopping Omnistat user-mode ---"
+  "${OMNISTAT_VENV}/bin/omnistat-usermode" --configfile "$OMNISTAT_CONFIG" --stopexporters || true
+  "${OMNISTAT_VENV}/bin/omnistat-usermode" --configfile "$OMNISTAT_CONFIG" --stopserver || true
+}
+trap cleanup_omnistat EXIT
+
+# ── Per-rank launcher (one container per task, bound to its local GPU) ────────
+cat > "$WORK/scripts/tele8_rank.sh" << 'RANKEOF'
+#!/bin/bash
+source /opt/venv/bin/activate
+# All 8 GPUs stay visible to every rank (RCCL/XGMI topology); device chosen from
+# SLURM_LOCALID. Do NOT set ROCR_VISIBLE_DEVICES per rank.
+export HSA_NO_SCRATCH_RECLAIM=1
+export MASTER_ADDR=127.0.0.1
+export MASTER_PORT=8899
+export WORLD_SIZE=$SLURM_NPROCS
+export RANK=$SLURM_PROCID
+export LOCAL_RANK=$SLURM_LOCALID
+export HYDRAGNN_MASTER_ADDR=127.0.0.1
+export HYDRAGNN_MASTER_PORT=8899
+export HYDRAGNN_BACKEND=nccl
+# TRAIN_CONFIG (passed via --env) lives in the training dir.
+cd "$(dirname "$TRAIN_CONFIG")"
+python3 hg_train_ddp.py
+RANKEOF
+chmod +x "$WORK/scripts/tele8_rank.sh"
+
+# Strip outer PMIX/PMI/OMPI env (MPI_Init collision inside container otherwise).
+_U=(); while IFS= read -r v; do _U+=(-u "$v"); done \
+  < <(env | grep -oE '^(PMIX_|PMI_|OMPI_)[A-Za-z0-9_]+')
+
+# Kernel-trace: bind the tool lib + set the rocprofiler/HSA env that loads it
+# inside the container (per Omnistat docs: ROCP_TOOL_LIBRARIES + HSA_TOOLS_LIB +
+# HSA_TOOLS_ROCPROFILER_V1_TOOLS). Empty arrays when tracing is off.
+_KT_BIND=(); _KT_ENV=()
+if [[ "$_KTRACE_ON" == "1" ]]; then
+  # The trace lib POSTs to the omnistat collector port (8101 in the template).
+  _OMNI_PORT=$(awk -F'[= \t]+' '/^[[:space:]]*port[[:space:]]*=/ {print $2; exit}' "$OMNISTAT_CONFIG")
+  _KT_BIND=(--bind "${OMNISTAT_TRACE_LIB}:${OMNISTAT_TRACE_LIB}:ro")
+  _KT_ENV=(--env ROCP_TOOL_LIBRARIES="${OMNISTAT_TRACE_LIB}"
+           --env HSA_TOOLS_LIB=/opt/rocm/lib/librocprofiler64.so
+           --env HSA_TOOLS_ROCPROFILER_V1_TOOLS=1
+           --env OMNISTAT_TRACE_ENDPOINT_PORT="${_OMNI_PORT:-8101}")
+fi
+
+_T0=$(date +%s)
+srun --ntasks=8 --gpus-per-node=8 --mpi=pmix --cpu-bind=none \
+  env "${_U[@]}" apptainer exec --rocm \
+  --overlay "${HG_OVERLAY}:ro" \
+  --bind "${HG_DATA_DIR}:${HG_DATA_DIR}:ro" \
+  --bind "$WORK:$WORK" \
+  --bind "$HG_INFER_REPO:$HG_INFER_REPO" \
+  "${_KT_BIND[@]}" "${_KT_ENV[@]}" \
+  --env HG_INFER_REPO="$HG_INFER_REPO" \
+  --env HG_DATASET_BP="$HG_DATASET_BP" \
+  --env HG_NUM_EPOCH="$HG_NUM_EPOCH" \
+  --env HG_PRECISION="$HG_PRECISION" \
+  --env TRAIN_CONFIG="$WORK/training/hg_train_config_v3.json" \
+  --env VAL_OUT="${HG_OUTPUT_DIR}/validation.json" \
+  --env MODEL_OUT="${HG_OUTPUT_DIR}/hg_model.pk" \
+  --env SCAN_LIMIT="$SCAN_LIMIT" \
+  --env N_SAMPLES="$N_SAMPLES" \
+  --env PYTHONPATH="${HG_INFER_REPO}:/opt/hydragnn-pkgs" \
+  --env LD_LIBRARY_PATH=/opt/hydragnn-pkgs/adios2:/opt/venv/lib/python3.12/site-packages/torch/lib \
+  "$HG_SIF" bash "$WORK/scripts/tele8_rank.sh"
+
+rc=$?
+_T1=$(date +%s)
+_RUNTIME=$((_T1 - _T0))
+echo ""
+echo "=== srun exit code: $rc  runtime: ${_RUNTIME}s ==="
+
+# ── Manifest the studio backend reads to harvest telemetry ───────────────────
+cat > "${HG_OUTPUT_DIR}/manifest.json" << EOF
+{
+  "jobid": "${SLURM_JOB_ID:-$$}",
+  "runtime_s": ${_RUNTIME},
+  "epochs": ${HG_NUM_EPOCH},
+  "precision": "${HG_PRECISION}",
+  "n_gpus": 8,
+  "n_samples": ${N_SAMPLES},
+  "telemetry_enabled": ${_TELEMETRY_ON},
+  "omnistat_db_path": "${HG_OUTPUT_DIR}/omnistat-db",
+  "victoria_binary": "${PERF_TOOLS_DIR}/victoriametrics/victoria-metrics-prod",
+  "validation_json": "${HG_OUTPUT_DIR}/validation.json",
+  "model_out": "${HG_OUTPUT_DIR}/hg_model.pk"
+}
+EOF
+echo "=== Wrote manifest: ${HG_OUTPUT_DIR}/manifest.json ==="
+echo "=== Done at $(date) ==="
+exit $rc

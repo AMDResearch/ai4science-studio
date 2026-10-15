@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+pyyaml
+pydantic>=2
+numpy
+imageio-ffmpeg
+python-multipart
+aiofiles
+requests

@@ -79,3 +79,93 @@ runs/
 
 # Stray SLURM stdout from perf runs (real logs live under perf-runs/<jobid>/)
 orbit2-train-*.out
+
+# ── Studio web application ────────────────────────────────────────────────────
+
+# Frontend build output and dependencies (regenerate with npm install / npm run build)
+studio/frontend/dist/
+studio/frontend/node_modules/
+
+# Backend runtime artifacts (ephemeral job output, SQLite state, bytecode)
+studio/backend/runs/
+studio/backend/studio.db
+studio/backend/__pycache__/
+studio/backend/tools/__pycache__/
+
+# Demo large media — videos > 1 MB and screenshot grids (keep scripts, not outputs)
+studio/demo/demo-output/*.mp4
+studio/demo/demo-output/*.webm
+studio/demo/demo-output/shots/
+studio/demo/demo-output/backend_*.log
+studio/demo/demo-output/frontend_*.log
+studio/demo/node_modules/
+
+# Baked data assets (large, regenerable via tools/bake_*.py — see assets/README.md)
+studio/backend/assets/*.json
+
+# GHSL global built-up GeoTIFF cache (129 MB, re-downloadable via fetch_dc_urban_density.py)
+studio/backend/assets/_ghsl_builtup_dc.tif
+
+# Stray demo capture logs
+studio/demo/demo-output/*.log
+studio/scripts/demo/*.log
+
+# ── LaTeX documentation ───────────────────────────────────────────────────────
+# Keep .tex source, .bib, Makefile; ignore compiled artifacts and binaries
+docs/*.pdf
+docs/**/*.pdf
+docs/*.aux
+docs/*.bbl
+docs/*.blg
+docs/*.log
+docs/*.out
+docs/*.toc
+docs/*.lof
+docs/*.lot
+docs/*.fls
+docs/*.fdb_latexmk
+docs/*.synctex.gz
+docs/*.xdv
+docs/*-blx.bib
+docs/*.bcf
+docs/*.run.xml
+
+# ── Root-level site-specific SLURM overlay build scripts ─────────────────────
+# These reference absolute paths for a specific cluster; not portable.
+# The canonical templates live in each model's examples/ directory.
+build_*.slurm
+build_*.log
+
+# Demo capture job logs (per-run, ephemeral)
+studio/scripts/demo/capture_demo_*.log
+studio/demo/studio_demo_*.log
+
+# SLURM holder-allocation stdout (per-job, ephemeral — new runs write to logs/)
+studio/scripts/launch/studio-hold-*.log
+
+# Per-directory logs/ folders — ignore the log CONTENTS but KEEP the folders
+# themselves (tracked via .gitkeep). SLURM --output requires the target dir to
+# pre-exist, so the folders must survive a fresh checkout.
+logs/*
+**/logs/*
+!logs/.gitkeep
+!**/logs/.gitkeep
+
+# Ephemeral dev-server restart logs (backend/frontend, per-session)
+studio/**/*_restart.log
+
+# One-off local Playwright capture scripts (hardcoded ports and /tmp outputs,
+# some carry demo credentials). The reusable tooling is shot-on-compute.sh +
+# shot-capture.js; keep ad hoc captures out of the repo.
+studio/demo/*.mjs
+studio/demo/shot-preview.js
+studio/demo/shot-saf*.js
+
+# Studio site configuration: keep the template, ignore the filled-in copy and
+# deployment-specific runbook notes.
+!studio/.env.example
+studio/SERVING.local.md
+
+# Generated demo artifacts (regenerate with the capture/record scripts)
+studio/demo/demo-output/*.pdf
+studio/assets/**/*.mp4

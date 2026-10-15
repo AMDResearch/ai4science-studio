@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AMD · Molten-Salt Blanket Digital Twin</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --amd:#ED1C24; --amd-bright:#FF3B41; --amd-deep:#5c0c0f;
+    --bg:#0a0a0b; --surface:#141416; --border:#27272a;
+    --ink:#f5f5f7; --muted:#a1a1aa; --ok:#21c77a; --info:#38bdf8; --warn:#f5a524;
+  }
+  html,body{height:100%;margin:0}
+  body{font-family:'Inter',system-ui,sans-serif;color:var(--ink);
+    background:radial-gradient(140% 140% at 50% 0%,#1a0507 0%,#0a0203 55%,#000 100%) fixed;
+    -webkit-font-smoothing:antialiased;}
+  .card{background:rgba(20,20,22,.72);border:1px solid var(--border);border-radius:1rem;
+    backdrop-filter:blur(8px);}
+  .section-label{font-size:.7rem;font-weight:700;letter-spacing:.15em;text-transform:uppercase;color:var(--amd);}
+  .gradient-text{background:linear-gradient(135deg,#ED1C24 0%,#FF3B41 55%,#ff7a45 100%);
+    -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;}
+  .badge{font-weight:800;letter-spacing:.05em;padding:.2rem .7rem;border-radius:9999px;font-size:.78rem;display:inline-block;}
+  .badge-amd{background:rgba(237,28,36,.16);color:#ff8f93;border:1px solid rgba(237,28,36,.45);}
+  .badge-ok{background:rgba(33,199,122,.14);color:#6ee7b7;border:1px solid rgba(33,199,122,.4);}
+  .badge-warn{background:rgba(245,165,36,.14);color:#fcd34d;border:1px solid rgba(245,165,36,.4);}
+  .badge-info{background:rgba(56,189,248,.14);color:#7dd3fc;border:1px solid rgba(56,189,248,.4);}
+  .hero-glow{position:absolute;border-radius:50%;filter:blur(120px);opacity:.16;pointer-events:none;}
+  input[type=range]{-webkit-appearance:none;height:6px;border-radius:3px;background:#27272a;outline:none;}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;
+    background:var(--amd);cursor:pointer;box-shadow:0 0 0 3px rgba(237,28,36,.25);}
+  .mono{font-family:ui-monospace,Menlo,monospace;}
+  .seg{padding:.4rem .9rem;border-radius:.55rem;border:1px solid var(--border);background:#0c0c0e;
+    cursor:pointer;font-size:.8rem;font-weight:600;transition:all .15s;}
+  .seg.active{background:var(--amd);border-color:var(--amd);color:#fff;}
+  .chartbox{position:relative;width:100%;height:230px;}
+</style>
+</head>
+<body>
+<div class="hero-glow" style="width:640px;height:640px;background:#ED1C24;top:-260px;left:-160px;"></div>
+
+<!-- Header -->
+<header class="sticky top-0 z-50" style="background:rgba(10,2,3,.82);backdrop-filter:blur(16px);border-bottom:1px solid rgba(39,39,42,.7)">
+  <div class="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <img src="AMD-Logo.png" alt="AMD" style="height:26px">
+      <span class="text-slate-600">|</span>
+      <span class="font-black gradient-text text-lg">Molten-Salt Blanket Digital Twin</span>
+    </div>
+    <div class="flex items-center gap-2">
+      <span class="badge badge-amd">AxiomFabric&trade;</span>
+      <span class="badge badge-info">OpenMC-calibrated</span>
+    </div>
+  </div>
+</header>
+
+<main class="max-w-[1720px] mx-auto px-6 py-3">
+  <div class="grid lg:grid-cols-12 gap-4">
+    <!-- LEFT SIDEBAR: intro text box + design knobs -->
+    <div class="lg:col-span-3 flex flex-col gap-4">
+      <!-- Intro box (moved from the top band) -->
+      <div class="card p-6">
+        <p class="section-label mb-2" style="font-size:.82rem">Physics-Conditioned AI · Tritium Breeding</p>
+        <h1 class="text-3xl font-black mb-3 leading-tight">FLiBe breeding-blanket twin for <span class="gradient-text">design &amp; optimization</span></h1>
+        <p class="text-slate-300 text-base leading-relaxed">
+          A laptop-fast, glass-box digital twin of a molten-salt (FLiBe) breeding blanket, calibrated
+          against OpenMC Monte-Carlo neutronics on AMD Instinct&trade; GPUs. Move the design knobs and
+          the twin predicts the tritium breeding ratio (TBR) in real time, with an honest uncertainty
+          band and OpenMC ground-truth overlaid.
+        </p>
+      </div>
+
+      <!-- Design knobs -->
+      <div class="card p-6">
+        <div class="text-base font-bold tracking-widest text-slate-300 mb-4">DESIGN KNOBS</div>
+
+        <label class="text-lg font-semibold flex justify-between">Li-6 enrichment
+          <span id="li6val" class="mono text-amd" style="color:var(--amd-bright)">30.0%</span></label>
+        <input id="li6" type="range" min="7.59" max="90" step="0.1" value="30" class="w-full my-2">
+        <div class="text-sm text-slate-500 mb-4">Natural 7.59% &rarr; fully enriched 90%</div>
+
+        <label class="text-lg font-semibold flex justify-between">Blanket thickness
+          <span id="tval" class="mono" style="color:var(--amd-bright)">1.00 m</span></label>
+        <input id="tbl" type="range" min="0.3" max="1.5" step="0.01" value="1.0" class="w-full my-2">
+        <div class="text-sm text-slate-500 mb-4">FLiBe breeder path 0.3 &rarr; 1.5 m</div>
+
+        <label class="text-lg font-semibold mb-2 block">Neutron multiplier</label>
+        <div class="flex gap-2 mb-5">
+          <div class="seg" data-mult="none" style="font-size:.95rem;padding:.5rem 1.1rem">None</div>
+          <div class="seg active" data-mult="Be" style="font-size:.95rem;padding:.5rem 1.1rem">Be (n,2n)</div>
+          <div class="seg" data-mult="Pb" style="font-size:.95rem;padding:.5rem 1.1rem">Pb (n,2n)</div>
+        </div>
+
+        <button id="optbtn" class="w-full text-white font-semibold py-3 rounded-lg text-lg"
+          style="background:var(--amd)" onmouseover="this.style.background='var(--amd-bright)'"
+          onmouseout="this.style.background='var(--amd)'">
+          Optimize design (twin)</button>
+        <div id="optout" class="text-sm text-slate-400 mt-3"></div>
+      </div>
+    </div>
+
+    <!-- RIGHT MAIN: charts fill the freed space -->
+    <div class="lg:col-span-9 flex flex-col gap-4">
+      <!-- Live readout + sweep chart -->
+      <div class="card p-5">
+        <div class="flex items-start justify-between mb-2">
+          <div>
+            <div class="text-base font-bold tracking-widest text-slate-300 mb-1">TWIN PREDICTION</div>
+            <div class="flex items-baseline gap-3">
+              <span id="tbrbig" class="text-5xl font-black gradient-text mono">1.13</span>
+              <span class="text-slate-400 text-xl">TBR</span>
+            </div>
+            <div id="bandtxt" class="text-base text-slate-400 mono mt-1">band 0.79 – 1.47</div>
+          </div>
+          <div id="verdict" class="text-right"></div>
+        </div>
+        <div class="chartbox" style="height:320px"><canvas id="sweepChart"></canvas></div>
+        <div class="text-sm text-slate-400 mt-2 leading-relaxed">
+          Solid = twin (calibrated reduced + delta net) · shaded = honest &plusmn;10% band (nuclear-data + geometry, Abdou 2021) ·
+          dots = OpenMC ground truth. Self-sufficiency uses the lower band edge, never the point value.
+        </div>
+      </div>
+
+      <!-- Model-comparison + optimization convergence -->
+      <div class="grid lg:grid-cols-2 gap-4">
+        <div class="card p-5">
+          <div class="text-base font-bold tracking-widest text-slate-300 mb-1">FIDELITY LADDER</div>
+          <div class="text-base text-slate-400 mb-2">Reduced 1D slab vs OpenMC vs calibrated twin, across the sweep.</div>
+          <div class="chartbox" style="height:300px"><canvas id="fidChart"></canvas></div>
+        </div>
+        <div class="card p-5">
+          <div class="text-base font-bold tracking-widest text-slate-300 mb-1">OPTIMIZATION CONVERGENCE</div>
+          <div class="text-base text-slate-400 mb-2">Differential evolution on the twin — best breeding design across the whole space, in seconds.</div>
+          <div class="chartbox" style="height:300px"><canvas id="optChart"></canvas></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="mt-2 mb-1 text-sm text-slate-500 leading-relaxed">
+    Anchors: 6Li(n,t) ~940 b (ENDF/B-VIII.0) · required TBR 1.05–1.15 (Abdou 2021) · ARC FLiBe 1.08–1.1
+    (Sorbom 2015 / Kuang 2018). Detailed sim: OpenMC 0.15.3, ENDF/B-VIII.0, 14.1 MeV DT source, on AMD Instinct&trade; GPUs (Vultr-Lux, MI355X).
+  </div>
+</main>
+
+<script src="twin_data.js"></script>
+<script src="dashboard.js"></script>
+</body>
+</html>

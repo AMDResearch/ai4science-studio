@@ -1,0 +1,74 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+    @page { size: A4; margin: 14mm; }
+    * { box-sizing: border-box; }
+    body { font-family: Inter, Arial, sans-serif; color: #18181b; margin: 0; }
+    .cover { text-align:center; padding: 40mm 10mm; page-break-after: always; }
+    .cover h1 { font-size: 30px; margin: 0 0 8px; color:#0a0a0b; }
+    .cover .amd { color:#ED1C24; font-weight:800; letter-spacing:.5px; }
+    .cover p { color:#52525b; font-size: 14px; max-width: 150mm; margin: 10px auto; line-height:1.6; }
+    .cover .meta { margin-top: 24px; font-size: 12px; color:#71717a; }
+    section.page { page-break-after: always; }
+    .hdr { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
+    .num { background:#ED1C24; color:#fff; font-weight:800; width:26px; height:26px;
+      border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:14px; }
+    h2 { font-size: 17px; margin:0; color:#0a0a0b; }
+    img { width:100%; border:1px solid #d4d4d8; border-radius:6px; }
+    .cap { font-size: 12.5px; color:#3f3f46; line-height:1.6; margin-top:8px; }
+  </style></head><body>
+    <div class="cover">
+      <div class="amd">AMD AI4Science Studio</div>
+      <h1>HydraGNN Demo Walkthrough</h1>
+      <p>Training-scaling comparison (1-GPU vs 8-GPU) and live atomistic inference with an
+      interactive 3D molecular viewer, on AMD Instinct MI355X GPUs.</p>
+      <p>All results are real: models trained on Alexandria DFT data via the studio's SLURM pipeline.</p>
+      <div class="meta">Generated from the running studio · demo + live modes</div>
+    </div>
+    
+    <section class="page">
+      <div class="hdr"><span class="num">1</span><h2>Step 1 — Choose a Scientific Domain</h2></div>
+      <img src="shots/00_domains.png" />
+      <p class="cap">The studio opens on the domain picker. HydraGNN lives under Material Science.</p>
+    </section>
+
+    <section class="page">
+      <div class="hdr"><span class="num">2</span><h2>Step 2 — Select the Model</h2></div>
+      <img src="shots/01_models.png" />
+      <p class="cap">Material Science models. We pick HydraGNN, our graph foundation model for atomistic energy prediction.</p>
+    </section>
+
+    <section class="page">
+      <div class="hdr"><span class="num">3</span><h2>Step 3 — Configure: Training-Scaling Demo</h2></div>
+      <img src="shots/02_configure_train.png" />
+      <p class="cap">HydraGNN adds a task toggle. In "Training scaling" mode the demo compares 1-GPU vs 8-GPU training on real Alexandria DFT data.</p>
+    </section>
+
+    <section class="page">
+      <div class="hdr"><span class="num">4</span><h2>Step 4 — Run (Demo Mode)</h2></div>
+      <img src="shots/03_run_train.png" />
+      <p class="cap">Demo mode replays the real training results instantly on the login node — no GPU needed.</p>
+    </section>
+
+    <section class="page">
+      <div class="hdr"><span class="num">5</span><h2>Step 5 — Analyze: 1-GPU vs 8-GPU Scaling</h2></div>
+      <img src="shots/04_analyze_convergence.png" />
+      <p class="cap">Real loss-convergence curves, training-set size, an 8-GPU predicted-vs-DFT parity plot, and a final-metrics comparison (corr 0.75 → 0.79, R² 0.56 → 0.63).</p>
+    </section>
+
+    <section class="page">
+      <div class="hdr"><span class="num">6</span><h2>Step 3 (Inference) — Pick the Trained Model</h2></div>
+      <img src="shots/05_configure_infer.png" />
+      <p class="cap">For live inference the user chooses the 8-GPU or 1-GPU trained checkpoint, then runs on a real held-out Alexandria structure.</p>
+    </section>
+
+    <section class="page">
+      <div class="hdr"><span class="num">7</span><h2>Step 5 (Inference) — Analyze: 3D Structure + Properties</h2></div>
+      <img src="shots/06_analyze_structure.png" />
+      <p class="cap">The Analyze page renders the atomistic structure in an interactive 3Dmol viewer alongside predicted properties.</p>
+    </section>
+
+    <section class="page">
+      <div class="hdr"><span class="num">8</span><h2>Step 5 (Live) — Predicted Energy vs DFT</h2></div>
+      <img src="shots/07_analyze_live_energy.png" />
+      <p class="cap">A real 8-GPU-model prediction on held-out BaAuF₃: predicted −2.01 vs DFT −1.89 eV/atom, with the interactive 3D structure and model validation stats.</p>
+    </section>
+  </body></html>

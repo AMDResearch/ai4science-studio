@@ -140,7 +140,10 @@ def main() -> None:
     if args.checkpoint is not None:
         child_argv.extend(["--checkpoint", args.checkpoint])
 
-    os.chdir(examples_dir)
+    # Upstream visualize.py writes output PNGs/npy to its cwd. examples_dir is a
+    # read-only bind under Apptainer, so prefer an explicit writable output dir.
+    out_cwd = os.environ.get("ORBIT2_OUTPUT_DIR")
+    os.chdir(out_cwd if out_cwd and os.path.isdir(out_cwd) else examples_dir)
     os.execvpe(sys.executable, child_argv, env)
 
 

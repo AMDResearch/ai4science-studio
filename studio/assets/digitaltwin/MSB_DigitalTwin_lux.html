@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AMD · Molten-Salt Blanket Digital Twin</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  html, body { height:100%; overflow:hidden; }
+  body{font-family:'Inter',system-ui,sans-serif;color:#f5f5f7;
+    background:radial-gradient(140% 140% at 50% 0%,#1a0507 0%,#0a0203 55%,#000 100%);
+    background-attachment:fixed;-webkit-font-smoothing:antialiased;}
+  main{height:100vh;overflow-y:scroll;scroll-snap-type:y mandatory;}
+  .slide{width:100%;min-height:100vh;scroll-snap-align:start;scroll-snap-stop:always;
+    display:flex;align-items:center;justify-content:center;position:relative;
+    padding:5rem 1.5rem 3rem;overflow:hidden;}
+  .gradient-text{background:linear-gradient(135deg,#ED1C24 0%,#FF3B41 55%,#ff7a45 100%);
+    -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;}
+  .card{background:rgba(20,20,22,.72);border:1px solid #27272a;border-radius:1rem;
+    backdrop-filter:blur(8px);transition:all .25s ease;}
+  .card:hover{border-color:#3f2224;transform:translateY(-3px);box-shadow:0 12px 30px rgba(237,28,36,.10);}
+  .hero-glow{position:absolute;border-radius:50%;filter:blur(120px);opacity:.16;pointer-events:none;}
+  .section-label{font-size:.7rem;font-weight:700;letter-spacing:.15em;text-transform:uppercase;color:#ED1C24;margin-bottom:.6rem;}
+  nav{position:fixed;top:0;left:0;right:0;z-index:50;background:rgba(10,2,3,.82);
+    backdrop-filter:blur(16px);border-bottom:1px solid rgba(39,39,42,.7);}
+  nav a{transition:color .2s;color:#a1a1aa;} nav a:hover,nav a.active{color:#FF3B41;}
+  .slide-counter{position:fixed;bottom:1.1rem;right:1.6rem;z-index:50;font-size:.72rem;color:#71717a;font-variant-numeric:tabular-nums;}
+  .foot{position:absolute;bottom:.6rem;left:50%;transform:translateX(-50%);font-size:.58rem;color:#52525b;letter-spacing:.05em;white-space:nowrap;}
+  .chartbox{position:relative;width:100%;height:300px;}
+  .badge{font-weight:800;letter-spacing:.05em;padding:.15rem .6rem;border-radius:9999px;font-size:.62rem;display:inline-block;}
+  .badge-amd{background:rgba(237,28,36,.16);color:#ff8f93;border:1px solid rgba(237,28,36,.45);}
+  .badge-ok{background:rgba(33,199,122,.14);color:#6ee7b7;border:1px solid rgba(33,199,122,.4);}
+  .badge-info{background:rgba(56,189,248,.14);color:#7dd3fc;border:1px solid rgba(56,189,248,.4);}
+  .eq{font-family:'Georgia',serif;letter-spacing:.03em;}
+  .amd-corner{position:fixed;top:.55rem;right:1.5rem;z-index:60;height:22px;opacity:.95;}
+  ::-webkit-scrollbar{width:8px;}::-webkit-scrollbar-thumb{background:#27272a;border-radius:4px;}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="max-w-7xl mx-auto px-5 py-2.5 flex items-center justify-between">
+    <div class="flex items-center gap-2.5">
+      <img src="AMD-Logo.png" alt="AMD" style="height:22px">
+      <span class="text-slate-600 text-sm">|</span>
+      <span class="text-slate-300 text-sm font-semibold">Molten-Salt Blanket Digital Twin</span>
+    </div>
+    <div class="hidden lg:flex items-center gap-5 text-xs">
+      <a href="#s2">Problem</a><a href="#s3">FLiBe</a><a href="#s4">OpenMC</a>
+      <a href="#s5">Pillars</a><a href="#s6">Calibrate</a><a href="#s7">Optimize</a>
+      <a href="#s8">Twin</a><a href="#s9">Limits</a>
+    </div>
+  </div>
+</nav>
+<div class="slide-counter" id="slideCounter">1 / 9</div>
+
+<main id="mainScroller">
+
+<!-- 1 · TITLE -->
+<section class="slide" id="s1">
+  <div class="hero-glow" style="width:680px;height:680px;background:#ED1C24;top:-240px;left:-180px;"></div>
+  <div class="hero-glow" style="width:520px;height:520px;background:#FF3B41;bottom:-200px;right:-140px;opacity:.10"></div>
+  <div class="max-w-5xl mx-auto text-center">
+    <img src="AMD-Logo.png" alt="AMD" style="height:44px;margin:0 auto 1.5rem;">
+    <p class="section-label" style="margin-bottom:1.25rem;">Physics-Conditioned AI for the Physical World</p>
+    <h1 class="text-4xl md:text-6xl font-black mb-4 leading-tight">
+      <span class="gradient-text">Molten-Salt Blanket</span> Digital Twin
+    </h1>
+    <p class="text-lg md:text-2xl text-slate-300 mb-3">Tritium breeding by design — OpenMC-calibrated, laptop-fast, glass-box</p>
+    <p class="text-slate-400 max-w-2xl mx-auto mb-9 text-sm md:text-base">
+      A FLiBe breeding-blanket twin built with the AxiomFabric&trade; four-pillar methodology and
+      calibrated against 3D Monte-Carlo neutronics (OpenMC) running on AMD Instinct&trade; GPUs.
+      Every number traces to a cited anchor.
+    </p>
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 max-w-4xl mx-auto text-left">
+      <div class="card p-4"><div class="text-3xl font-black gradient-text">6Li</div><div class="text-slate-400 text-xs mt-1">(n,t)&#8203; breeding, ~940 b thermal anchor</div></div>
+      <div class="card p-4"><div class="text-3xl font-black gradient-text" id="k_runs">90</div><div class="text-slate-400 text-xs mt-1">OpenMC ground-truth runs, seed 2026</div></div>
+      <div class="card p-4"><div class="text-3xl font-black gradient-text">&mu;s</div><div class="text-slate-400 text-xs mt-1">twin TBR prediction, vs minutes for MC</div></div>
+      <div class="card p-4"><div class="text-3xl font-black gradient-text">1.05</div><div class="text-slate-400 text-xs mt-1">self-sufficiency floor (Abdou 2021)</div></div>
+    </div>
+  </div>
+  <div class="foot">AxiomFabric&trade; · AMD Instinct&trade; MI355X · OpenMC 0.15.3 / ENDF/B-VIII.0 · Vultr-Lux cluster</div>
+</section>
+
+<!-- 2 · PROBLEM -->
+<section class="slide" id="s2">
+  <div class="hero-glow" style="width:600px;height:600px;background:#ED1C24;top:-200px;right:-120px;opacity:.10;"></div>
+  <div class="max-w-5xl mx-auto">
+    <p class="section-label">The Problem</p>
+    <h2 class="text-3xl md:text-4xl font-black mb-3">No breeding blanket, <span class="gradient-text">no fusion power plant</span></h2>
+    <p class="text-slate-400 max-w-3xl mb-8 text-sm md:text-base">
+      A DT reactor burns tritium that does not exist in nature. It must breed its own from lithium
+      via 6Li(n,t)4He, with a tritium breeding ratio (TBR) above ~1.05 to stay self-sufficient — and
+      the entire margin is only 5–15%. Detailed 3D neutronics tells you the TBR of one design, slowly.
+      You cannot search thousands of designs that way.
+    </p>
+    <div class="grid md:grid-cols-3 gap-4">
+      <div class="card p-5"><div class="font-bold mb-1" style="color:#FF3B41">Thin margin</div><div class="text-slate-400 text-sm">Required TBR 1.05–1.15; achievable ceiling ~1.15 for the best 3D designs. Miss it and the plant starves (Abdou 2021, Sawan &amp; Abdou 2006).</div></div>
+      <div class="card p-5"><div class="font-bold mb-1" style="color:#FF3B41">Slow to explore</div><div class="text-slate-400 text-sm">Each Monte-Carlo point is minutes to hours. Sweeping enrichment × thickness × multiplier × geometry is out of reach interactively.</div></div>
+      <div class="card p-5"><div class="font-bold mb-1" style="color:#FF3B41">Trust must transfer</div><div class="text-slate-400 text-sm">A black-box surrogate you cannot audit is unusable for a first-of-a-kind blanket you cannot yet measure.</div></div>
+    </div>
+    <p class="text-slate-300 mt-8 text-sm md:text-base">
+      <span class="gradient-text font-semibold">Our answer:</span> a glass-box reduced model that runs in microseconds,
+      calibrated to OpenMC, wrapped into a digital twin that optimizes the blanket and states its own limits.
+    </p>
+  </div>
+  <div class="foot">Anchors: Abdou et al 2021 (Nucl. Fusion 61 013001) · Sawan &amp; Abdou 2006 (Fus. Eng. Des. 81 1131)</div>
+</section>
+
+<!-- 3 · FLiBe PHYSICS -->
+<section class="slide" id="s3">
+  <div class="max-w-6xl mx-auto w-full">
+    <p class="section-label">The Breeder</p>
+    <h2 class="text-3xl md:text-4xl font-black mb-2">FLiBe — the molten-salt breeding blanket</h2>
+    <p class="text-slate-400 mb-8 text-sm md:text-base max-w-3xl">A molten fluoride salt (2LiF&middot;BeF&#8322;, "FLiBe") is breeder, coolant, and neutron moderator in one. The ARC design immerses the whole vessel in it.</p>
+    <div class="grid md:grid-cols-2 gap-6 items-center">
+      <div class="space-y-4">
+        <div class="card p-5"><div class="eq text-lg text-slate-200 mb-1">&#8310;Li + n &rarr; T + &#8308;He&nbsp;&nbsp;<span class="text-slate-500 text-sm">(+4.78 MeV, ~940 b thermal)</span></div>
+          <div class="text-slate-400 text-sm">The workhorse: exothermic, huge thermal cross section. Enriching Li-6 above natural 7.59% raises breeding.</div></div>
+        <div class="card p-5"><div class="eq text-lg text-slate-200 mb-1">&#8311;Li + n &rarr; T + &#8308;He + n'&nbsp;&nbsp;<span class="text-slate-500 text-sm">(threshold ~2.8 MeV)</span></div>
+          <div class="text-slate-400 text-sm">Fast channel: breeds AND conserves the neutron. Matters most for the 14.1 MeV DT source spectrum.</div></div>
+        <div class="card p-5"><div class="eq text-lg text-slate-200 mb-1">Be / Pb (n,2n)&nbsp;&nbsp;<span class="text-slate-500 text-sm">neutron multiplier</span></div>
+          <div class="text-slate-400 text-sm">A thin multiplier layer makes up the neutron deficit so TBR can clear 1.0 with margin.</div></div>
+      </div>
+      <div class="card p-6">
+        <div class="text-xs font-bold tracking-widest text-slate-400 mb-3">DESIGN KNOBS THE TWIN CONTROLS</div>
+        <ul class="text-slate-300 text-sm space-y-3">
+          <li><span class="badge badge-amd">1</span> &nbsp;<b>Li-6 enrichment</b> — 7.59% natural &rarr; 90% enriched</li>
+          <li><span class="badge badge-amd">2</span> &nbsp;<b>Blanket thickness</b> — 0.3 &rarr; 1.5 m of FLiBe</li>
+          <li><span class="badge badge-amd">3</span> &nbsp;<b>Neutron multiplier</b> — none / Be / Pb</li>
+        </ul>
+        <div class="mt-5 text-xs text-slate-500">Reference: ARC immersion FLiBe blanket, TBR 1.08–1.1 (Sorbom 2015; Kuang 2018).</div>
+      </div>
+    </div>
+  </div>
+  <div class="foot">6Li(n,t) 940 b: ENDF/B-VIII.0 (Brown 2018) · ARC FLiBe: Sorbom 2015 / Kuang 2018</div>
+</section>
+
+<!-- 4 · OPENMC -->
+<section class="slide" id="s4">
+  <div class="max-w-6xl mx-auto w-full">
+    <p class="section-label">Detailed Simulation</p>
+    <h2 class="text-3xl md:text-4xl font-black mb-2">OpenMC — the <span class="gradient-text">ground truth</span></h2>
+    <p class="text-slate-400 mb-6 text-sm md:text-base max-w-3xl">
+      3D Monte-Carlo neutron transport of a 14.1 MeV DT source in a spherical immersion blanket
+      (W first wall, Eurofer structure, optional Be/Pb multiplier, steel-homogenized FLiBe breeder, graphite reflector),
+      ENDF/B-VIII.0 data, on AMD Instinct&trade; MI355X GPUs (Vultr-Lux cluster). TBR = tritium produced per source neutron.
+    </p>
+    <div class="grid md:grid-cols-3 gap-4 mb-6">
+      <div class="card p-5"><div class="text-2xl font-black gradient-text" id="k_openmc_runs">90 runs</div><div class="text-slate-400 text-xs mt-1">enrichment × thickness × multiplier grid</div></div>
+      <div class="card p-5"><div class="text-2xl font-black gradient-text" id="k_ref_tbr">TBR ≈ 1.06</div><div class="text-slate-400 text-xs mt-1">realistic blanket: 15 vol% steel, 85% coverage</div></div>
+      <div class="card p-5"><div class="text-2xl font-black gradient-text">&lt;0.5%</div><div class="text-slate-400 text-xs mt-1">MC statistical uncertainty (trigger-controlled)</div></div>
+    </div>
+    <div class="card p-6"><div class="chartbox"><canvas id="openmcChart"></canvas></div>
+      <div class="text-xs text-slate-500 mt-2">OpenMC TBR vs Li-6 enrichment at 1.0 m blanket, per multiplier. Steel-homogenized breeder + 85% coverage put TBR in the real 1.0–1.1 self-sufficiency regime, where enrichment and multiplier genuinely trade.</div></div>
+  </div>
+  <div class="foot">OpenMC 0.15.3 · ENDF/B-VIII.0 · 14.1 MeV DT point source · fixed-source mode · std-dev trigger 0.5%</div>
+</section>
+
+<!-- 5 · FOUR PILLARS -->
+<section class="slide" id="s5">
+  <div class="max-w-6xl mx-auto w-full">
+    <p class="section-label">The Methodology</p>
+    <h2 class="text-3xl md:text-4xl font-black mb-2">AxiomFabric&trade; — four pillars, applied to breeding</h2>
+    <p class="text-slate-400 mb-8 text-sm md:text-base max-w-3xl">Physics that doesn't change, times intelligence that learns from data, equals an auditable twin.</p>
+    <div class="grid md:grid-cols-4 gap-3 items-stretch">
+      <div class="card p-5"><div class="text-xs font-bold tracking-widest mb-2" style="color:#FF3B41">01 · PLANTFORGE</div><div class="text-white font-semibold text-sm mb-1">Reduced physics</div><div class="text-slate-400 text-xs">A glass-box 1D two-group slab TBR model — the 6Li e-folding, effective path, multiplier factor, parasitic loss. Runs in microseconds.</div></div>
+      <div class="card p-5"><div class="text-xs font-bold tracking-widest mb-2" style="color:#FF3B41">02 · OPENMC</div><div class="text-white font-semibold text-sm mb-1">Ground truth</div><div class="text-slate-400 text-xs">3D Monte-Carlo neutronics on AMD GPUs provides the reference TBR the reduced model is measured against.</div></div>
+      <div class="card p-5"><div class="text-xs font-bold tracking-widest mb-2" style="color:#FF3B41">03 · DELTAFUSION</div><div class="text-white font-semibold text-sm mb-1">Calibrate + close the gap</div><div class="text-slate-400 text-xs">Fit the reduced model's group constants to OpenMC, then a small learned delta-net closes the residual — MC accuracy at reduced-model speed.</div></div>
+      <div class="card p-5"><div class="text-xs font-bold tracking-widest mb-2" style="color:#FF3B41">04 · OPTIMIZE</div><div class="text-white font-semibold text-sm mb-1">Design &amp; twin</div><div class="text-slate-400 text-xs">Differential evolution over the fast twin finds the best breeding design across the whole space — the twin for design and operation.</div></div>
+    </div>
+    <div class="card p-5 mt-5"><div class="eq text-lg text-center text-slate-200">TBR<sub>twin</sub>(x) = TBR<sub>reduced</sub>(x) + &delta;<sub>net</sub>(x)&nbsp;&nbsp;&nbsp;&nbsp;x = (Li-6 enrichment, thickness, multiplier)</div></div>
+  </div>
+  <div class="foot">Glass-box first: the delta is a correction on physics, never a black-box replacement.</div>
+</section>
+
+<!-- 6 · CALIBRATION -->
+<section class="slide" id="s6">
+  <div class="max-w-6xl mx-auto w-full">
+    <p class="section-label">DeltaFusion</p>
+    <h2 class="text-3xl md:text-4xl font-black mb-2">Calibrating the reduced model to <span class="gradient-text">Monte-Carlo</span></h2>
+    <p class="text-slate-400 mb-6 text-sm md:text-base max-w-3xl">The reduced model's effective group constants are fit to the OpenMC sweep (inverse-variance weighted least squares); the delta-net then removes what physics-plus-fit leaves behind.</p>
+    <div class="grid md:grid-cols-2 gap-5">
+      <div class="card p-6"><div class="text-xs font-bold tracking-widest text-slate-400 mb-3">FIDELITY LADDER</div>
+        <div class="chartbox"><canvas id="fidChart"></canvas></div>
+        <div class="text-xs text-slate-500 mt-2">Model TBR vs OpenMC TBR. Perfect agreement lies on the dashed line.</div></div>
+      <div class="card p-6"><div class="text-xs font-bold tracking-widest text-slate-400 mb-3">ERROR VS OPENMC</div>
+        <div class="grid grid-cols-2 gap-3 mb-4">
+          <div class="card p-4"><div class="text-2xl font-black text-slate-300" id="k_prior_rmse">—</div><div class="text-slate-500 text-xs mt-1">RMSE, reduced prior</div></div>
+          <div class="card p-4"><div class="text-2xl font-black gradient-text" id="k_twin_rmse">—</div><div class="text-slate-500 text-xs mt-1">RMSE, calibrated twin</div></div>
+        </div>
+        <div class="text-slate-400 text-sm">The honest &plusmn;30% 1D-vs-3D model-form band is preserved: calibration tightens the point value, it does not erase the model-form uncertainty. Self-sufficiency screening always uses the lower band edge.</div>
+      </div>
+    </div>
+  </div>
+  <div class="foot">Least-squares calibration + learned residual · band per Sawan &amp; Abdou 2006 model-form context</div>
+</section>
+
+<!-- 7 · OPTIMIZE -->
+<section class="slide" id="s7">
+  <div class="max-w-6xl mx-auto w-full">
+    <p class="section-label">Design Optimization</p>
+    <h2 class="text-3xl md:text-4xl font-black mb-2">The best design — and an <span class="gradient-text">honest margin</span></h2>
+    <p class="text-slate-400 mb-6 text-sm md:text-base max-w-3xl">Differential evolution over the fast twin searches the whole space for maximum breeding at least cost. It lands on an interior optimum (~46% Li-6, Be multiplier) — and shows the margin is thin: TBR clears 1.05 on the point estimate but the honest ±10% band dips below it.</p>
+    <div class="grid md:grid-cols-2 gap-5 items-stretch">
+      <div class="card p-6"><div class="text-xs font-bold tracking-widest text-slate-400 mb-3">CONVERGENCE</div>
+        <div class="chartbox"><canvas id="optChart"></canvas></div>
+        <div class="text-xs text-slate-500 mt-2">Best-so-far TBR per DE iteration; dashed = required 1.05.</div></div>
+      <div class="card p-6 flex flex-col justify-center">
+        <div class="text-xs font-bold tracking-widest text-slate-400 mb-3">RECOMMENDED DESIGN</div>
+        <div id="reco" class="space-y-3 text-slate-200"></div>
+        <div class="text-xs text-slate-500 mt-5">Optimization runs entirely on the twin: what OpenMC does in minutes per point, the twin explores across the whole space in seconds.</div>
+      </div>
+    </div>
+  </div>
+  <div class="foot">scipy differential evolution over the calibrated twin · seed 2026 · cost = enrichment + thickness proxy</div>
+</section>
+
+<!-- 8 · LIVE TWIN -->
+<section class="slide" id="s8">
+  <div class="max-w-5xl mx-auto text-center">
+    <p class="section-label" style="margin-bottom:1.25rem;">The Deliverable</p>
+    <h2 class="text-3xl md:text-4xl font-black mb-4">An interactive twin for <span class="gradient-text">design &amp; operation</span></h2>
+    <p class="text-slate-400 max-w-2xl mx-auto mb-8 text-sm md:text-base">
+      The same twin ships as a live dashboard: move the design knobs, watch TBR update in real time with
+      the honest band and OpenMC ground truth overlaid, and let the optimizer recommend a self-sufficient design.
+    </p>
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 max-w-4xl mx-auto text-left">
+      <div class="card p-4"><div class="text-2xl font-black gradient-text">Live</div><div class="text-slate-400 text-xs mt-1">browser dashboard, no GPU needed at runtime</div></div>
+      <div class="card p-4"><div class="text-2xl font-black gradient-text">Auditable</div><div class="text-slate-400 text-xs mt-1">every prediction = physics + visible correction</div></div>
+      <div class="card p-4"><div class="text-2xl font-black gradient-text">Fast</div><div class="text-slate-400 text-xs mt-1">microsecond TBR, real-time sweeps</div></div>
+      <div class="card p-4"><div class="text-2xl font-black gradient-text">AMD</div><div class="text-slate-400 text-xs mt-1">OpenMC + surrogate trained on Instinct GPUs</div></div>
+    </div>
+  </div>
+  <div class="foot">webapp/index.html · driven live in the demo video</div>
+</section>
+
+<!-- 9 · LIMITS -->
+<section class="slide" id="s9">
+  <div class="hero-glow" style="width:560px;height:560px;background:#ED1C24;bottom:-200px;left:-120px;opacity:.10"></div>
+  <div class="max-w-5xl mx-auto">
+    <p class="section-label">Honest Limits</p>
+    <h2 class="text-3xl md:text-4xl font-black mb-6">What this twin <span class="gradient-text">does not</span> claim</h2>
+    <div class="grid md:grid-cols-2 gap-4">
+      <div class="card p-5"><div class="font-bold text-slate-200 mb-1">Two honest bands</div><div class="text-slate-400 text-sm">The raw 1D slab carries a &plusmn;30% model-form band vs 3D MC. After calibration to OpenMC the twin's residual is &lt;1%, so the reported band is the &plusmn;10% OpenMC-vs-reality uncertainty (nuclear data + geometry) — never removed.</div></div>
+      <div class="card p-5"><div class="font-bold text-slate-200 mb-1">1D-spherical geometry</div><div class="text-slate-400 text-sm">The OpenMC ground truth is a 1D sphere with homogenized steel and a coverage factor — realistic in magnitude (TBR ~1.0–1.1, near ARC's 1.08) but not a specific 3D machine CAD. Calibrated to this reference, not yet to a named device.</div></div>
+      <div class="card p-5"><div class="font-bold text-slate-200 mb-1">Nuclear-data sensitivity</div><div class="text-slate-400 text-sm">TBR carries 5–15% modeling and nuclear-data uncertainty — comparable to the whole self-sufficiency margin. TBR has never been measured in an integrated system (ITER TBMs will give the first data).</div></div>
+      <div class="card p-5"><div class="font-bold text-slate-200 mb-1">Screening tier</div><div class="text-slate-400 text-sm">This is a design-screening twin, not a licensing calculation. It rank-orders and narrows the space fast; final designs still need full 3D MC.</div></div>
+    </div>
+    <p class="text-slate-300 mt-8 text-sm md:text-base"><span class="gradient-text font-semibold">The point:</span> a twin you can trust is one that shows its physics and states its band. That is the AxiomFabric contract.</p>
+  </div>
+  <div class="foot">Uncertainty context: Abdou 2021 · Gilbert 2013 (nuclear-data spread) · every number traces to a cited anchor</div>
+</section>
+
+</main>
+
+<script src="deck_data.js"></script>
+<script>
+const D = window.DECK_DATA || null;
+document.querySelectorAll('.slide').forEach((s,i)=>{
+  const c=document.createElement('div'); c.className='foot'; // keep existing foots
+});
+// slide counter
+const slides=[...document.querySelectorAll('.slide')];
+const scroller=document.getElementById('mainScroller');
+scroller.addEventListener('scroll',()=>{
+  let idx=0,min=1e9;
+  slides.forEach((s,i)=>{const d=Math.abs(s.getBoundingClientRect().top);if(d<min){min=d;idx=i;}});
+  document.getElementById('slideCounter').textContent=`${idx+1} / ${slides.length}`;
+});
+
+Chart.defaults.color="#a1a1aa";
+Chart.defaults.font.family="Inter, system-ui, sans-serif";
+Chart.defaults.borderColor="rgba(39,39,42,.6)";
+const AMD="#ED1C24",AMDB="#FF3B41",INFO="#38bdf8",OK="#21c77a",MUT="#a1a1aa",AMBER="#f5a524";
+
+function build(){
+  if(!D){console.warn("deck_data.js missing");return;}
+  // KPI fills
+  if(D.n_runs){document.getElementById('k_runs').textContent=D.n_runs;
+    document.getElementById('k_openmc_runs').textContent=D.n_runs+' runs';}
+  if(D.ref_tbr){document.getElementById('k_ref_tbr').textContent='TBR ≈ '+D.ref_tbr.toFixed(2);}
+  if(D.calibration){
+    document.getElementById('k_prior_rmse').textContent=D.calibration.prior_rmse.toFixed(3);
+    document.getElementById('k_twin_rmse').textContent=(D.calibration.twin_rmse??D.calibration.rmse).toFixed(3);
+  }
+
+  // OpenMC chart: TBR vs Li-6 at 1.0 m per multiplier
+  const byMult={};
+  D.openmc.filter(r=>Math.abs(r.t_blanket-1.0)<0.01).forEach(r=>{
+    (byMult[r.multiplier]=byMult[r.multiplier]||[]).push({x:r.li6*100,y:r.tbr});});
+  const colors={none:MUT,Be:AMD,Pb:INFO};
+  new Chart(document.getElementById('openmcChart'),{type:'line',
+    data:{datasets:Object.keys(byMult).map(m=>({label:m+' multiplier',
+      data:byMult[m].sort((a,b)=>a.x-b.x),borderColor:colors[m]||AMBER,
+      backgroundColor:colors[m]||AMBER,borderWidth:2.5,pointRadius:4,tension:.2}))},
+    options:{maintainAspectRatio:false,
+      scales:{x:{type:'linear',title:{display:true,text:'Li-6 enrichment (%)'}},
+        y:{title:{display:true,text:'TBR (per source neutron)'}}}}});
+
+  // fidelity
+  new Chart(document.getElementById('fidChart'),{type:'scatter',
+    data:{datasets:[
+      {label:'reduced (prior)',data:D.fidelity.reduced,backgroundColor:MUT,pointRadius:4},
+      {label:'twin (calibrated)',data:D.fidelity.twin,backgroundColor:AMD,pointRadius:4},
+      {label:'ideal',type:'line',data:D.fidelity.ideal,borderColor:OK,borderDash:[6,4],borderWidth:1.5,pointRadius:0}]},
+    options:{maintainAspectRatio:false,
+      scales:{x:{title:{display:true,text:'OpenMC TBR'}},y:{title:{display:true,text:'model TBR'}}}}});
+
+  // optimization convergence
+  const rec=D.optimization.recommended;
+  const hist=(D.optimization.per_multiplier[rec.multiplier]||rec).history||[];
+  let best=-1;const bestArr=hist.map(h=>{best=Math.max(best,h.tbr);return best;});
+  new Chart(document.getElementById('optChart'),{type:'line',
+    data:{labels:hist.map((_,i)=>i),datasets:[
+      {label:'best TBR so far',data:bestArr,borderColor:AMD,borderWidth:2.5,pointRadius:0,tension:.2},
+      {label:'required',data:hist.map(()=>D.tbr_required),borderColor:OK,borderDash:[6,4],borderWidth:1.5,pointRadius:0}]},
+    options:{maintainAspectRatio:false,
+      scales:{x:{title:{display:true,text:'iteration'}},
+        y:{title:{display:true,text:'TBR'},suggestedMin:0.8,suggestedMax:1.6}}}});
+
+  // recommended design card
+  document.getElementById('reco').innerHTML=`
+    <div class="flex justify-between"><span class="text-slate-400">Multiplier</span><b>${rec.multiplier}</b></div>
+    <div class="flex justify-between"><span class="text-slate-400">Li-6 enrichment</span><b>${(rec.li6_opt*100).toFixed(1)}%</b></div>
+    <div class="flex justify-between"><span class="text-slate-400">Blanket thickness</span><b>${rec.t_blanket_opt.toFixed(2)} m</b></div>
+    <div class="flex justify-between border-t border-slate-800 pt-3"><span class="text-slate-400">Twin TBR</span><b class="gradient-text text-lg">${rec.tbr_opt.toFixed(3)}</b></div>
+    <div class="flex justify-between"><span class="text-slate-400">Lower band edge</span><b>${rec.tbr_lo_opt.toFixed(3)}</b></div>
+    <div class="mt-2">${
+      rec.feasible ? '<span class="badge badge-ok">SELF-SUFFICIENT</span>'
+      : rec.tbr_opt >= D.tbr_required ? '<span class="badge badge-warn">MARGINAL — point OK, band edge below required</span>'
+      : '<span class="badge badge-amd">BELOW REQUIRED</span>'}</div>`;
+}
+build();
+</script>
+</body>
+</html>

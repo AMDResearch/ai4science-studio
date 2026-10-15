@@ -69,7 +69,11 @@
 
 set -euo pipefail
 
-if [[ -n "${SLURM_JOB_ID:-}" ]]; then
+if [[ -n "${STUDIO_EXAMPLES_DIR:-}" ]]; then
+  # Invoked by AI4Science Studio, which bash-calls this script; scontrol would
+  # resolve to the studio's generated job.sh, so honor the explicit dir instead.
+  SCRIPT_DIR=$(cd "$STUDIO_EXAMPLES_DIR" && pwd)
+elif [[ -n "${SLURM_JOB_ID:-}" ]]; then
   _ORIG_CMD=$(scontrol show job "$SLURM_JOB_ID" | sed -n 's/.*Command=\(\S\+\).*/\1/p')
   SCRIPT_DIR=$(cd "$(dirname "$_ORIG_CMD")" && pwd)
 else
@@ -284,6 +288,11 @@ if [[ -n "${ORBIT2_SIF:-}" ]]; then
     echo "--- Using overlay: ${ORBIT2_OVERLAY} ---"
   fi
 
+  # visualize.py writes output PNGs/npy to its cwd; /orbit2/examples is a
+  # read-only bind, so run from a writable, bound output dir instead.
+  ORBIT2_OUTPUT_DIR="${ORBIT2_OUTPUT_DIR:-${ORBIT2_BASE}/outputs}"
+  mkdir -p "$ORBIT2_OUTPUT_DIR"
+
   # Write a per-rank launcher script so srun can invoke it directly.
   RANK_SCRIPT="${TMPDIR:-/tmp}/orbit2_rank_${SLURM_JOB_ID:-$$}.sh"
   cat > "$RANK_SCRIPT" << RANKEOF
@@ -292,7 +301,8 @@ set -euo pipefail
 source /opt/venv/bin/activate
 echo "[rank \$SLURM_PROCID / \$SLURM_NTASKS] GPU \$SLURM_LOCALID on \$(hostname)"
 export PYTHONPATH="/opt/orbit2-pkgs:/orbit2/src:/orbit2:\${PYTHONPATH:-}"
-cd /orbit2/examples
+export ORBIT2_OUTPUT_DIR=/orbit2out
+cd /orbit2out
 python3 /examples/run_visualize.py \\
     --orbit2-root /orbit2 \\
     /config/config.yaml \\
@@ -325,11 +335,16 @@ RANKEOF
   #   os.environ["MASTER_ADDR"] = os.environ["HOSTNAME"]
   # Using localhost only works single-node; the scontrol-derived hostname works
   # for any number of nodes without changing the srun command.
-  srun --mpi=pmix apptainer exec \
+  # --cpu-bind=none --overlap: when this batch job is packed onto a node with a
+  # fragmented CPU mask (e.g. shared/oversubscribed nodes), strict binding makes
+  # the nested step fail "Unable to satisfy cpu bind request". Single-GPU
+  # visualize doesn't need pinned affinity, so disable it.
+  srun --mpi=pmix --cpu-bind=none --overlap apptainer exec \
       --rocm \
       "${OVERLAY_ARG[@]}" "${PKGDIR_BIND[@]}" \
       --bind "$ORBIT2_ROOT":/orbit2 \
       --bind "$SCRIPT_DIR":/examples \
+      --bind "$ORBIT2_OUTPUT_DIR":/orbit2out \
       --bind "$(dirname "$RANK_SCRIPT"):$(dirname "$RANK_SCRIPT")" \
       --bind "$CONFIG_BIND" \
       --env HOSTNAME="$MASTER_ADDR" \
