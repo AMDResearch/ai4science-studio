@@ -6,6 +6,14 @@
 
 ORBIT-2 is a scalable **vision foundation model for global weather and climate downscaling**, combining a Reslim (Residual Slim ViT) architecture with **TILES** (tile-wise sequence scaling) for long sequences and large-scale training. Checkpoints on Hugging Face include **pretrain** and **fine-tuned** weights (e.g. US regional and global precipitation/temperature variants). **Exact file names and folder layout change over time**—always check the [current Hub tree](https://huggingface.co/jychoi-hpc/ORBIT-2/tree/main) before scripting downloads.
 
+## Validated on AMD Instinct (MI355X)
+
+ORBIT-2 has been reproduced end-to-end on AMD Instinct **MI355X** (gfx950, 8 GPU/node) via the Studio recipes:
+
+- **Inference / visualization** — single- and multi-GPU runs, containerized (ROCm PyTorch + Apptainer overlay), synthetic-data smoke test and real ERA5/PRISM paths. See [`recipes/inference/`](recipes/inference/).
+- **Training** — multi-node training validated at **1, 2, 4, and 8 nodes** (8 GPU/node) with hybrid FSDP. Clean near-linear scaling at small node counts; per-epoch loss decreases monotonically as a crash/hang sanity gate (not an absolute-convergence claim). Full weak-/strong-scaling tables, methodology, and caveats are in [`recipes/train/`](recipes/train/).
+- **Run model** — Apptainer overlay for Python deps + a shared scratch root (`AI4S_SHARED_DIR`); every knob is an `ORBIT2_*` environment variable with documented defaults (see [`examples/`](examples/)).
+
 ## Using this model
 
 Training, inference, visualization, and SLURM examples are maintained in the **GitHub repository**, not in AI4Science Studio. This repo only holds **pointers and runbook-style recipes**:

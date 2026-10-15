@@ -12,6 +12,7 @@ description: Applies when working in the AI4Science Studio repository. Use for d
 - **Model index:** Root [`models.yaml`](../../../models.yaml) — **generated** list of all models. Read this first for discovery. Do not edit it by hand.
 - **Per-model manifest:** `<domain>/models/<model-slug>/model.yaml` — source of truth (HF id, license, recipes, env vars, hardware). Schema: [`schemas/model.schema.json`](../../../schemas/model.schema.json).
 - **Human index:** Root [`README.md`](../../../README.md).
+- **Web GUI:** [`studio/`](../../../studio/) — a Streamlit app (launch with `./studio.sh`) that browses models, runs `/init-cluster`-style discovery, submits jobs, and monitors them from a browser. It reads the same `models.yaml` / `model.yaml` and submits the same sbatch scripts; it does not fork run logic. Point-and-click alternative to the run / init-cluster slash commands.
 
 ## Model slug rule
 

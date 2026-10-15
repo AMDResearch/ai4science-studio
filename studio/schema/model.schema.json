@@ -1,0 +1,75 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/AMDResearch/ai4science-studio/studio/schema/model.schema.json",
+  "title": "AI4Science Studio model.yaml",
+  "description": "Per-model manifest. Extra properties are allowed for forward compatibility.",
+  "type": "object",
+  "required": ["name", "license", "task", "domain"],
+  "additionalProperties": true,
+  "properties": {
+    "name": {"type": "string"},
+    "hf_id": {"type": "string", "description": "Hugging Face id org/model, or 'N/A'."},
+    "license": {"type": "string", "description": "SPDX id or link."},
+    "task": {"type": "string"},
+    "domain": {
+      "type": "string",
+      "enum": ["earth_science", "material_science", "protein_folding", "healthcare", "physics_simulation"]
+    },
+    "upstream_code": {"type": "string"},
+    "upstream_branch": {"type": "string"},
+    "paper": {"type": ["string", "null"]},
+    "container_image": {
+      "description": "Single image string or a list of image strings.",
+      "oneOf": [
+        {"type": "string"},
+        {"type": "array", "items": {"type": "string"}}
+      ]
+    },
+    "vram_gb": {"type": ["number", "null"]},
+    "validated_hardware": {"type": "array", "items": {"type": "string"}},
+    "weight_source": {"type": "string"},
+    "data_source": {"type": "string"},
+    "data_format": {"type": "string"},
+    "disclaimer": {"type": "string"},
+    "model_variants": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {"type": "string"},
+          "conditioning": {"type": "string"}
+        }
+      }
+    },
+    "recipes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["task"],
+        "additionalProperties": true,
+        "properties": {
+          "task": {"type": "string"},
+          "description": {"type": "string"},
+          "recipe_path": {"type": "string"},
+          "script": {"type": "string"},
+          "slurm": {"type": "string", "description": "SLURM script path (alias of sbatch_script)."},
+          "sbatch_script": {"type": "string", "description": "SLURM script path (alias of slurm)."}
+        }
+      }
+    },
+    "env_vars": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "description": {"type": "string"},
+          "required": {"type": "boolean"},
+          "default": {"type": ["string", "number", "boolean", "null"]},
+          "enum": {"type": "array", "items": {"type": "string"},
+                    "description": "Optional explicit allow-list for select widgets."}
+        }
+      }
+    }
+  }
+}

@@ -6,6 +6,15 @@
 
 This release is an **ensemble of fifteen predictive graph foundation models (GFMs)** for **atomistic materials** modeling, trained with [HydraGNN](https://github.com/ORNL/HydraGNN) using **multi-task** objectives for **system energy** (graph-level) and **atomic forces** (node-level). Training aggregates five open datasets totaling on the order of **154M** structures (see the [model card](https://huggingface.co/mlupopa/HydraGNN_Predictive_GFM_2024) for scope, curation, and limitations—e.g. **no excited states**). The Hugging Face repo hosts **ADIOS**-format preprocessed data under `ADIOS_files/` and checkpoints under `Ensemble_of_models/`. **Exact file names and layout can change**—check the [current Hub tree](https://huggingface.co/mlupopa/HydraGNN_Predictive_GFM_2024/tree/main) before scripting downloads.
 
+## Validated on AMD Instinct (MI355X)
+
+HydraGNN has been reproduced end-to-end on AMD Instinct **MI355X** (gfx950, 8 GPU/node) via the Studio recipes:
+
+- **Inference** — ensemble checkpoint loads and runs (energy + forces heads), containerized (ROCm PyTorch + Apptainer overlay). See [`recipes/inference/`](recipes/inference/).
+- **Training** — single- and multi-node distributed training validated at **1, 2, 4, and 8 nodes** (8 GPU/node) with strong-scaling efficiency held to ~0.94 at 8 nodes; multi-epoch runs show smooth, monotonic loss convergence. Scaling tables and hyperparameter notes are in [`recipes/train/`](recipes/train/).
+- **Networking** — multi-node collectives use RCCL over the ANP plugin (RoCEv2/GDRDMA) with MPI (ADIOS I/O + coordination) split onto the management NIC; `PMIX_MCA_gds=hash` and `HSA_NO_SCRATCH_RECLAIM=1` are required for stability. Details in [`recipes/train/`](recipes/train/).
+- **Run model** — Apptainer overlay for Python deps (torch-geometric, mpi4py, ADIOS2-MPI) + a shared scratch root (`AI4S_SHARED_DIR`); every knob is an `HG_*` environment variable with documented defaults (see [`examples/`](examples/)).
+
 ## Using this model
 
 Authoritative training, HPO, ensemble, and inference scripts live in **upstream HydraGNN** (branch above). This repo holds **pointers and runbook-style recipes**:

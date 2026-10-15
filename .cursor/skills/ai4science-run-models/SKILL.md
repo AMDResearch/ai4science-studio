@@ -7,6 +7,12 @@ description: Step-by-step instructions for how Cursor should run any model in AI
 
 Use this skill when a user asks to run, execute, or launch any model in the repository.
 
+> **Prefer a GUI?** There is also a point-and-click web app (Studio) that wraps this same
+> flow — cluster setup, run, and job monitoring — in a browser. Launch it on the login node
+> with `./studio.sh` and reach it via `ssh -L 8501:localhost:8501 $USER@<login-node>`. It
+> reads the same `model.yaml` metadata and submits the same sbatch scripts, so both paths
+> stay in sync. See `studio/README.md`.
+
 ## Step 0: Check for cluster config
 
 Before anything else, check if a cluster config exists:
