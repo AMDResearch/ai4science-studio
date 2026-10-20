@@ -4,40 +4,38 @@
 # skip the pip install phase on every submission.
 #
 # ── Quick start ──────────────────────────────────────────────────────────────
-#   # From an interactive compute node (has /opt/ompi with mpicc):
-#   export AI4S_SHARED_DIR=/path/to/shared   # set via /init-cluster
-#   bash build_overlay_amd.sh
+#   # ORNL Lux (two steps on a compute node):
+#   sbatch sbatch_build_adios2_amd.sh    # once — MPI ADIOS2 to shared prefix
+#   sbatch sbatch_build_overlay_amd.sh   # PyG wheels + hydragnn into overlay
+#
+#   # Vultr Lux (/opt/ompi):
+#   bash build_adios2_amd.sh && bash build_overlay_amd.sh
 #
 # ── MPI-enabled adios2 ──────────────────────────────────────────────────────
-#   The compute nodes have /opt/ompi (OpenMPI 5.x with mpicc). We bind-mount
-#   it into the container during the build so pip can compile adios2 from
-#   source with ADIOS2_USE_MPI=ON.  This is required for parallel dataset I/O.
+#   Built separately by build_adios2_amd.sh (standard cmake install).
+#   ORNL Lux uses the site openmpi/5.0.10 module via lux_mpi_env.sh.
 #
 # ── torch-scatter / torch-sparse / torch-cluster / torch-spline-conv ────────
 #   No official ROCm wheels exist at data.pyg.org.  We use pre-built ROCm
-#   wheels from https://github.com/Looong01/pyg-rocm-build (release 15):
-#     - PyTorch 2.10.x + ROCm 7.1 wheels run fine on ROCm 7.2.x (ABI compat)
-#     - Python 3.12, linux_x86_64
-#   torch-geometric (pure Python) is installed from PyPI as normal.
-#
-# ── Why staging is needed ────────────────────────────────────────────────────
-#   pip install --target does not see the SIF's /opt/venv, so torch gets
-#   re-downloaded (~6 GB) and fills the overlay.  We stage into /tmp (node-
-#   local fast disk), strip torch/nvidia/triton, then copy into the overlay.
+#   wheels from https://github.com/Looong01/pyg-rocm-build (release 15).
 #
 # ── Key environment variables ────────────────────────────────────────────────
 #   AI4S_SHARED_DIR     Shared filesystem root (required)
+#   HG_ADIOS2_PREFIX    ADIOS2 install tree from build_adios2_amd.sh
 #   HG_SIF              Path to the Apptainer SIF image
 #   HG_OVERLAY          Output overlay path
 #   HG_OVERLAY_SIZE_MB  Size of the ext3 overlay in MB (default: 4096)
-#   HG_HYDRAGNN_SHA     Git SHA to pin HydraGNN at (default: current main)
-#   PYG_ROCM_RELEASE    Looong01 release tag to use (default: 15)
-#   PYG_PYTHON_TAG      Python tag in zip filename (default: py312)
+#   HG_HYDRAGNN_SHA     Git SHA to pin HydraGNN at
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lux_mpi_env.sh
+source "${SCRIPT_DIR}/lux_mpi_env.sh"
+
 HG_BASE="${AI4S_SHARED_DIR:?AI4S_SHARED_DIR must be set}/models/HydraGNN"
 HG_SIF="${HG_SIF:-${AI4S_SHARED_DIR}/images/pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif}"
+HG_ADIOS2_PREFIX="${HG_ADIOS2_PREFIX:-${HG_BASE}/adios2-lux}"
 OVERLAY="${HG_OVERLAY:-${HG_BASE}/overlays/hydragnn-overlay.img}"
 OVERLAY_SIZE_MB="${HG_OVERLAY_SIZE_MB:-4096}"
 HG_HYDRAGNN_SHA="${HG_HYDRAGNN_SHA:-2fb0bd0157e3c85a74f9841887155095bd163303}"
@@ -47,74 +45,58 @@ PYG_PYTHON_TAG="${PYG_PYTHON_TAG:-py312}"
 PYG_ZIP_NAME="torch-2.10.0-rocm-7.1-${PYG_PYTHON_TAG}-linux_x86_64.zip"
 PYG_ZIP_URL="https://github.com/Looong01/pyg-rocm-build/releases/download/${PYG_ROCM_RELEASE}/${PYG_ZIP_NAME}"
 
-# Use node-local fast storage for build I/O (SCRATCH_LOCAL from .cluster-config.yaml)
-LOCAL_TMP="${SCRATCH_LOCAL:-/scratch}/${USER:?}/hydragnn-overlay-build-$$"
+LOCAL_TMP="${SCRATCH_LOCAL:-/tmp}/${USER:?}/hydragnn-overlay-build-$$"
 LOCAL_OVERLAY="${LOCAL_TMP}/hydragnn-overlay.img"
 STAGE="${LOCAL_TMP}/stage"
 PYG_WHEELS_DIR="${LOCAL_TMP}/pyg-rocm-wheels"
 
 echo "=== HydraGNN overlay build ==="
-echo "  SIF          : $HG_SIF"
-echo "  Overlay dest : $OVERLAY  (${OVERLAY_SIZE_MB} MB)"
-echo "  Build tmp    : $LOCAL_TMP"
-echo "  HydraGNN SHA : $HG_HYDRAGNN_SHA"
-echo "  PyG wheels   : Looong01 release ${PYG_ROCM_RELEASE} (torch 2.10, ROCm 7.1, ${PYG_PYTHON_TAG})"
-echo "  Node         : $(hostname)  Date: $(date)"
+echo "  SIF            : $HG_SIF"
+echo "  ADIOS2 prefix  : $HG_ADIOS2_PREFIX"
+echo "  Overlay dest   : $OVERLAY  (${OVERLAY_SIZE_MB} MB)"
+echo "  Build tmp      : $LOCAL_TMP"
+echo "  HydraGNN SHA   : $HG_HYDRAGNN_SHA"
+echo "  Node           : $(hostname)  Date: $(date)"
 echo ""
 
+if [[ ! -f "${HG_ADIOS2_PREFIX}/lib/libadios2_core_mpi.so" ]]; then
+  echo "ERROR: MPI ADIOS2 not found at $HG_ADIOS2_PREFIX" >&2
+  echo "  Run first: sbatch sbatch_build_adios2_amd.sh  (ORNL Lux compute node)" >&2
+  exit 1
+fi
+
 if [[ -f "$OVERLAY" ]]; then
-  echo "WARNING: Overlay already exists: $OVERLAY"
-  echo "  Delete it to rebuild: rm $OVERLAY"
-  echo "  Proceeding with rebuild (will overwrite)..."
+  echo "WARNING: Overlay already exists — overwriting: $OVERLAY"
   rm -f "$OVERLAY"
 fi
 
-# ---------------------------------------------------------------------------
-# Ensure MPI is available on this compute node
-# ---------------------------------------------------------------------------
-OMPI_DIR="/opt/ompi"
-if [[ ! -x "${OMPI_DIR}/bin/mpicc" ]]; then
-  echo "ERROR: /opt/ompi/bin/mpicc not found. Run this script on a compute node." >&2
-  exit 1
+# MPI binds needed for overlay verify (adios2 loads host MPI at import time).
+MPI_BINDS=()
+if lux_mpi_should_use && lux_mpi_setup_binds; then
+  echo "  MPI runtime  : system ${HG_LUX_OPENMPI_MODULE}"
+elif [[ -x /opt/ompi/bin/mpicc ]]; then
+  MPI_BINDS=( --bind /opt/ompi:/opt/ompi:ro )
+  echo "  MPI runtime  : /opt/ompi"
 fi
-echo "  MPI: ${OMPI_DIR}/bin/mpicc ($(${OMPI_DIR}/bin/ompi_info --version 2>&1 | head -1))"
 echo ""
 
 mkdir -p "$LOCAL_TMP" "$STAGE" "$PYG_WHEELS_DIR"
 
-# ---------------------------------------------------------------------------
-# Stage local patches (applied to the HydraGNN source inside the container)
-# ---------------------------------------------------------------------------
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PATCHES_SRC="${SCRIPT_DIR}/patches"
 PATCHES_STAGE="${LOCAL_TMP}/patches"
 mkdir -p "$PATCHES_STAGE"
 if [[ -d "$PATCHES_SRC" ]]; then
   shopt -s nullglob
-  for p in "$PATCHES_SRC"/*.patch; do
-    cp "$p" "$PATCHES_STAGE/"
-  done
+  for p in "$PATCHES_SRC"/*.patch; do cp "$p" "$PATCHES_STAGE/"; done
   shopt -u nullglob
 fi
-PATCH_COUNT=$(ls "$PATCHES_STAGE"/*.patch 2>/dev/null | wc -l)
-echo "  Local patches to apply: $PATCH_COUNT"
-if [[ "$PATCH_COUNT" -gt 0 ]]; then
-  for p in "$PATCHES_STAGE"/*.patch; do echo "    - $(basename "$p")"; done
-fi
-echo ""
 
-# ---------------------------------------------------------------------------
-# Download and extract Looong01 PyG ROCm wheels
-# ---------------------------------------------------------------------------
 PYG_ZIP="${LOCAL_TMP}/${PYG_ZIP_NAME}"
 echo "--- Downloading PyG ROCm wheels ---"
 curl -fL "$PYG_ZIP_URL" -o "$PYG_ZIP"
 unzip -q -o "$PYG_ZIP" -d "$PYG_WHEELS_DIR"
 echo "  Wheels: $(ls "$PYG_WHEELS_DIR"/*.whl 2>/dev/null | wc -l) files"
 
-# ---------------------------------------------------------------------------
-# Write the install script that runs inside the container
-# ---------------------------------------------------------------------------
 cat > "${LOCAL_TMP}/overlay_install.sh" << 'INNEREOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -123,179 +105,102 @@ source /opt/venv/bin/activate
 PKG=/opt/hydragnn-pkgs
 STAGE="$BUILD_STAGE"
 PYG_WHEELS="$BUILD_PYG_WHEELS"
-OMPI="/opt/ompi"
+OMPI="${BUILD_OMPI_DIR:-}"
+if [[ -n "$OMPI" ]]; then
+  export PATH="${OMPI}/bin:${PATH}"
+  export LD_LIBRARY_PATH="${OMPI}/lib:${HG_MPI_EXTRA_LDPATH:-}:${LD_LIBRARY_PATH:-}"
+  [[ -n "${HG_LUX_OPAL_PREFIX:-}" ]] && export OPAL_PREFIX="${HG_LUX_OPAL_PREFIX}"
+  [[ -n "${MPI4PY_LIBMPI:-}" ]] && export MPI4PY_LIBMPI
+fi
 
 rm -rf "$STAGE" && mkdir -p "$STAGE"
 
-echo "--- torch version: $(python3 -c 'import torch; print(torch.__version__)') ---"
-echo "--- Installing to staging dir: $STAGE ---"
-
-echo "--- Step 1: PyG ROCm wheels (torch-scatter, torch-sparse, torch-cluster) ---"
+echo "--- Step 1: PyG ROCm wheels ---"
 pip install -q --no-cache-dir --no-deps --target "$STAGE" "$PYG_WHEELS"/*.whl
-echo "  installed: $(ls $STAGE | grep torch | tr '\n' ' ')"
 
-echo "--- Step 2: torch-geometric (pure Python) ---"
-pip install -q --no-cache-dir --target "$STAGE" torch-geometric 2>&1 | tail -3
+echo "--- Step 2: torch-geometric ---"
+pip install -q --no-cache-dir --target "$STAGE" torch-geometric
 
 echo "--- Step 3: HydraGNN runtime deps ---"
 pip install -q --no-cache-dir --target "$STAGE" \
     mpi4py tqdm pyyaml tensorboard matplotlib \
-    scikit-learn scipy h5py ase vesin e3nn 2>&1 | tail -5
+    scikit-learn scipy h5py ase vesin e3nn
 
-echo "--- Step 4a: install build deps for adios2 (cmake, nanobind, mpi4py) ---"
-export PATH="${OMPI}/bin:${PATH}"
-export LD_LIBRARY_PATH="${OMPI}/lib:${LD_LIBRARY_PATH:-}"
-echo "  mpicc: $(which mpicc) ($(mpicc --showme:version 2>&1 | head -1))"
-pip install -q --no-cache-dir cmake nanobind mpi4py 2>&1 | tail -3
+echo "--- Step 4: ADIOS2 from install prefix ---"
+cp -r "$BUILD_ADIOS2_PREFIX/lib/python3.12/site-packages/adios2" "$STAGE/adios2"
+cp "$BUILD_ADIOS2_PREFIX/lib/libadios2"*.so* "$STAGE/adios2/"
+echo "  adios2 libs: $(ls "$STAGE/adios2"/libadios2_core_mpi.so && echo OK)"
 
-echo "--- Step 4b: adios2 with MPI (cmake from source) ---"
-pip download --no-deps --no-binary adios2 -d /tmp/adios2-dl adios2 2>&1 | tail -2
-cd /tmp/adios2-dl && tar xf adios2*.tar.gz
-ADIOS2_SRC=$(ls -d /tmp/adios2-dl/adios2-*/)
-ADIOS2_BUILD=/tmp/adios2-build
-ADIOS2_INST=/tmp/adios2-install
-mkdir -p "$ADIOS2_BUILD"
-cmake "$ADIOS2_SRC" -B "$ADIOS2_BUILD" \
-    -DCMAKE_INSTALL_PREFIX="$ADIOS2_INST" \
-    -DCMAKE_C_COMPILER="${OMPI}/bin/mpicc" \
-    -DCMAKE_CXX_COMPILER="${OMPI}/bin/mpicxx" \
-    -DADIOS2_USE_MPI=ON \
-    -DADIOS2_USE_Python=ON \
-    -DADIOS2_USE_SST=OFF -DADIOS2_USE_OpenSSL=OFF -DADIOS2_USE_CURL=OFF \
-    -DADIOS2_USE_Sodium=OFF -DADIOS2_USE_DAOS=OFF -DADIOS2_USE_IME=OFF \
-    -DADIOS2_USE_MGARD=OFF -DADIOS2_USE_Fortran=OFF -DADIOS2_USE_Table=OFF \
-    -DADIOS2_USE_Profiling=OFF -DBUILD_TESTING=OFF \
-    2>&1 | grep -E "MPI|Python|nanobind|Configuring done"
-cmake --build "$ADIOS2_BUILD" -j$(nproc) 2>&1 | tail -3
-cmake --install "$ADIOS2_BUILD" 2>&1 | tail -3
-# Copy Python package + libs to staging
-cp -r "$ADIOS2_INST"/lib/python3.12/site-packages/adios2 "$STAGE/adios2"
-cp "$ADIOS2_INST"/lib/libadios2*.so* "$STAGE/adios2/" 2>/dev/null || true
-echo "  adios2 installed (MPI + Python bindings)"
-cd /
-
-echo "--- Step 5: HydraGNN source (pinned SHA: $BUILD_SHA) ---"
-if [[ ! -d /tmp/HydraGNN-src ]]; then
-    # Full clone (not --depth=1) so arbitrary SHAs can be checked out; some
-    # remotes refuse fetch-by-sha on shallow clones depending on
-    # uploadpack.allowReachableSHA1InWant config.
-    git clone -q https://github.com/ORNL/HydraGNN.git /tmp/HydraGNN-src
-    cd /tmp/HydraGNN-src && git checkout -q "$BUILD_SHA"
-    HEAD_SHA="$(git rev-parse HEAD)"
-    if [[ "$HEAD_SHA" != "$BUILD_SHA" ]]; then
-      echo "ERROR: checkout produced $HEAD_SHA, expected $BUILD_SHA" >&2
-      exit 1
-    fi
-    cd /
-fi
-
-echo "--- Step 5b: apply local patches (BUILD_PATCHES=$BUILD_PATCHES) ---"
+echo "--- Step 5: HydraGNN source (SHA: $BUILD_SHA) ---"
+git clone -q https://github.com/ORNL/HydraGNN.git /tmp/HydraGNN-src
+cd /tmp/HydraGNN-src && git checkout -q "$BUILD_SHA"
 if [[ -d "$BUILD_PATCHES" ]]; then
-    cd /tmp/HydraGNN-src
-    shopt -s nullglob
-    for p in "$BUILD_PATCHES"/*.patch; do
-        echo "  applying: $(basename "$p")"
-        # --check first so we fail fast with a clear message if the patch
-        # was authored against a different SHA than BUILD_SHA.
-        if ! patch -p1 --dry-run --silent < "$p"; then
-            echo "ERROR: patch $(basename "$p") does not apply cleanly to SHA $BUILD_SHA" >&2
-            exit 1
-        fi
-        patch -p1 < "$p"
-    done
-    shopt -u nullglob
-    cd /
+  for p in "$BUILD_PATCHES"/*.patch; do
+    [[ -f "$p" ]] || continue
+    patch -p1 --dry-run --silent < "$p"
+    patch -p1 < "$p"
+  done
 fi
-
-# Copy the source tree directly rather than pip-installing (avoids partial package issues)
 cp -r /tmp/HydraGNN-src/hydragnn "$STAGE/hydragnn"
-echo "  HydraGNN source copied (SHA: $BUILD_SHA + $(ls "$BUILD_PATCHES"/*.patch 2>/dev/null | wc -l) patches)"
 
-echo "--- Step 6: strip torch / nvidia / triton / cuda from staging dir ---"
+echo "--- Step 6: strip torch from staging ---"
 for pkg in torch torchvision torchaudio torchgen functorch nvidia triton cuda sympy; do
-    rm -rf "${STAGE}/${pkg}" "${STAGE}/${pkg}"-*.dist-info 2>/dev/null || true
+  rm -rf "${STAGE}/${pkg}" "${STAGE}/${pkg}"-*.dist-info 2>/dev/null || true
 done
-rm -rf "${STAGE}"/nvidia_*.dist-info "${STAGE}"/cuda_*.dist-info 2>/dev/null || true
-echo "  Staging size after strip: $(du -sh $STAGE | cut -f1)"
 
-echo "--- Step 7: copy stripped packages → overlay ---"
+echo "--- Step 7: copy → overlay ---"
 mkdir -p "$PKG"
 cp -r "$STAGE/." "$PKG/"
 for pkg in torch torchvision torchaudio torchgen functorch nvidia triton cuda sympy; do
-    rm -rf "${PKG}/${pkg}" "${PKG}/${pkg}"-*.dist-info 2>/dev/null || true
+  rm -rf "${PKG}/${pkg}" "${PKG}/${pkg}"-*.dist-info 2>/dev/null || true
 done
-rm -rf "${PKG}"/nvidia_*.dist-info "${PKG}"/cuda_*.dist-info 2>/dev/null || true
-# Keep adios2 .so libs accessible
-echo "  Overlay contents: $(du -sh $PKG | cut -f1)"
-echo "  adios2 libs: $(ls $PKG/adios2/libadios2_core_mpi.so 2>/dev/null && echo 'present' || echo 'MISSING')"
 
 echo "--- Step 8: verify ---"
 export PYTHONPATH="$PKG"
 export LD_LIBRARY_PATH="$PKG/adios2:${LD_LIBRARY_PATH:-}"
-python3 -c "
-import torch, torch_scatter, torch_geometric
-print('torch         :', torch.__version__)
-print('torch_scatter : ok')
-print('torch_geometric:', torch_geometric.__version__)
-assert torch.cuda.is_available() or 'rocm' in torch.__version__, 'ROCm torch expected'
-print('ROCm torch    : ok')
-"
-
-python3 -c "
-import adios2
-from mpi4py import MPI
-a = adios2.Adios(MPI.COMM_SELF)
-print('adios2        :', adios2.__version__, '(MPI: OK)')
-"
-
-python3 -c "import vesin; print('vesin         : ok')"
-python3 -c "import e3nn; print('e3nn          :', e3nn.__version__)"
-python3 -c "
-import hydragnn, os, inspect
-print('hydragnn      : imported from', os.path.dirname(hydragnn.__file__))
-# Confirm the persistent_workers patch is present iff a patch file was applied.
-src = inspect.getsource(__import__('hydragnn.preprocess.load_data', fromlist=['_']))
-patched = 'HYDRAGNN_PERSISTENT_WORKERS' in src
-print('hydragnn      : persistent_workers patch =', patched)
-"
-
+python3 -c "import torch; assert torch.cuda.is_available() or 'rocm' in torch.__version__"
+python3 -c "import torch_scatter, torch_geometric, adios2; from mpi4py import MPI; adios2.Adios(MPI.COMM_SELF)"
+python3 -c "import hydragnn, vesin, e3nn"
 echo "=== Overlay install complete ==="
 INNEREOF
-
 chmod +x "${LOCAL_TMP}/overlay_install.sh"
 
-# ---------------------------------------------------------------------------
-# Create overlay on local disk, run install, then copy to NFS
-# ---------------------------------------------------------------------------
-echo "Creating ${OVERLAY_SIZE_MB} MB ext3 overlay: $LOCAL_OVERLAY ..."
+echo "Creating ${OVERLAY_SIZE_MB} MB overlay: $LOCAL_OVERLAY ..."
 apptainer overlay create --size "$OVERLAY_SIZE_MB" "$LOCAL_OVERLAY"
 
-echo "Running install inside container (binding /opt/ompi for MPI) ..."
-apptainer exec \
-    --rocm \
-    --overlay "${LOCAL_OVERLAY}:rw" \
-    --bind "${OMPI_DIR}:${OMPI_DIR}:ro" \
-    --bind "${LOCAL_TMP}:${LOCAL_TMP}" \
-    --env BUILD_STAGE="$STAGE" \
-    --env BUILD_PYG_WHEELS="$PYG_WHEELS_DIR" \
-    --env BUILD_SHA="$HG_HYDRAGNN_SHA" \
-    --env BUILD_PATCHES="$PATCHES_STAGE" \
-    "$HG_SIF" \
-    bash "${LOCAL_TMP}/overlay_install.sh"
+PROXY_ENVS=()
+for k in https_proxy http_proxy HTTPS_PROXY HTTP_PROXY no_proxy NO_PROXY; do
+  v="${!k:-}"
+  [[ -n "$v" ]] && PROXY_ENVS+=( --env "${k}=${v}" )
+done
 
-echo ""
-echo "--- Copying finished overlay to shared storage: $OVERLAY ---"
+BUILD_ENVS=(
+  --env BUILD_STAGE="$STAGE"
+  --env BUILD_PYG_WHEELS="$PYG_WHEELS_DIR"
+  --env BUILD_SHA="$HG_HYDRAGNN_SHA"
+  --env BUILD_PATCHES="$PATCHES_STAGE"
+  --env BUILD_ADIOS2_PREFIX="$HG_ADIOS2_PREFIX"
+)
+[[ -n "${HG_OMPI_DIR:-}" ]] && BUILD_ENVS+=( --env BUILD_OMPI_DIR="$HG_OMPI_DIR" )
+[[ -n "${HG_LUX_OPAL_PREFIX:-}" ]] && BUILD_ENVS+=( --env HG_LUX_OPAL_PREFIX="$HG_LUX_OPAL_PREFIX" )
+[[ -n "${MPI4PY_LIBMPI:-}" ]] && BUILD_ENVS+=( --env MPI4PY_LIBMPI="$MPI4PY_LIBMPI" )
+[[ -n "${HG_MPI_EXTRA_LDPATH:-}" ]] && BUILD_ENVS+=( --env HG_MPI_EXTRA_LDPATH="$HG_MPI_EXTRA_LDPATH" )
+
+unset LD_PRELOAD
+apptainer exec --rocm \
+  --overlay "${LOCAL_OVERLAY}:rw" \
+  "${MPI_BINDS[@]}" \
+  --bind "${LOCAL_TMP}:${LOCAL_TMP}" \
+  --bind "${HG_ADIOS2_PREFIX}:${HG_ADIOS2_PREFIX}:ro" \
+  "${PROXY_ENVS[@]}" \
+  "${BUILD_ENVS[@]}" \
+  "$HG_SIF" \
+  bash "${LOCAL_TMP}/overlay_install.sh"
+
 mkdir -p "$(dirname "$OVERLAY")"
-echo "  Image size: $(du -sh "$LOCAL_OVERLAY" | cut -f1)"
 cp "$LOCAL_OVERLAY" "$OVERLAY"
-echo "  Done."
-
-# Cleanup local tmp
 rm -rf "$LOCAL_TMP"
 
 echo ""
 echo "=== Overlay ready ==="
 ls -lh "$OVERLAY"
-echo ""
-echo "SHA pinned: $HG_HYDRAGNN_SHA"
-echo "To use:  export HG_OVERLAY=$OVERLAY"

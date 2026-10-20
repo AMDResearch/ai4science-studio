@@ -50,6 +50,13 @@ export MIOPEN_DEBUG_AMD_MP_BD_WINOGRAD_WORKSPACE_MAX="${ORBIT2_MIOPEN_MP_BD_WINO
 export MIOPEN_DEBUG_CONV_WINOGRAD="${ORBIT2_MIOPEN_CONV_WINOGRAD:-0}"
 export HSA_FORCE_FINE_GRAIN_PCIE="${HSA_FORCE_FINE_GRAIN_PCIE:-1}"
 
+# Proxy passthrough for no-egress clusters (ORNL Lux): runtime pip/HF inside container.
+PROXY_ENVS=()
+for k in https_proxy http_proxy HTTPS_PROXY HTTP_PROXY no_proxy NO_PROXY; do
+  v="${!k:-}"
+  [[ -n "$v" ]] && PROXY_ENVS+=( --env "${k}=${v}" )
+done
+
 # ---------------------------------------------------------------------------
 # No-overlay dep install (Apptainer only — ~15 min one-time per job)
 # When ORBIT2_SIF is set but no overlay is provided, install all Python
@@ -125,6 +132,7 @@ INSTALLEOF
       "${PKGDIR_BIND[@]}" \
       --bind "$(dirname "$_INSTALL_SCRIPT"):$(dirname "$_INSTALL_SCRIPT")" \
       --env ROCM_WHL_TAG="$ROCM_WHL_TAG" \
+      "${PROXY_ENVS[@]}" \
       "$ORBIT2_SIF" \
       bash "$_INSTALL_SCRIPT"
 
@@ -184,6 +192,7 @@ PYEOF
       fi
       CKPT=$(apptainer exec "${OVERLAY_ARG[@]}" "${PKGDIR_BIND[@]}" \
           --env PYTHONPATH=/opt/orbit2-pkgs \
+          "${PROXY_ENVS[@]}" \
           "$ORBIT2_SIF" \
           bash -c "source /opt/venv/bin/activate && PYTHONPATH=/opt/orbit2-pkgs python3 -c \"\$1\"" _ "$HF_DL_SCRIPT")
     else
@@ -236,6 +245,14 @@ set -euo pipefail
 source /opt/venv/bin/activate
 echo "[rank \$SLURM_PROCID / \$SLURM_NTASKS] GPU \$SLURM_LOCALID on \$(hostname)"
 export PYTHONPATH="/opt/orbit2-pkgs:/orbit2/src:/orbit2:\${PYTHONPATH:-}"
+OMPI="\${HG_OMPI_DIR:-/opt/ompi}"
+if [[ -n "\${HG_MPI_EXTRA_LDPATH:-}" ]]; then
+  export LD_LIBRARY_PATH="/opt/orbit2-pkgs:\${OMPI}/lib:\${HG_MPI_EXTRA_LDPATH}:/opt/venv/lib/python3.12/site-packages/torch/lib:\${LD_LIBRARY_PATH:-}"
+else
+  export LD_LIBRARY_PATH="/opt/orbit2-pkgs:\${OMPI}/lib:/opt/venv/lib/python3.12/site-packages/torch/lib:\${LD_LIBRARY_PATH:-}"
+fi
+[[ -n "\${MPI4PY_LIBMPI:-}" ]] && export MPI4PY_LIBMPI
+[[ -n "\${HG_LUX_OPAL_PREFIX:-}" ]] && export OPAL_PREFIX="\${HG_LUX_OPAL_PREFIX}"
 cd /orbit2/examples
 python3 /examples/run_visualize.py \\
     --orbit2-root /orbit2 \\
@@ -248,6 +265,64 @@ RANKEOF
 
   # Bind the config into /config/config.yaml inside the container
   CONFIG_BIND="$(realpath "$CONFIG"):/config/config.yaml"
+
+  # ORNL Lux: system OpenMPI module over ob1/TCP. Vultr Lux: /opt/ompi + ob1/TCP.
+  LUX_MPI_SH="${SCRIPT_DIR}/../../../../material_science/models/HydraGNN/examples/lux_mpi_env.sh"
+  MPI_BINDS=()
+  MPI_RUNTIME_ENVS=()
+  LUX_MPI_MULTINODE_BINDS=()
+  LUX_RCCL_MULTINODE_ENVS=()
+  NODES="${SLURM_JOB_NUM_NODES:-1}"
+  if [[ -f "$LUX_MPI_SH" ]]; then
+    # shellcheck source=../../../../material_science/models/HydraGNN/examples/lux_mpi_env.sh
+    source "$LUX_MPI_SH"
+  fi
+  if lux_mpi_should_use 2>/dev/null; then
+    lux_mpi_stage_local || true
+  fi
+  if lux_mpi_should_use 2>/dev/null && lux_mpi_setup_binds && lux_mpi_runtime_envs; then
+    MPI_BINDS=( "${MPI_BINDS[@]}" )
+    MPI_RUNTIME_ENVS=( "${LUX_MPI_RUNTIME_ENVS[@]}" )
+    lux_mpi_multinode_apptainer_binds
+    if lux_mpi_rccl_multinode_envs; then
+      LUX_RCCL_MULTINODE_ENVS=( "${LUX_RCCL_MULTINODE_ENVS[@]}" )
+      echo "  Multi-node RCCL: ORNL Lux Pensando (lux_mpi_rccl_multinode_envs)"
+    fi
+    echo "  MPI stack: ORNL Lux system openmpi/5.0.10 (ob1/tcp)"
+  elif [[ -x /opt/ompi/bin/mpicc ]]; then
+    MPI_BINDS=( --bind /opt/ompi:/opt/ompi:ro )
+    _CLUSTER_CFG="${SCRIPT_DIR}/../../../../.cluster-config.yaml"
+    MPI_TCP_IFACE="${NCCL_SOCKET_IFNAME:-bond0}"
+    if [[ -f "$_CLUSTER_CFG" ]]; then
+      _yaml_get() { grep "^  $1:" "$_CLUSTER_CFG" 2>/dev/null | sed 's/.*: *"\?\([^"]*\)"\?.*/\1/' | grep -v '^$'; }
+      MPI_TCP_IFACE="${NCCL_SOCKET_IFNAME:-$(_yaml_get mgmt_iface)}"
+    fi
+    # Apptainer --env KEY=a,b truncates at the comma; btl list goes through APPTAINERENV.
+    export APPTAINERENV_OMPI_MCA_btl="tcp,self"
+    MPI_RUNTIME_ENVS=(
+      --env OMPI_MCA_pml=ob1
+      --env OMPI_MCA_btl_tcp_if_include="$MPI_TCP_IFACE"
+      --env MPI4PY_RC_THREADS=false
+    )
+    echo "  MPI stack: /opt/ompi (ob1/tcp on ${MPI_TCP_IFACE})"
+  else
+    echo "ERROR: no OpenMPI baseline found (ORNL Lux: system module; Vultr: /opt/ompi)" >&2
+    exit 2
+  fi
+  OPT_MPI_ENVS=()
+  for k in MPI4PY_LIBMPI HG_MPI_EXTRA_LDPATH HG_OMPI_DIR HG_LUX_OPAL_PREFIX OPAL_PREFIX; do
+    v="${!k:-}"
+    [[ -n "$v" ]] && OPT_MPI_ENVS+=( --env "${k}=${v}" )
+  done
+
+  # Host paths referenced inside the container (checkpoints on Lustre, etc.)
+  HOST_BINDS=()
+  if [[ -n "${AI4S_SHARED_DIR:-}" && -d "${AI4S_SHARED_DIR}/models/ORBIT-2" ]]; then
+    HOST_BINDS+=( --bind "${AI4S_SHARED_DIR}/models/ORBIT-2:${AI4S_SHARED_DIR}/models/ORBIT-2" )
+  elif [[ -n "${ORBIT2_CHECKPOINT:-}" && -f "${ORBIT2_CHECKPOINT}" ]]; then
+    _ckpt_parent=$(dirname "$(realpath "$ORBIT2_CHECKPOINT")")
+    HOST_BINDS+=( --bind "${_ckpt_parent}:${_ckpt_parent}:ro" )
+  fi
 
   echo "ORBIT2_SIF=$ORBIT2_SIF  MASTER_ADDR=$MASTER_ADDR  SLURM_NTASKS=${SLURM_NTASKS:-?}"
   echo ""
@@ -262,25 +337,66 @@ RANKEOF
   fi
 
   echo ""
-  echo "--- Phase 2: ${SLURM_NTASKS:-8}-way distributed visualize (srun --mpi=pmix) ---"
+  NTASKS="${SLURM_NTASKS:-${SLURM_STEP_NUM_TASKS:-1}}"
+  # Sidafa-style: stage SIF + overlay to node-local /tmp (Lustre fuse2fs starves multi-rank).
+  ORBIT2_SIF_USE="$ORBIT2_SIF"
+  if [[ "${ORBIT2_STAGE_LOCAL:-1}" != "0" ]]; then
+    _NODE_TMP="${ORBIT2_NODE_TMP:-/tmp/orbit2-${SLURM_JOB_ID}}"
+    echo "--- Staging SIF + overlay to ${_NODE_TMP} (1 task/node) ---"
+    srun -N "${SLURM_JOB_NUM_NODES:-1}" --ntasks-per-node=1 --cpus-per-task=4 --gres=none \
+      bash -c '
+        set -euo pipefail
+        dest="'"$_NODE_TMP"'"
+        mkdir -p "$dest"
+        stage_file() {
+          local src="$1" dst="$2" label="$3"
+          local want have
+          want=$(stat -c %s "$src")
+          have=$(stat -c %s "$dst" 2>/dev/null || echo 0)
+          if [[ "$have" != "$want" ]]; then
+            echo "  $(hostname): staging $label -> $dst ($((want/1024/1024)) MB)"
+            cp -f "$src" "${dst}.partial"
+            mv -f "${dst}.partial" "$dst"
+          else
+            echo "  $(hostname): $label already staged"
+          fi
+        }
+        stage_file "'"$ORBIT2_SIF"'" "$dest/$(basename "'"$ORBIT2_SIF"'")" sif
+        if [[ -n "'"${ORBIT2_OVERLAY:-}"'" && -f "'"${ORBIT2_OVERLAY:-}"'" ]]; then
+          stage_file "'"$ORBIT2_OVERLAY"'" "$dest/orbit2-overlay.img" overlay
+        fi
+        echo "  $(hostname): stage ready"
+      '
+    ORBIT2_SIF_USE="${_NODE_TMP}/$(basename "$ORBIT2_SIF")"
+    if [[ ${#OVERLAY_ARG[@]} -gt 0 ]]; then
+      OVERLAY_ARG=(--overlay "${_NODE_TMP}/orbit2-overlay.img:ro")
+    fi
+  fi
+  echo "--- Phase 2: ${NTASKS}-way distributed visualize (srun --mpi=pmix) ---"
   # --mpi=pmix: provides a PMIx server that the container's OpenMPI/mpi4py
   # can connect to for MPI_Init.
   # HOSTNAME is injected as MASTER_ADDR because visualize.py does:
   #   os.environ["MASTER_ADDR"] = os.environ["HOSTNAME"]
-  # Using localhost only works single-node; the scontrol-derived hostname works
-  # for any number of nodes without changing the srun command.
   srun --mpi=pmix apptainer exec \
       --rocm \
       "${OVERLAY_ARG[@]}" "${PKGDIR_BIND[@]}" \
+      "${MPI_BINDS[@]}" \
+      "${LUX_MPI_MULTINODE_BINDS[@]}" \
+      "${HOST_BINDS[@]}" \
       --bind "$ORBIT2_ROOT":/orbit2 \
       --bind "$SCRIPT_DIR":/examples \
       --bind "$(dirname "$RANK_SCRIPT"):$(dirname "$RANK_SCRIPT")" \
       --bind "$CONFIG_BIND" \
       --env HOSTNAME="$MASTER_ADDR" \
       --env MASTER_PORT="$MASTER_PORT" \
+      --env PMIX_MCA_gds=hash \
+      --env PMIX_MCA_psec=native \
       --env PYTHONPATH="/opt/orbit2-pkgs:/orbit2/src:/orbit2" \
-      --env LD_LIBRARY_PATH=/opt/venv/lib/python3.12/site-packages/torch/lib \
-      "$ORBIT2_SIF" \
+      "${MPI_RUNTIME_ENVS[@]}" \
+      "${OPT_MPI_ENVS[@]}" \
+      "${LUX_RCCL_MULTINODE_ENVS[@]}" \
+      "${PROXY_ENVS[@]}" \
+      "$ORBIT2_SIF_USE" \
       bash "$RANK_SCRIPT"
 
 # ---------------------------------------------------------------------------

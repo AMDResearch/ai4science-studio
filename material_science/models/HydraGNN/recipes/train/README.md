@@ -2,7 +2,9 @@
 
 > **Ready-to-run scripts:** see [`../../examples/`](../../examples/) for `sbatch_train_amd.sh` and `run_train.sh`.
 
-This recipe documents multi-node GFM (Graph Foundation Model) training using HydraGNN on AMD Instinct MI355X GPUs with Pensando/ionic interconnect.
+> **Cluster note:** Performance tables and multi-node network settings below were validated on **Vultr Lux** (16-node commercial MI355X, Pensando/ionic fabric, 2026-05–06). **ORNL Lux** (504 nodes, OLCF) is a separate platform — do not copy Vultr fabric settings there. ORNL Lux fabric and scaling are not yet validated; see `.cluster-config.yaml`.
+
+This recipe documents multi-node GFM (Graph Foundation Model) training using HydraGNN on AMD Instinct MI355X GPUs.
 
 ---
 
@@ -17,7 +19,7 @@ No module loads or conda environments are needed. Everything runs inside an Appt
 
 **Overlay contents:** PyTorch 2.10.0+rocm7.2.2, torch-geometric, torch-scatter/sparse/cluster (ROCm wheels), mpi4py, adios2, hydragnn, and runtime deps (tqdm, pyyaml, tensorboard, scikit-learn, scipy, h5py, ase).
 
-**Hardware:** AMD Instinct MI355X (gfx950), 8 GPUs per node, 288 GB VRAM per GPU, Pensando ionic interconnect.
+**Hardware:** AMD Instinct MI355X (gfx950), 8 GPUs per node, 288 GB VRAM per GPU. Vultr Lux used Pensando ionic interconnect; ORNL Lux fabric is undetermined.
 
 ## 2. Build / Setup Instructions
 
@@ -86,7 +88,7 @@ sbatch --nodes=4 --time=04:00:00 sbatch_train_amd.sh
 | `HG_REPO_DIR` | `$AI4S_SHARED_DIR/models/HydraGNN/code/HydraGNN` | HydraGNN source clone |
 | `HYDRAGNN_MAX_NUM_BATCH` | (unset = unlimited) | Cap batches per epoch (sanity: 50) |
 | `HYDRAGNN_VALTEST` | `0` | Run validation/test loops (0=skip) |
-| `SCRATCH_LOCAL` | `/scratch` | Node-local fast storage for MIOpen cache |
+| `SCRATCH_LOCAL` | `/tmp` on ORNL Lux (`/scratch` absent); override per cluster |
 
 ### How the launch works
 
@@ -130,9 +132,9 @@ For longer training runs (`num_epoch >= 10`):
 - Force prediction error should also decrease
 - Early stopping (patience=10) will halt training if validation loss plateaus
 
-### Validated sanity test (1 node / 8 GPUs, 50 batches)
+### Validated sanity test (Vultr Lux — 1 node / 8 GPUs, 50 batches)
 
-Validated on MI355X (2026-05-19) with `HYDRAGNN_MAX_NUM_BATCH=50`, `HG_BATCH_SIZE=200`, `HG_PRECISION=fp64`, datasets `ANI1x,Alexandria`:
+Validated on **Vultr Lux** MI355X (2026-05-19) with `HYDRAGNN_MAX_NUM_BATCH=50`, `HG_BATCH_SIZE=200`, `HG_PRECISION=fp64`, datasets `ANI1x,Alexandria`:
 
 | Metric | Value |
 |--------|-------|
@@ -147,7 +149,9 @@ Validated on MI355X (2026-05-19) with `HYDRAGNN_MAX_NUM_BATCH=50`, `HG_BATCH_SIZ
 
 ## 6. Performance & Scaling
 
-Matched strong-scaling sweep on MI355X (2026-06-06): identical env on all node counts, steady-state train s/batch (mean of epochs 2–5), `HYDRAGNN_VALTEST=0`, RCCL high-priority enabled.
+### Vultr Lux (16-node cap) — validated 2026-06-06
+
+Matched strong-scaling sweep on **Vultr Lux** MI355X: identical env on all node counts, steady-state train s/batch (mean of epochs 2–5), `HYDRAGNN_VALTEST=0`, RCCL high-priority enabled.
 
 | Nodes | GPUs | Train s/batch | samples/s | Strong-scaling eff. |
 |------:|-----:|--------------:|----------:|--------------------:|
@@ -159,9 +163,11 @@ Matched strong-scaling sweep on MI355X (2026-06-06): identical env on all node c
 Submit a matched sweep: `./examples/run_scaling_study.sh`  
 Regenerate the table from SLURM logs: `python examples/collate_scaling_study.py --jobs <id1>,<id2>,... -o scaling_study`
 
-### Multi-node network architecture
+### Multi-node network architecture (Vultr Lux only)
 
-On Pensando/ionic fabrics, data NICs use `/31` point-to-point subnets that don't route between nodes — standard IB verbs cannot work for inter-node MPI. The architecture separates traffic into three paths:
+> **ORNL Lux:** This section describes the **Vultr Lux** Pensando/ionic fabric only. ORNL Lux advertises `mlx5_0` IB HCAs and Lustre over `kfi` — multi-node RCCL/MPI settings must be discovered separately; do not copy the ANP/ionic bind-mounts below.
+
+On **Vultr Lux** Pensando/ionic fabrics, data NICs use `/31` point-to-point subnets that don't route between nodes — standard IB verbs cannot work for inter-node MPI. The architecture separates traffic into three paths:
 
 | Path | Interface | Protocol | Purpose |
 |------|-----------|----------|---------|
@@ -234,9 +240,9 @@ HydraGNN emits per-epoch lines:
 
 The parser extracts these into CSV columns: `epoch, batch, train_loss, val_loss, test_loss, tasks_train, tasks_val, wall_time_s, source`.
 
-### Validated convergence (1 node / 8 GPUs, 5 epochs, 50 batches/epoch)
+### Validated convergence (Vultr Lux — 1 node / 8 GPUs, 5 epochs, 50 batches/epoch)
 
-Validated on MI355X (2026-05-19) with `HYDRAGNN_VALTEST=1`, `HYDRAGNN_MAX_NUM_BATCH=50`, `HG_BATCH_SIZE=200`, `HG_PRECISION=fp64`:
+Validated on **Vultr Lux** MI355X (2026-05-19) with `HYDRAGNN_VALTEST=1`, `HYDRAGNN_MAX_NUM_BATCH=50`, `HG_BATCH_SIZE=200`, `HG_PRECISION=fp64`:
 
 | Epoch | Train Loss | Val Loss | Test Loss | Time/batch |
 |-------|-----------|----------|-----------|------------|

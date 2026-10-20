@@ -10,7 +10,8 @@
 # Prerequisites:
 #   1. Apptainer SIF with PyTorch ROCm (default: rocm7.2.2 + py3.12)
 #   2. Pre-built overlay with hydragnn, torch-geometric, mpi4py, adios2 (MPI)
-#      Built via: build_overlay_amd.sh
+#      Built via: sbatch sbatch_build_overlay_amd.sh  (ORNL Lux, compute node)
+#                 or build_overlay_amd.sh             (Vultr Lux, /opt/ompi)
 #   3. ADIOS datasets staged on shared filesystem
 #
 # Quick-start (1 node, 8 GPUs):
@@ -65,6 +66,10 @@ else
   SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 fi
 
+# shellcheck source=lux_mpi_env.sh
+source "${SCRIPT_DIR}/lux_mpi_env.sh"
+HG_USE_SYSTEM_MPI=0
+
 # ---------------------------------------------------------------------------
 # Paths and configuration
 # ---------------------------------------------------------------------------
@@ -107,13 +112,67 @@ for ds in "${DATASET_ARRAY[@]}"; do
 done
 
 # ---------------------------------------------------------------------------
-# Clone HydraGNN source if not present
+# OpenMPI bind-mount (overlay adios2 links against host MPI)
+#   Vultr Lux: /opt/ompi
+#   ORNL Lux: system openmpi/5.0.10 module over ob1/TCP
 # ---------------------------------------------------------------------------
+MPI_BINDS=()
+MPI4PY_LIBMPI=""
+HG_MPI_EXTRA_LDPATH=""
+if [[ -z "${HG_OMPI_DIR:-}" ]] && lux_mpi_setup; then
+  HG_USE_SYSTEM_MPI=1
+  MPI_BINDS=( "${MPI_BINDS[@]}" )
+elif [[ -z "${HG_OMPI_DIR:-}" ]]; then
+  if [[ -x /opt/ompi/bin/mpicc ]]; then
+    HG_OMPI_DIR=/opt/ompi
+    MPI_BINDS=( --bind "${HG_OMPI_DIR}:${HG_OMPI_DIR}:ro" )
+  else
+    if command -v module &>/dev/null; then
+      module load openmpi/5.0.10 2>/dev/null || module load openmpi 2>/dev/null || true
+    fi
+    if command -v mpicc &>/dev/null; then
+      HG_OMPI_DIR="$(cd "$(dirname "$(dirname "$(command -v mpicc)")")" && pwd)"
+      MPI_BINDS=( --bind "${HG_OMPI_DIR}:${HG_OMPI_DIR}:ro" )
+      MPI4PY_LIBMPI="${HG_OMPI_DIR}/lib/libmpi.so.40"
+      _ucc_lib="$(ldd "${HG_OMPI_DIR}/lib/libmpi.so.40" 2>/dev/null | awk '/libucc\.so/ {print $3; exit}')" || true
+      _ucx_lib=""
+      [[ -n "${_ucc_lib}" ]] && _ucx_lib="$(ldd "${_ucc_lib}" 2>/dev/null | awk '/libucs\.so/ {print $3; exit}')" || true
+      HG_UCC_LIB="${HG_UCC_LIB:-$(dirname "${_ucc_lib}" 2>/dev/null)}"
+      HG_UCX_LIB="${HG_UCX_LIB:-$(dirname "${_ucx_lib}" 2>/dev/null)}"
+      if [[ -d "${HG_UCC_LIB}" && -d "${HG_UCX_LIB}" ]]; then
+        HG_MPI_EXTRA_LDPATH="${HG_UCC_LIB}:${HG_UCX_LIB}:/lib64"
+        MPI_BINDS+=( --bind "${HG_UCC_LIB}:${HG_UCC_LIB}:ro" --bind "${HG_UCX_LIB}:${HG_UCX_LIB}:ro" )
+        for _lib in /lib64/liblnetconfig.so.4 /lib64/liblustreapi.so.1 /lib64/libnl-genl-3.so.200; do
+          [[ -f "$_lib" ]] && MPI_BINDS+=( --bind "${_lib}:${_lib}:ro" )
+        done
+      fi
+    fi
+  fi
+fi
+if [[ -z "${HG_OMPI_DIR:-}" || ${#MPI_BINDS[@]} -eq 0 ]]; then
+  echo "ERROR: OpenMPI not found for ADIOS MPI. On ORNL Lux load the system OpenMPI module." >&2
+  exit 2
+fi
+
+# ---------------------------------------------------------------------------
+# Clone HydraGNN source if not present (prefer pre-clone on login node; compute nodes have no egress)
 HG_HYDRAGNN_SHA="${HG_HYDRAGNN_SHA:-2fb0bd0157e3c85a74f9841887155095bd163303}"
+# Orion world-shared ADIOS stores (Alexandria-v3, legacy ANI1x) lack graph_attr.
+export HG_DISABLE_GRAPH_ATTR="${HG_DISABLE_GRAPH_ATTR:-1}"
 if [[ ! -d "${HG_REPO_DIR}/examples/multidataset_hpo_sc26" ]]; then
   echo "--- Cloning HydraGNN (pinned SHA: ${HG_HYDRAGNN_SHA}) ---"
-  git clone https://github.com/ORNL/HydraGNN.git "$HG_REPO_DIR"
-  git -C "$HG_REPO_DIR" checkout "$HG_HYDRAGNN_SHA"
+  PROXY_ENVS=()
+  for k in https_proxy http_proxy HTTPS_PROXY HTTP_PROXY no_proxy NO_PROXY; do
+    v="${!k:-}"
+    [[ -n "$v" ]] && PROXY_ENVS+=( --env "${k}=${v}" )
+  done
+  if [[ -n "${HG_SIF:-}" && -f "${HG_SIF:-}" ]]; then
+    apptainer exec "${PROXY_ENVS[@]}" --bind "$(dirname "$HG_REPO_DIR")" \
+      "$HG_SIF" bash -c "git clone https://github.com/ORNL/HydraGNN.git '$HG_REPO_DIR' && git -C '$HG_REPO_DIR' checkout '$HG_HYDRAGNN_SHA'"
+  else
+    git clone https://github.com/ORNL/HydraGNN.git "$HG_REPO_DIR"
+    git -C "$HG_REPO_DIR" checkout "$HG_HYDRAGNN_SHA"
+  fi
 fi
 
 # ---------------------------------------------------------------------------
@@ -131,6 +190,22 @@ for ds in "${DATASET_ARRAY[@]}"; do
     echo "  Linked: $target -> $source"
   fi
 done
+
+# Bind external world-shared trees so Apptainer can follow weights/ symlinks.
+# shellcheck source=hg_dataset_binds.sh
+source "${SCRIPT_DIR}/hg_dataset_binds.sh"
+hg_setup_dataset_binds
+
+# Multi-node: expose host RDMA/RoCE sysfs to UCX inside Apptainer.
+LUX_MPI_MULTINODE_BINDS=()
+LUX_RCCL_MULTINODE_ENVS=()
+if [[ "$NODES" -gt 1 && "${HG_USE_SYSTEM_MPI}" == 1 ]]; then
+  lux_mpi_multinode_apptainer_binds
+  lux_mpi_rccl_multinode_envs
+  for _bind in "${LUX_MPI_MULTINODE_BINDS[@]}"; do
+    echo "  Multi-node bind: ${_bind}"
+  done
+fi
 
 # ---------------------------------------------------------------------------
 # Prepare output directory
@@ -167,6 +242,9 @@ echo "  HW queues    : GPU_MAX_HW_QUEUES=${GPU_MAX_HW_QUEUES}"
 echo "  Start from   : ${HG_STARTFROM:-none}"
 echo "  Output dir   : $HG_OUTPUT_DIR"
 echo "  Repo dir     : $HG_REPO_DIR"
+echo "  OpenMPI      : $HG_OMPI_DIR"
+[[ -n "${HG_UCC_LIB:-}" ]] && echo "  UCC lib      : $HG_UCC_LIB"
+[[ -n "${HG_UCX_LIB:-}" ]] && echo "  UCX lib      : $HG_UCX_LIB"
 echo "  Config       : ${EXAMPLE_DIR}/gfm_mlip.json"
 echo "  Node(s)      : ${SLURM_NODELIST:-$(hostname)}"
 echo "  Date         : $(date)"
@@ -182,11 +260,18 @@ set -euo pipefail
 source /opt/venv/bin/activate
 
 export PYTHONPATH="/opt/hydragnn-pkgs:${PYTHONPATH:-}"
-export LD_LIBRARY_PATH="/opt/hydragnn-pkgs/adios2:/opt/ompi/lib:${LD_LIBRARY_PATH:-}"
+OMPI="${HG_OMPI_DIR:-/opt/ompi}"
+if [[ -n "${HG_MPI_EXTRA_LDPATH:-}" ]]; then
+  export LD_LIBRARY_PATH="/opt/hydragnn-pkgs/adios2:${OMPI}/lib:${HG_MPI_EXTRA_LDPATH}:${LD_LIBRARY_PATH:-}"
+else
+  export LD_LIBRARY_PATH="/opt/hydragnn-pkgs/adios2:${OMPI}/lib:${LD_LIBRARY_PATH:-}"
+fi
+[[ -n "${MPI4PY_LIBMPI:-}" ]] && export MPI4PY_LIBMPI
+[[ -n "${HG_LUX_OPAL_PREFIX:-}" ]] && export OPAL_PREFIX="${HG_LUX_OPAL_PREFIX}"
 
 # Use node-local fast storage for per-rank temp writes (MIOpen cache, etc.)
 # SCRATCH_LOCAL comes from .cluster-config.yaml paths.scratch_local (e.g. /scratch, /local, /tmp)
-SCRATCH_RANK="${SCRATCH_LOCAL:-/scratch}/${USER:?}/hydragnn-${SLURM_JOB_ID:-$$}/${SLURM_PROCID:-0}"
+SCRATCH_RANK="${SCRATCH_LOCAL:-/tmp}/${USER:?}/hydragnn-${SLURM_JOB_ID:-$$}/${SLURM_PROCID:-0}"
 mkdir -p "$SCRATCH_RANK"
 export TMPDIR="$SCRATCH_RANK"
 
@@ -206,6 +291,13 @@ export HYDRAGNN_TRACE_LEVEL="${HYDRAGNN_TRACE_LEVEL:-1}"
 # Required for RCCL stability on MI355X
 export HSA_NO_SCRATCH_RECLAIM=1
 
+# Multi-node: pin one GPU per rank. MPI uses ob1/TCP on bond0; RCCL selects
+# ionic HCAs independently through NCCL_IB_HCA.
+if [[ "${SLURM_JOB_NUM_NODES:-1}" -gt 1 ]]; then
+  _local_rank="${SLURM_LOCALID:-${OMPI_COMM_WORLD_LOCAL_RANK:-0}}"
+  export ROCR_VISIBLE_DEVICES="${_local_rank}"
+fi
+
 cd "$HG_OUTPUT_DIR"
 
 # Monkey-patch AdiosMultiDataset to inject avg_num_neighbors, avoiding an
@@ -213,16 +305,33 @@ cd "$HG_OUTPUT_DIR"
 export HYDRAGNN_AVG_NUM_NEIGHBORS="${HYDRAGNN_AVG_NUM_NEIGHBORS:-13.735293601560318}"
 
 exec python -u -c "
-import sys, os, runpy
+import sys, os, json, runpy
 
 avg_nn = float(os.environ.get('HYDRAGNN_AVG_NUM_NEIGHBORS', '0'))
+import hydragnn.utils.datasets.adiosdataset as adm
+_orig_setkeys = adm.AdiosDataset.setkeys
+def _patched_setkeys(self, keys):
+    filtered = [k for k in keys if k in self.keys]
+    missing = [k for k in keys if k not in self.keys]
+    if missing and self.comm.Get_rank() == 0:
+        print('  ADIOS keys skipped (not in file):', missing, flush=True)
+    return _orig_setkeys(self, filtered)
+adm.AdiosDataset.setkeys = _patched_setkeys
 if avg_nn > 0:
-    import hydragnn.utils.datasets.adiosdataset as adm
     _orig_init = adm.AdiosMultiDataset.__init__
     def _patched_init(self, *a, **kw):
         _orig_init(self, *a, **kw)
         self.avg_num_neighbors = avg_nn
     adm.AdiosMultiDataset.__init__ = _patched_init
+
+cfg_src = os.environ['HG_EXAMPLE_DIR'] + '/gfm_mlip.json'
+cfg_dst = os.path.join(os.environ['HG_OUTPUT_DIR'], 'gfm_mlip_runtime.json')
+with open(cfg_src) as f:
+    cfg = json.load(f)
+if os.environ.get('HG_DISABLE_GRAPH_ATTR', '0') == '1':
+    cfg['NeuralNetwork']['Architecture']['use_graph_attr_conditioning'] = False
+with open(cfg_dst, 'w') as f:
+    json.dump(cfg, f)
 
 batch_size = int(os.environ.get('HG_BATCH_SIZE', '0') or 200)
 max_num_batch = int(os.environ.get('HYDRAGNN_MAX_NUM_BATCH', '0'))
@@ -230,7 +339,7 @@ num_samples_val = max_num_batch * batch_size if max_num_batch > 0 else 0
 
 sys.argv = [
     os.environ['HG_EXAMPLE_DIR'] + '/gfm_mlip_all_mpnn.py',
-    '--inputfile=' + os.environ['HG_EXAMPLE_DIR'] + '/gfm_mlip.json',
+    '--inputfile=' + cfg_dst,
     '--multi',
     '--everyone',
     '--multi_model_list=' + os.environ['HG_DATASETS'],
@@ -265,9 +374,17 @@ chmod +x "$RANK_SCRIPT"
 # ---------------------------------------------------------------------------
 RCCL_MULTINODE_ENVS=()
 MPI_MULTINODE_ENVS=()
-if [[ "$NODES" -gt 1 ]]; then
-  # Read cluster-specific network settings from .cluster-config.yaml if not
-  # already set via environment. Requires yq or falls back to grep parsing.
+if [[ "${HG_USE_SYSTEM_MPI}" == 1 ]]; then
+  if lux_mpi_runtime_envs; then
+    MPI_MULTINODE_ENVS=( "${LUX_MPI_RUNTIME_ENVS[@]}" )
+    if [[ "$NODES" -gt 1 ]]; then
+      echo "  Multi-node MPI: system openmpi/5.0.10 (ob1/tcp)"
+    fi
+  else
+    echo "WARNING: system OpenMPI module unavailable — MPI tuning not applied" >&2
+  fi
+elif [[ "$NODES" -gt 1 ]]; then
+  # Vultr Lux: ob1/tcp + RCCL ANP over ionic fabric
   _CLUSTER_CFG="${SCRIPT_DIR}/../../../../.cluster-config.yaml"
   if [[ -f "$_CLUSTER_CFG" ]]; then
     _yaml_get() { grep "^  $1:" "$_CLUSTER_CFG" 2>/dev/null | sed 's/.*: *"\?\([^"]*\)"\?.*/\1/' | grep -v '^$'; }
@@ -277,26 +394,19 @@ if [[ "$NODES" -gt 1 ]]; then
     : "${LIBIONIC_PATH:=$(_yaml_get libionic_path)}"
   fi
 
-  # Validate required settings
   : "${NCCL_IB_HCA:?Set NCCL_IB_HCA or configure network.ib_hca in .cluster-config.yaml}"
   : "${NCCL_SOCKET_IFNAME:?Set NCCL_SOCKET_IFNAME or configure network.mgmt_iface in .cluster-config.yaml}"
   : "${RCCL_ANP_PLUGIN:?Set RCCL_ANP_PLUGIN or configure network.rccl_anp_plugin in .cluster-config.yaml}"
   : "${LIBIONIC_PATH:?Set LIBIONIC_PATH or configure network.libionic_path in .cluster-config.yaml}"
 
-  # MPI transport: ob1/tcp over management NIC.
-  # Pensando/ionic data NICs use /31 point-to-point subnets that don't route
-  # between nodes, so IB verbs cannot work for MPI. Only RCCL (via ANP plugin)
-  # bypasses IP routing on the data fabric. MPI uses TCP on the management NIC.
+  # Apptainer --env KEY=a,b truncates at the comma.
+  export APPTAINERENV_OMPI_MCA_btl="tcp,self"
   MPI_MULTINODE_ENVS=(
     --env OMPI_MCA_pml=ob1
-    --env OMPI_MCA_btl=tcp,self
     --env OMPI_MCA_btl_tcp_if_include="$NCCL_SOCKET_IFNAME"
     --env MPI4PY_RC_THREADS=false
   )
 
-  # RCCL/NCCL env vars for ANP over ionic (from AMD MI355X documentation).
-  # The ANP plugin and libionic must be bind-mounted into the container since
-  # Apptainer --rocm does not expose them automatically.
   RCCL_MULTINODE_ENVS=(
     --bind "${RCCL_ANP_PLUGIN}:${RCCL_ANP_PLUGIN}:ro"
     --bind "${LIBIONIC_PATH}:${LIBIONIC_PATH}:ro"
@@ -337,26 +447,47 @@ echo ""
 # passes the check and then `int("")` blows up. Build a separate array of
 # `--env` flags that are only added when the var is set non-empty.
 OPT_ENVS=()
-for k in HYDRAGNN_MAX_NUM_BATCH HYDRAGNN_NUM_WORKERS HYDRAGNN_PERSISTENT_WORKERS; do
+for k in HYDRAGNN_MAX_NUM_BATCH HYDRAGNN_NUM_WORKERS HYDRAGNN_PERSISTENT_WORKERS MPI4PY_LIBMPI HG_MPI_EXTRA_LDPATH HG_OMPI_DIR HG_LUX_OPAL_PREFIX OPAL_PREFIX NCCL_DEBUG_SUBSYS NCCL_TIMEOUT NCCL_ASYNC_ERROR_HANDLING TORCH_DISTRIBUTED_DEBUG; do
   v="${!k:-}"
   if [[ -n "$v" ]]; then
     OPT_ENVS+=( --env "${k}=${v}" )
   fi
 done
 
+# Stage ext3 overlay to node-local /tmp once per node. Concurrent fuse2fs mounts of
+# the same Lustre .img from NGPU ranks starve/deadlock Apptainer startup on ORNL Lux.
+HG_OVERLAY_USE="$HG_OVERLAY"
+if [[ -n "${HG_OVERLAY:-}" && -f "${HG_OVERLAY}" && "${HG_STAGE_OVERLAY_LOCAL:-1}" != "0" ]]; then
+  _LOCAL_OV="/tmp/hydragnn-overlay-${SLURM_JOB_ID}.img"
+  echo "--- Staging overlay to node-local ${_LOCAL_OV} (1 task/node) ---"
+  srun -N "$NODES" --ntasks-per-node=1 --cpus-per-task=2 --gres=none \
+    bash -c '
+      src="'"$HG_OVERLAY"'"
+      dst="'"$_LOCAL_OV"'"
+      if [[ ! -s "$dst" ]]; then
+        echo "  $(hostname): cp -> $dst"
+        cp -f "$src" "$dst"
+      fi
+      echo "  $(hostname): ready $(du -h "$dst" 2>/dev/null | cut -f1)"
+    '
+  HG_OVERLAY_USE="$_LOCAL_OV"
+fi
+
 srun --mpi=pmix \
     apptainer exec \
     --rocm \
-    --overlay "${HG_OVERLAY}:ro" \
-    --bind "/opt/ompi:/opt/ompi:ro" \
-    --bind "${SCRATCH_LOCAL:-/scratch}:${SCRATCH_LOCAL:-/scratch}" \
+    --overlay "${HG_OVERLAY_USE}:ro" \
+    "${MPI_BINDS[@]}" \
+    "${LUX_MPI_MULTINODE_BINDS[@]}" \
+    --bind "${SCRATCH_LOCAL:-/tmp}:${SCRATCH_LOCAL:-/tmp}" \
     --bind "${HG_REPO_DIR}:${HG_REPO_DIR}:ro" \
     --bind "${HG_DATA_DIR}:${HG_DATA_DIR}:ro" \
+    "${DATA_BINDS[@]}" \
     --bind "${HG_OUTPUT_DIR}:${HG_OUTPUT_DIR}" \
     --env PMIX_MCA_gds=hash \
     --env PMIX_MCA_psec=native \
     "${MPI_MULTINODE_ENVS[@]}" \
-    --env SCRATCH_LOCAL="${SCRATCH_LOCAL:-/scratch}" \
+    --env SCRATCH_LOCAL="${SCRATCH_LOCAL:-/tmp}" \
     --env HG_DATASETS="$HG_DATASETS" \
     --env HG_PRECISION="$HG_PRECISION" \
     --env HG_BATCH_SIZE="${HG_BATCH_SIZE:-200}" \
@@ -370,6 +501,7 @@ srun --mpi=pmix \
     --env GPU_MAX_HW_QUEUES="$GPU_MAX_HW_QUEUES" \
     "${OPT_ENVS[@]}" \
     "${RCCL_MULTINODE_ENVS[@]}" \
+    "${LUX_RCCL_MULTINODE_ENVS[@]}" \
     "$HG_SIF" \
     bash "$RANK_SCRIPT"
 

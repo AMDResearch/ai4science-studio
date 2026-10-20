@@ -249,6 +249,10 @@ chmod +x "$SCRIPTS_DIR/overlay_install.sh"
 echo "Creating ${OVERLAY_SIZE_MB} MB ext3 overlay on local disk: $LOCAL_OVERLAY ..."
 apptainer overlay create --size "$OVERLAY_SIZE_MB" "$LOCAL_OVERLAY"
 
+if [[ "$USE_STAGING" == true ]]; then
+  mkdir -p "$STAGE_DIR"
+fi
+
 echo "Running install inside container ..."
 apptainer exec \
     --rocm \

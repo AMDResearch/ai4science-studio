@@ -24,13 +24,15 @@
 #                        upstream loop is while (epoch_start+1) < max_epochs)
 #   ORBIT2_MAX_BATCHES   Cap batches per epoch (default: 20; 0 = unlimited)
 #   ORBIT2_BATCH_SIZE    Per-rank batch size (default: 8)
-#   ORBIT2_FSDP / ORBIT2_SIMPLE_DDP  Parallelism for render (optional). When both unset
-#                        and nodes=1 with 8 GPUs/job, defaults to fsdp=8, simple_ddp=1.
+#   ORBIT2_FSDP / ORBIT2_SIMPLE_DDP  Parallelism for render (optional). When both unset:
+#                        HSDP = fsdp=GPUs/node (intra-node XGMI), simple_ddp=nodes
+#                        (inter-node). Never use render's fsdp=nodes × simple_ddp=gpus.
 #   ORBIT2_LAUNCH_SCRIPT  Absolute path to launch script under ORBIT2_ROOT (optional).
 #                        If unset, uses launch_diffusion.sh at repo root or examples/ when present.
 #   ORBIT2_OUTPUT_DIR    Job output dir (default: .../outputs/train/<jobid>)
 #   TORCH_NCCL_HIGH_PRIORITY / GPU_MAX_HW_QUEUES — RCCL tuning (default: 1 / 2)
-#   ORBIT2_SKIP_NODE_HEALTH_PROBE=1 — skip mount probe (not recommended)
+#   ORBIT2_STAGE_LOCAL   Stage SIF+overlay to node-local /tmp before srun (default 1;
+#                        Sidafa Primus pattern — avoids Lustre fuse2fs starve on ORNL Lux)
 
 #SBATCH --job-name=orbit2-train
 #SBATCH --partition=YOUR_PARTITION_HERE
@@ -39,7 +41,7 @@
 #SBATCH --ntasks-per-node=8
 #SBATCH --gpus-per-node=8
 #SBATCH --cpus-per-task=7
-#SBATCH --time=02:00:00
+#SBATCH --time=00:45:00
 #SBATCH --output=orbit2-train-%j.out
 #SBATCH --error=orbit2-train-%j.out
 
@@ -50,6 +52,14 @@ if [[ -n "${SLURM_JOB_ID:-}" ]]; then
   SCRIPT_DIR=$(cd "$(dirname "$_ORIG_CMD")" && pwd)
 else
   SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+fi
+# Prefer $HOME when the scheduler resolved the script through another mount of the same tree.
+if [[ -n "${HOME:-}" && -d "$HOME" ]]; then
+  _SCRIPT_REAL=$(readlink -f "$SCRIPT_DIR" 2>/dev/null || printf '%s' "$SCRIPT_DIR")
+  _HOME_REAL=$(readlink -f "$HOME" 2>/dev/null || printf '%s' "$HOME")
+  if [[ "$_SCRIPT_REAL" == "$_HOME_REAL"* ]]; then
+    SCRIPT_DIR="${HOME}${_SCRIPT_REAL#"$_HOME_REAL"}"
+  fi
 fi
 
 ORBIT2_BASE="${AI4S_SHARED_DIR:?AI4S_SHARED_DIR must be set}/models/ORBIT-2"
@@ -84,13 +94,12 @@ NODES="${SLURM_JOB_NUM_NODES:-1}"
 GPUS_PER_NODE=8
 TOTAL_RANKS=$((NODES * GPUS_PER_NODE))
 
-# Parallelism: explicit env, else 1×8 GPU baseline fsdp=8 simple_ddp=1, else fsdp=nodes × simple_ddp=gpus
+# HSDP: shard within node (fsdp=GPUs/node), DDP across nodes (simple_ddp=nodes).
+# Matches run_scaling_study.sh — NOT render's default fsdp=nodes × simple_ddp=gpus.
 if [[ -n "${ORBIT2_FSDP:-}" && -n "${ORBIT2_SIMPLE_DDP:-}" ]]; then
   RENDER_PARALLEL=(--fsdp "$ORBIT2_FSDP" --simple-ddp "$ORBIT2_SIMPLE_DDP")
-elif [[ "$NODES" -eq 1 && "$GPUS_PER_NODE" -eq 8 ]]; then
-  RENDER_PARALLEL=(--fsdp 8 --simple-ddp 1)
 else
-  RENDER_PARALLEL=()
+  RENDER_PARALLEL=(--fsdp "$GPUS_PER_NODE" --simple-ddp "$NODES")
 fi
 
 # Bayes-CAST ships launch/launch_diffusion.sh as an OLCF/Crusher sbatch+conda script: it
@@ -157,11 +166,7 @@ echo "  RCCL priority: TORCH_NCCL_HIGH_PRIORITY=$TORCH_NCCL_HIGH_PRIORITY"
 echo "  HW queues    : GPU_MAX_HW_QUEUES=$GPU_MAX_HW_QUEUES"
 echo "  Output dir   : $ORBIT2_OUTPUT_DIR"
 echo "  ORBIT2_ROOT  : $ORBIT2_ROOT"
-if ((${#RENDER_PARALLEL[@]})); then
-  echo "  Parallelism  : ${RENDER_PARALLEL[*]}"
-else
-  echo "  Parallelism  : (render default fsdp=$NODES simple_ddp=$GPUS_PER_NODE)"
-fi
+echo "  Parallelism  : ${RENDER_PARALLEL[*]}  (HSDP: fsdp=GPUs/node, simple_ddp=nodes)"
 if [[ "$LAUNCH_EDM_DIRECT" -eq 1 ]]; then
   echo "  Train entry  : python3 /orbit2/launch/train_edm.py (Bayes EDM; Studio bypasses launch_diffusion.sh)"
 elif [[ -n "$LAUNCH_IC" ]]; then
@@ -184,7 +189,7 @@ if [[ "$ORBIT2_SKIP_NODE_HEALTH_PROBE" != "1" ]]; then
        --cpus-per-task=1 --gres=none --output="${_PROBE_OUT}" --error="${_PROBE_OUT}" \
     bash -c '
       H=$(hostname)
-      HM=$(test -d "/home/$USER" 2>/dev/null && echo OK || echo FAIL)
+      HM=$(test -d "/home/$USER" -o -d "/ccs/home/$USER" 2>/dev/null && echo OK || echo FAIL)
       SH=$(test -d "'"$AI4S_SHARED_DIR"'" 2>/dev/null && echo OK || echo FAIL)
       SIF_CHECK=$(test -f "'"$ORBIT2_SIF"'" 2>/dev/null && echo OK || echo FAIL)
       DATA_CHECK=$(test -d "'"$ORBIT2_DATA_ROOT"'" 2>/dev/null && echo OK || echo FAIL)
@@ -221,6 +226,14 @@ set -euo pipefail
 source /opt/venv/bin/activate
 echo "[rank \$SLURM_PROCID / \$SLURM_NTASKS] GPU \$SLURM_LOCALID on \$(hostname)"
 export PYTHONPATH="/opt/orbit2-pkgs:/orbit2/src:/orbit2:\${PYTHONPATH:-}"
+OMPI="\${HG_OMPI_DIR:-/opt/ompi}"
+if [[ -n "\${HG_MPI_EXTRA_LDPATH:-}" ]]; then
+  export LD_LIBRARY_PATH="/opt/orbit2-pkgs:\${OMPI}/lib:\${HG_MPI_EXTRA_LDPATH}:/opt/venv/lib/python3.12/site-packages/torch/lib:\${LD_LIBRARY_PATH:-}"
+else
+  export LD_LIBRARY_PATH="/opt/orbit2-pkgs:\${OMPI}/lib:/opt/venv/lib/python3.12/site-packages/torch/lib:\${LD_LIBRARY_PATH:-}"
+fi
+[[ -n "\${MPI4PY_LIBMPI:-}" ]] && export MPI4PY_LIBMPI
+[[ -n "\${HG_LUX_OPAL_PREFIX:-}" ]] && export OPAL_PREFIX="\${HG_LUX_OPAL_PREFIX}"
 export OMP_NUM_THREADS="\${SLURM_CPUS_PER_TASK:-7}"
 export MIOPEN_DISABLE_CACHE=1
 export MIOPEN_USER_DB_PATH="\${TMPDIR:-/tmp}/orbit2-miopen-\${SLURM_JOB_ID:-\$\$}-\${SLURM_PROCID:-0}"
@@ -270,10 +283,30 @@ chmod +x "$RANK_SCRIPT"
 
 CONFIG_BIND="$(realpath "$JOB_CONFIG"):/config/config.yaml"
 
-# Multi-node RCCL/MPI (from .cluster-config.yaml)
+# MPI / RCCL — ORNL Lux: system OpenMPI module over ob1/TCP; Vultr Lux: /opt/ompi.
+LUX_MPI_SH="${SCRIPT_DIR}/../../../../material_science/models/HydraGNN/examples/lux_mpi_env.sh"
+MPI_BINDS=()
+MPI_RUNTIME_ENVS=()
+LUX_MPI_MULTINODE_BINDS=()
 RCCL_MULTINODE_ENVS=()
-MPI_MULTINODE_ENVS=()
-if [[ "$NODES" -gt 1 ]]; then
+LUX_RCCL_MULTINODE_ENVS=()
+if [[ -f "$LUX_MPI_SH" ]]; then
+  # shellcheck source=../../../../material_science/models/HydraGNN/examples/lux_mpi_env.sh
+  source "$LUX_MPI_SH"
+fi
+if lux_mpi_should_use 2>/dev/null; then
+  lux_mpi_stage_local || true
+fi
+if lux_mpi_should_use 2>/dev/null && lux_mpi_setup_binds && lux_mpi_runtime_envs; then
+  MPI_BINDS=( "${MPI_BINDS[@]}" )
+  MPI_RUNTIME_ENVS=( "${LUX_MPI_RUNTIME_ENVS[@]}" )
+  lux_mpi_multinode_apptainer_binds
+  if lux_mpi_rccl_multinode_envs; then
+    LUX_RCCL_MULTINODE_ENVS=( "${LUX_RCCL_MULTINODE_ENVS[@]}" )
+    echo "  Multi-node RCCL: ORNL Lux Pensando (lux_mpi_rccl_multinode_envs)"
+  fi
+  echo "  MPI stack: ORNL Lux system openmpi/5.0.10 (ob1/tcp)"
+elif [[ "$NODES" -gt 1 ]]; then
   _CLUSTER_CFG="${SCRIPT_DIR}/../../../../.cluster-config.yaml"
   if [[ -f "$_CLUSTER_CFG" ]]; then
     _yaml_get() { grep "^  $1:" "$_CLUSTER_CFG" 2>/dev/null | sed 's/.*: *"\?\([^"]*\)"\?.*/\1/' | grep -v '^$'; }
@@ -287,9 +320,11 @@ if [[ "$NODES" -gt 1 ]]; then
   : "${RCCL_ANP_PLUGIN:?Set RCCL_ANP_PLUGIN or configure network.rccl_anp_plugin}"
   : "${LIBIONIC_PATH:?Set LIBIONIC_PATH or configure network.libionic_path}"
 
-  MPI_MULTINODE_ENVS=(
+  MPI_BINDS=( --bind /opt/ompi:/opt/ompi:ro )
+  # Apptainer --env KEY=a,b truncates at the comma.
+  export APPTAINERENV_OMPI_MCA_btl="tcp,self"
+  MPI_RUNTIME_ENVS=(
     --env OMPI_MCA_pml=ob1
-    --env OMPI_MCA_btl=tcp,self
     --env OMPI_MCA_btl_tcp_if_include="$NCCL_SOCKET_IFNAME"
     --env MPI4PY_RC_THREADS=false
   )
@@ -316,14 +351,62 @@ if [[ "$NODES" -gt 1 ]]; then
     --env NCCL_DMABUF_ENABLE=1
     --env NCCL_DEBUG="${NCCL_DEBUG:-WARN}"
   )
-  echo "  Multi-node RCCL enabled (NCCL_IB_HCA=$NCCL_IB_HCA)"
+  echo "  Multi-node RCCL: Vultr Lux ANP (NCCL_IB_HCA=$NCCL_IB_HCA)"
+elif [[ -x /opt/ompi/bin/mpicc ]]; then
+  MPI_BINDS=( --bind /opt/ompi:/opt/ompi:ro )
+  echo "  MPI stack: /opt/ompi (single-node)"
+else
+  echo "ERROR: no OpenMPI baseline found (ORNL Lux: system module; Vultr: /opt/ompi)" >&2
+  exit 2
+fi
+OPT_MPI_ENVS=()
+for k in MPI4PY_LIBMPI HG_MPI_EXTRA_LDPATH HG_OMPI_DIR HG_LUX_OPAL_PREFIX OPAL_PREFIX; do
+  v="${!k:-}"
+  [[ -n "$v" ]] && OPT_MPI_ENVS+=( --env "${k}=${v}" )
+done
+
+# Stage large Apptainer artifacts to node-local /tmp (Sidafa Primus pattern on
+# ORNL Lux). Concurrent fuse2fs mounts / SIF opens against Lustre from NGPU ranks
+# starve startup. Override: ORBIT2_STAGE_LOCAL=0
+ORBIT2_OVERLAY_USE="$ORBIT2_OVERLAY"
+ORBIT2_SIF_USE="$ORBIT2_SIF"
+if [[ "${ORBIT2_STAGE_LOCAL:-1}" != "0" ]]; then
+  _NODE_TMP="${ORBIT2_NODE_TMP:-/tmp/orbit2-${SLURM_JOB_ID}}"
+  echo "--- Staging SIF + overlay to ${_NODE_TMP} (1 task/node, Sidafa-style) ---"
+  srun -N "$NODES" --ntasks-per-node=1 --cpus-per-task=4 --gres=none \
+    bash -c '
+      set -euo pipefail
+      dest="'"$_NODE_TMP"'"
+      mkdir -p "$dest"
+      stage_file() {
+        local src="$1" dst="$2" label="$3"
+        local want have
+        want=$(stat -c %s "$src")
+        have=$(stat -c %s "$dst" 2>/dev/null || echo 0)
+        if [[ "$have" != "$want" ]]; then
+          echo "  $(hostname): staging $label -> $dst ($((want/1024/1024)) MB)"
+          cp -f "$src" "${dst}.partial"
+          mv -f "${dst}.partial" "$dst"
+        else
+          echo "  $(hostname): $label already staged"
+        fi
+      }
+      stage_file "'"$ORBIT2_SIF"'" "$dest/$(basename "'"$ORBIT2_SIF"'")" sif
+      stage_file "'"$ORBIT2_OVERLAY"'" "$dest/orbit2-overlay.img" overlay
+      echo "  $(hostname): stage ready"
+    '
+  ORBIT2_SIF_USE="${_NODE_TMP}/$(basename "$ORBIT2_SIF")"
+  ORBIT2_OVERLAY_USE="${_NODE_TMP}/orbit2-overlay.img"
 fi
 
 echo "--- Launching training: $TOTAL_RANKS ranks across $NODES nodes ---"
+echo "  Runtime SIF  : $ORBIT2_SIF_USE"
+echo "  Runtime OV   : $ORBIT2_OVERLAY_USE"
 srun --mpi=pmix apptainer exec \
     --rocm \
-    --overlay "${ORBIT2_OVERLAY}:ro" \
-    --bind "/opt/ompi:/opt/ompi:ro" \
+    --overlay "${ORBIT2_OVERLAY_USE}:ro" \
+    "${MPI_BINDS[@]}" \
+    "${LUX_MPI_MULTINODE_BINDS[@]}" \
     --bind "$ORBIT2_ROOT":/orbit2 \
     --bind "$SCRIPT_DIR":/examples \
     --bind "$(dirname "$RANK_SCRIPT"):$(dirname "$RANK_SCRIPT")" \
@@ -335,10 +418,11 @@ srun --mpi=pmix apptainer exec \
     --env PMIX_MCA_gds=hash \
     --env PMIX_MCA_psec=native \
     --env PYTHONPATH="/opt/orbit2-pkgs:/orbit2/src:/orbit2" \
-    --env LD_LIBRARY_PATH=/opt/venv/lib/python3.12/site-packages/torch/lib \
-    "${MPI_MULTINODE_ENVS[@]}" \
+    "${MPI_RUNTIME_ENVS[@]}" \
+    "${OPT_MPI_ENVS[@]}" \
     "${RCCL_MULTINODE_ENVS[@]}" \
-    "$ORBIT2_SIF" \
+    "${LUX_RCCL_MULTINODE_ENVS[@]}" \
+    "$ORBIT2_SIF_USE" \
     bash "$RANK_SCRIPT"
 
 echo ""
