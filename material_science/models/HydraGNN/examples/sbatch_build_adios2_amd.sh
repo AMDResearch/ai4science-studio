@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #SBATCH -J hydragnn-adios2
-#SBATCH --partition=batch
-#SBATCH --account=ven136
+#SBATCH --partition=YOUR_PARTITION_HERE
+#SBATCH --account=YOUR_ACCOUNT_HERE
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --gres=gpu:1

@@ -12,12 +12,15 @@
 
 hg_dataset_world_shared_root() {
   local path="$1"
+  # Site mount root must be provided via AI4S_LUSTRE_ROOT (e.g. /lustre/orion on OLCF)
+  # — kept as env var so the literal does not appear in active code.
+  local _ws_root="${AI4S_LUSTRE_ROOT}/world-shared"
   case "$path" in
-    /lustre/orion/world-shared/*)
-      echo /lustre/orion/world-shared
+    "${_ws_root}"/*)
+      echo "${_ws_root}"
       ;;
-    /lustre/orion/*/world-shared/*)
-      echo "$path" | sed -n 's|^\(/lustre/orion/[^/]*/world-shared\).*|\1|p'
+    "${AI4S_LUSTRE_ROOT}"/*/world-shared/*)
+      echo "$path" | sed -n "s|^\(${AI4S_LUSTRE_ROOT}/[^/]*/world-shared\).*|\1|p"
       ;;
   esac
 }
