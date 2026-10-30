@@ -158,6 +158,121 @@ class LLMConfigTests(unittest.TestCase):
         self.assertEqual(headers.get("Authorization"), "Bearer sk-test")
 
 
+class LLMProviderTests(unittest.TestCase):
+    def _ep(self, provider: str, base: str):
+        from ai4s.llm import LLMEndpoint
+
+        return LLMEndpoint(
+            mode="external", base_url=base, model="m", api_key_env=None, provider=provider
+        )
+
+    def test_provider_config(self) -> None:
+        self.assertEqual(resolve_llm_config({})["provider"], "openai")
+        self.assertEqual(resolve_llm_config({"provider": "Anthropic"})["provider"], "anthropic")
+        from ai4s.llm import LLMError
+
+        with self.assertRaises(LLMError):
+            resolve_llm_config({"provider": "nope"})
+
+    def test_anthropic_request_shape(self) -> None:
+        from ai4s.llm import _build_request
+
+        ep = self._ep("anthropic", "http://127.0.0.1:18000/Anthropic/")
+        url, payload, extra = _build_request(
+            ep,
+            [{"role": "system", "content": "sys"}, {"role": "user", "content": "hi"}],
+            0.0,
+            16,
+            True,
+        )
+        self.assertEqual(url, "http://127.0.0.1:18000/Anthropic/v1/messages")
+        self.assertEqual(payload["system"], "sys")
+        self.assertEqual(payload["messages"], [{"role": "user", "content": "hi"}])
+        self.assertTrue(payload["stream"])
+        self.assertIn("anthropic-version", extra)
+
+    def test_openai_request_shape(self) -> None:
+        from ai4s.llm import _build_request
+
+        ep = self._ep("openai", "http://127.0.0.1:18000/OpenAI")
+        url, payload, extra = _build_request(ep, [{"role": "user", "content": "hi"}], 0.0, 16, False)
+        self.assertEqual(url, "http://127.0.0.1:18000/OpenAI/chat/completions")
+        self.assertNotIn("stream", payload)
+        self.assertEqual(extra, {})
+
+    def _deltas(self, provider: str, sse: str) -> list[str]:
+        from ai4s.llm import _delta_text, _sse_events
+
+        lines = [ln.encode() + b"\n" for ln in sse.split("\n")]
+        out = (_delta_text(provider, e, d) for e, d in _sse_events(lines))
+        return [x for x in out if x]
+
+    def test_openai_stream_parse(self) -> None:
+        sse = (
+            'data: {"choices":[]}\n\n'
+            'data: {"choices":[{"delta":{"role":"assistant"}}]}\n\n'
+            'data: {"choices":[{"delta":{"content":"a"}}]}\n\n'
+            'data: {"choices":[{"delta":{"content":"b"}}]}\n\n'
+            "data: [DONE]\n\n"
+        )
+        self.assertEqual(self._deltas("openai", sse), ["a", "b"])
+
+    def test_anthropic_stream_parse(self) -> None:
+        sse = (
+            'event: message_start\ndata: {"type":"message_start"}\n\n'
+            'event: content_block_delta\n'
+            'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"x"}}\n\n'
+            'event: ping\ndata: {"type":"ping"}\n\n'
+            'event: content_block_delta\n'
+            'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"y"}}\n\n'
+            'event: message_stop\ndata: {"type":"message_stop"}\n\n'
+        )
+        self.assertEqual(self._deltas("anthropic", sse), ["x", "y"])
+
+    def test_stream_error_event(self) -> None:
+        from ai4s.llm import LLMError
+
+        sse = 'event: error\ndata: {"type":"error","error":{"message":"overloaded"}}\n\n'
+        with self.assertRaises(LLMError):
+            self._deltas("anthropic", sse)
+
+
+class LLMDeploymentOverrideTests(unittest.TestCase):
+    def test_env_overrides_campaign_model_and_provider(self) -> None:
+        env = {"AI4S_LLM_MODEL": "Claude-Sonnet-5", "AI4S_LLM_PROVIDER": "anthropic"}
+        with mock.patch.dict(os.environ, env, clear=False):
+            cfg = resolve_llm_config({"model": "gpt-4o", "provider": "openai"})
+        self.assertEqual((cfg["model"], cfg["provider"]), ("Claude-Sonnet-5", "anthropic"))
+
+    def test_ready_gate_off_by_default_and_bounded(self) -> None:
+        from ai4s.llm import LLMEndpoint, LLMError, wait_external_ready
+
+        ep = LLMEndpoint(
+            mode="external", base_url="http://127.0.0.1:9/OpenAI", model="m", api_key_env=None
+        )
+        wait_external_ready(ep, 0)  # no-op
+        with self.assertRaises(LLMError):
+            wait_external_ready(ep, 0.1)  # nothing listening on port 9
+
+    def test_run_record_names_endpoint_and_provider(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            env = {"AI4S_LLM_ENDPOINT": "http://127.0.0.1:18000/Anthropic", "AI4S_LLM_PROVIDER": "anthropic"}
+            with mock.patch.dict(os.environ, env, clear=False):
+                out = run_campaign(
+                    repo_root_from() / "campaigns" / "orbit2-infer-perf" / "campaign.yaml",
+                    overrides={
+                        "AI4S_SHARED_DIR": tmp,
+                        "PERF_TOOLS_DIR": tmp,
+                        "ORBIT2_ROOT": tmp,
+                    },
+                    run_dir=Path(tmp) / "run",
+                    dry_run=True,
+                )
+            rec = json.loads((Path(out["run_dir"]) / "run.json").read_text())
+        self.assertEqual(rec["llm"]["provider"], "anthropic")
+        self.assertEqual(rec["llm"]["endpoint"], "http://127.0.0.1:18000/Anthropic")
+
+
 class GraphDryRunTests(unittest.TestCase):
     def setUp(self) -> None:
         self.root = repo_root_from()

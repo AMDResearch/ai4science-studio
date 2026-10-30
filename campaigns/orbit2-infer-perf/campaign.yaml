@@ -50,8 +50,9 @@ llm:
   api_key_env: OPENAI_API_KEY
   # auto → Ocp-Apim-Subscription-Key when endpoint host is llm-api.amd.com
   auth_style: auto
-  # OpenAI-compatible path on AMD MAG (not /Anthropic). Use gpt-* here;
-  # Claude works on https://llm-api.amd.com/Anthropic/v1/messages (different API).
+  # provider openai → .../OpenAI (gpt-*, DeepSeek, ...); provider anthropic → .../Anthropic
+  # (Claude via /v1/messages, e.g. AI4S_LLM_PROVIDER=anthropic with model Claude-Sonnet-5).
+  provider: openai
   model: gpt-4o
   # endpoint: set AI4S_LLM_ENDPOINT=https://llm-api.amd.com/OpenAI
 

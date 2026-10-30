@@ -205,6 +205,8 @@ def run_campaign(
     llm_meta = {
         "mode": llm_cfg["mode"],
         "endpoint_configured": bool(llm_cfg.get("endpoint")),
+        "endpoint": llm_cfg.get("endpoint") or None,
+        "provider": llm_cfg.get("provider"),
         "api_key_env": llm_cfg.get("api_key_env"),
         "model": llm_cfg.get("model"),
     }

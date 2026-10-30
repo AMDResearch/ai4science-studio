@@ -223,10 +223,15 @@ def _deterministic_findings(run_id: str, job_dir: Path) -> list[dict[str, Any]]:
             }
         )
 
-    # Optional PromQL enrichments already in foms.json
+    # Optional PromQL enrichments already in foms.json. Both bf16 (ORBIT-2) and
+    # fp64 (HydraGNN's hbm_flops_f64 rocprofiler profile) precisions are listed
+    # explicitly rather than merged under one key, so the finding title never
+    # mislabels the measured precision.
     for key, title in (
         ("mfma_bf16_tflops_per_card_avg", "MFMA BF16 TFLOPS/card"),
+        ("mfma_fp64_tflops_per_card_avg", "MFMA FP64 TFLOPS/card"),
         ("hbm_read_GBps_per_card_avg", "HBM read GB/s/card"),
+        ("mean_power_W", "Mean GPU power (W)"),
     ):
         val = foms.get(key)
         if val is not None:

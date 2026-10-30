@@ -45,6 +45,12 @@
           "default": "auto",
           "description": "auto selects apim (Ocp-Apim-Subscription-Key) for llm-api.amd.com, else bearer."
         },
+        "provider": {
+          "type": "string",
+          "enum": ["openai", "anthropic"],
+          "default": "openai",
+          "description": "Wire API: openai (/chat/completions) or anthropic (/v1/messages, e.g. Claude on the AMD Gateway)."
+        },
         "model": { "type": "string" },
         "local": {
           "type": "object",
