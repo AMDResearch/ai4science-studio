@@ -101,7 +101,20 @@ echo "  Config     : $HG_CONFIG"
 echo "  Output     : $HG_OUTPUT_DIR"
 echo ""
 
-HG_INFER_REPO="${HG_INFER_REPO:-${HG_OUTPUT_DIR}/HydraGNN-infer}"
+HG_INFER_REPO="${HG_INFER_REPO:-${HG_BASE}/code/HydraGNN-infer}"
+
+# Proxy passthrough — only when non-empty (compute nodes have no direct egress).
+PROXY_ENVS=()
+for k in https_proxy http_proxy HTTPS_PROXY HTTP_PROXY no_proxy NO_PROXY; do
+  v="${!k:-}"
+  [[ -n "$v" ]] && PROXY_ENVS+=( --env "${k}=${v}" )
+done
+
+# Bind pre-cloned inference repo when present (avoids in-container git clone).
+INFER_BIND=()
+if [[ -d "$HG_INFER_REPO" ]]; then
+  INFER_BIND=(--bind "${HG_INFER_REPO}:${HG_INFER_REPO}:ro")
+fi
 
 apptainer exec --rocm \
     --overlay "${HG_OVERLAY}:ro" \
@@ -109,10 +122,12 @@ apptainer exec --rocm \
     --bind "$(dirname "$HG_CONFIG"):$(dirname "$HG_CONFIG"):ro" \
     --bind "${HG_OUTPUT_DIR}:${HG_OUTPUT_DIR}" \
     --bind "$SCRIPT_DIR":/examples:ro \
+    "${INFER_BIND[@]}" \
     --env HG_CHECKPOINT="$HG_CHECKPOINT" \
     --env HG_CONFIG="$HG_CONFIG" \
     --env HG_OUTPUT_DIR="$HG_OUTPUT_DIR" \
     --env HG_INFER_REPO="$HG_INFER_REPO" \
     --env PYTHONPATH="/opt/hydragnn-pkgs" \
+    "${PROXY_ENVS[@]}" \
     "$HG_SIF" \
     bash -c "source /opt/venv/bin/activate && bash /examples/run_inference.sh"

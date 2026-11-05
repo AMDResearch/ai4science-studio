@@ -50,3 +50,12 @@ Validators live in `tools/ai4s_validate/` and return structured findings (import
 
 - Cursor: `.cursor/skills/` — keep `SKILL.md` short; load `reference/` when debugging HPC or a specific model.
 - Claude Code: `.claude/commands/` plus [`CLAUDE.md`](CLAUDE.md) (pointer to this file)
+
+## Campaign runtime (MVP)
+
+- Package: [`tools/ai4s/`](tools/ai4s/) — model-agnostic LangGraph campaign runner (`python -m ai4s run <campaign.yaml>`).
+- Reusable agents: [`agents/`](agents/) (repo) + optional cluster registry `${AI4S_SHARED_DIR}/registry`.
+- Model tasks: discovered from `*/models/*/model.yaml` as `Model:task` (not a global task registry).
+- Example campaign: [`campaigns/orbit2-infer-perf/`](campaigns/orbit2-infer-perf/).
+- Design: [`docs/design/agents-for-science.md`](docs/design/agents-for-science.md).
+- Validate: `make check` (includes `python -m ai4s validate`) and `make test-ai4s`.

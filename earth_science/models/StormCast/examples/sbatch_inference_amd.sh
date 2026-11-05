@@ -96,6 +96,13 @@ echo "  Start : ${SC_START}"
 echo "  Steps : ${SC_STEPS}"
 echo "  Job   : ${SLURM_JOB_ID:-local}"
 
+# Proxy passthrough for no-egress clusters (ORNL Lux): runtime pip inside container.
+PROXY_ENVS=()
+for k in https_proxy http_proxy HTTPS_PROXY HTTP_PROXY no_proxy NO_PROXY; do
+  v="${!k:-}"
+  [[ -n "$v" ]] && PROXY_ENVS+=( --env "${k}=${v}" )
+done
+
 # ---------------------------------------------------------------------------
 # Apptainer path
 # ---------------------------------------------------------------------------
@@ -148,6 +155,7 @@ INSTALLEOF
             "${PKGDIR_BIND[@]}" \
             --bind "$(dirname "$_INSTALL_SCRIPT"):$(dirname "$_INSTALL_SCRIPT")" \
             --env ROCM_WHL_TAG="$ROCM_WHL_TAG" \
+            "${PROXY_ENVS[@]}" \
             "$SC_SIF" \
             bash "$_INSTALL_SCRIPT"
 

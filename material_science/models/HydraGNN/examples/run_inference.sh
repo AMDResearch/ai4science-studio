@@ -68,6 +68,10 @@ python - <<PYEOF
 import sys, json, os, torch
 from collections import OrderedDict
 
+# Single-process inference: disable mpi4py auto-MPI_Init (no srun --mpi=pmix here).
+import mpi4py
+mpi4py.rc.initialize = False
+
 # Use the Predictive_GFM_2024 branch code (matches checkpoint architecture)
 sys.path.insert(0, "${HG_INFER_REPO}")
 

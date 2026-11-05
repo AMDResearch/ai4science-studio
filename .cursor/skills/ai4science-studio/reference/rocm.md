@@ -74,6 +74,19 @@ SCRIPT_DIR=$(cd "$(dirname "$(scontrol show job "$SLURM_JOB_ID" | grep -oP 'Comm
 
 Applies to both Docker and Apptainer sbatch scripts.
 
+**Nested runners:** when a thin `sbatch_*.sh` (or campaign wrapper) `exec`s/`bash`es an allocation-neutral `run_*.sh`, that inner script must prefer `BASH_SOURCE` unless it itself is the spool copy. Blindly using `scontrol Command=` inside the nested script resolves to the *outer* sbatch path and breaks sibling lookups. Pattern used by ORBIT-2 `run_infer_amd.sh` / `run_infer_perf_amd.sh`:
+
+```bash
+_SRC="${BASH_SOURCE[0]:-}"
+if [[ -n "$_SRC" && "$_SRC" != *"/var/spool/slurmd/"* && "$_SRC" != *"/spool/slurmd/"* ]]; then
+  SCRIPT_DIR=$(cd "$(dirname "$_SRC")" && pwd)
+elif [[ -n "${SLURM_JOB_ID:-}" ]]; then
+  SCRIPT_DIR=$(cd "$(dirname "$(scontrol show job "$SLURM_JOB_ID" | sed -n 's/.*Command=\(\S\+\).*/\1/p')")" && pwd)
+else
+  SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+fi
+```
+
 ## Python version compatibility
 
 The canonical image is **py3.12**. Some upstream models pin older deps that lack cp312 binary wheels:
@@ -184,6 +197,23 @@ cp "$LOCAL_OVERLAY" "$OVERLAY"   # $OVERLAY = NFS destination (set by user, neve
 rm -f "$LOCAL_OVERLAY"
 ```
 
+**Runtime: stage Lustre overlays to node-local `/tmp` before multi-rank `srun`.**
+
+On ORNL Lux (2026-09), 8 concurrent `apptainer exec` calls can starve when they each fuse2fs-mount the same shared ext3 overlay: ranks trickle in over many minutes or never reach bash. Use the site OpenMPI module; do not copy or stage a private MPI tree.
+
+Fix (default on; disable with `ORBIT2_STAGE_LOCAL=0` on train/infer, `ORBIT2_STAGE_OVERLAY_LOCAL=0` on train perf, or `HG_STAGE_OVERLAY_LOCAL=0` on HydraGNN):
+
+1. Load `rocm/7.2.4`, `amd-llvm/7.2.4`, then `openmpi/5.0.10`. `lux_mpi_setup_binds` bind-mounts the discovered software tree (common prefix of the MPI prefix and its non-system libraries). Override with `HG_LUX_SW_ROOT` if that prefix is wrong.
+2. Copy the overlay `.img` to `/tmp/<model>-overlay-$JOBID.img` once per node.
+
+```bash
+lux_mpi_setup_binds   # loads site modules; binds the discovered software tree read-only
+# ... likewise for overlay ...
+LOCAL_OV="/tmp/orbit2-overlay-${SLURM_JOB_ID}.img"
+srun -N "$NODES" --ntasks-per-node=1 bash -c 'cp -f "$OVERLAY" "'"$LOCAL_OV"'"'
+srun --mpi=pmix apptainer exec --overlay "${LOCAL_OV}:ro" "${MPI_BINDS[@]}" ...
+```
+
 **Validated overlay sizes:**
 - ORBIT-2 (pytorch-lightning + xformers + wandb + mpi4py + ...): 7 GB overlay, ~2 GB content
 - HydraGNN (torch-scatter + torch-geometric + mpi4py + ...): 4 GB overlay, ~522 MB content
@@ -291,10 +321,12 @@ torch.cuda.set_device(local_rank)  # rank 0→GPU 0, rank 1→GPU 1, ...
 - Multi-node: full set (`NCCL_NET_PLUGIN`, `NCCL_IB_HCA`, `NCCL_IB_GID_INDEX`, etc.) — see `sbatch_train_amd.sh` in HydraGNN examples
 
 **Multi-node MPI transport (ob1/tcp — correct for Pensando/ionic fabric):**
-- Pensando ionic data NICs use `/31` point-to-point subnets; nodes cannot route to each other on data interfaces. Standard IB verbs do NOT work for MPI inter-node traffic.
-- MPI uses ob1 PML with TCP BTL over the management NIC: `OMPI_MCA_pml=ob1`, `OMPI_MCA_btl=tcp,self`, `OMPI_MCA_btl_tcp_if_include=<mgmt_iface>`, `MPI4PY_RC_THREADS=false`.
-- RCCL uses ANP plugin (`librccl-anp.so`) + `libionic.so.1` (bind-mounted from host) over ionic native transport (RoCEv2/GDRDMA) for GPU allreduce — independent of MPI/UCX.
-- Without the ANP bind-mounts, RCCL falls back to socket transport over the management NIC (works but much slower).
+- Pensando ionic data NICs use `/31` point-to-point subnets; nodes cannot route to each other on data interfaces. Standard IB verbs do NOT work for MPI inter-node traffic inside Apptainer.
+- **MPI bootstrap (Studio Apptainer):** load Lux site modules `rocm/7.2.4`, `amd-llvm/7.2.4`, and `openmpi/5.0.10`. Bind the software tree discovered from that module (`HG_LUX_SW_ROOT` overrides it). Force `pml=ob1`, `osc=^ucx`, `coll=^ucc`, `btl=tcp,self` on `bond0` (`HG_LUX_MPI_TCP_IFACE` overrides the interface). There is no UCX transport option in `lux_mpi_env.sh`. **Comma trap:** `--env OMPI_MCA_btl=tcp,self` is truncated by Apptainer — export `APPTAINERENV_OMPI_MCA_btl` instead. If a job prints `Launching training` with **no** `[rank …]` lines, ranks never entered the container (overlay/exec or MPI_Init). Use `examples/sbatch_mpi_tcp_smoke_amd.sh` (SIF → overlay → 1/2/8-rank mpi4py).
+- **Why not UCX `sm` under Apptainer?** Each rank is a separate `apptainer exec`; UCX posix SHM opens peer `/proc/<pid>/fd/…` and hits Permission denied (user namespace). Fixing that for real requires a different container/process topology.
+- **RCCL data plane — ORNL Lux vs Vultr Lux (do not conflate):**
+  - **ORNL Lux (2026-09):** native RCCL IB over `ionic_0..7`, OOB `NCCL_SOCKET_IFNAME=bond0`, `NCCL_IB_GID_INDEX=1`, `NCCL_IB_TC=104`, `RCCL_AINIC_ROCE=1`, `IONIC_LOCKFREE=all`, plus Primus extras `USING_AINIC=1` / `RCCL_USE_AMD_SMI_LIB=1` (set `0` at ≥32 nodes per mswu). **Leave `NCCL_NET_PLUGIN` unset** — AMD ANP is not installable on ORNL. **Apptainer trap:** `--env NCCL_IB_HCA=ionic_0,ionic_1,...` truncates at the first comma — export `APPTAINERENV_NCCL_IB_HCA` instead (`lux_mpi_rccl_multinode_envs`). Do **not** set `NCCL_BUFFSIZE` / forced channel counts.
+  - **Vultr Lux:** may still use ANP plugin + `libionic.so.1` bind-mounts; site-specific — do not copy blindly to ORNL.
 
 ## PMIx shared memory fix for Apptainer
 
@@ -303,6 +335,12 @@ When using `srun --mpi=pmix` with Apptainer, ranks may segfault with `PMIx ERROR
 --env PMIX_MCA_gds=hash
 --env PMIX_MCA_psec=native
 ```
+
+## UCX `mm_posix` Permission denied under Apptainer (ORNL Lux)
+
+**Symptom:** multi-rank job inside Apptainer floods `mm_posix.c: open(/proc/<pid>/fd/…) failed: Permission denied` then hangs (ORBIT-2 Phase2 job pattern). Intra-node UCX `sm` uses posix SHM via peer `/proc/.../fd`.
+
+**Studio resolution:** use the system OpenMPI module with `ob1` + `tcp,self` and disable UCC collectives. This avoids UCX transport and `mm_posix` while retaining MPI. RCCL remains independent and continues to use ionic for GPU collectives.
 
 ## Never `import` mpi4py-bearing modules from a rank-0-only python before the real `srun`
 
@@ -711,7 +749,7 @@ When a probe job fails, ask **two** questions before retrying with a bigger run:
 ### 16. ORBIT-2 / Bayes-CAST: `launch_diffusion.sh`, 1-node FSDP layout, perf template parity
 
 - **`sbatch_train_perf_amd.sh`** defaults **`edm_8m_era5_1x8.yaml`** (Bayes-CAST EDM; rendered **`fsdp=8`/`simple_ddp=1`**) + ERA5 1.0° **`ORBIT2_DATA_ROOT`**; **`ORBIT2_ROOT`** prefers **`…/code/bayes-cast`** when present; detects **`launch/launch_diffusion.sh`**. **`sbatch_train_amd.sh`**: same launcher discovery + ORBIT2_ROOT preference; train still defaults PRISM **`interm_8m_prism.yaml`** unless overridden. `render_orbit2_config.py` adds **`ORBIT2_ERA5_SPATIAL_RES`** (default **111**) for the EDM template. Perf default `#SBATCH --nodes=1`; use `sbatch --nodes=N` for multi-node.
-- **1 node × 8 GPUs:** unless **`ORBIT2_FSDP`** and **`ORBIT2_SIMPLE_DDP`** are both set, sbatch passes **`--fsdp 8 --simple-ddp 1`** (YAML: eight-way FSDP, one DDP group). Multi-node jobs omit extra flags so render keeps **`fsdp=nodes`**, **`simple_ddp=8`**.
+- **HSDP layout (ORBIT-2):** unless **`ORBIT2_FSDP`** and **`ORBIT2_SIMPLE_DDP`** are both set, sbatch always passes **`--fsdp $GPUS_PER_NODE --simple-ddp $NODES`** (shard on XGMI within a node; DDP across nodes). Do **not** fall through to render’s **`fsdp=nodes`/`simple_ddp=gpus`** — that shards across IB.
 - **`launch/train_edm.py` (Bayes-CAST EDM):** when **`$ORBIT2_ROOT/launch/train_edm.py`** exists, Studio **does not** run upstream **`launch/launch_diffusion.sh`**. That file is often an OLCF/Crusher job wrapper: it **ignores argv**, hardcodes a YAML, and **nests `srun`**, which breaks Studio’s outer **`srun … apptainer exec`** flow. Ranks **`cd /orbit2/launch`**, run **`orbit2_rank_hook_runner.py`** (no-op if no hook), then **`exec python3 train_edm.py /config/config.yaml`**. Minimal Bayes checkouts may have **no `examples/`** — never **`cd /orbit2/examples`** on that path.
 - **Public ORBIT-2:** if **`launch_diffusion.sh`** exists and **`train_edm.py`** does not, ranks **`exec bash …/launch_diffusion.sh /config/config.yaml`** after the hook runner (from **`examples/`** when present). Otherwise **`run_orbit2_train.py`**. Optional **`ORBIT2_LAUNCH_SCRIPT`** must be under **`ORBIT2_ROOT`**.
 - **Perf + Bayes EDM + rank hooks:** when **`LAUNCH_EDM_DIRECT=1`**, the default pre-train hook is **empty** (the **`orbit2_profiler_hook.py`** imports `intermediate_downscaling`). Set **`export ORBIT2_RANK_PRE_TRAIN_HOOK=/abs/path/hook.py` before `sbatch`** so `sbatch_train_perf_amd.sh` bakes the path into the generated rank script; **`orbit2_rank_hook_runner.py`** runs it before **`train_edm.py`**. TraceLens still arms from **`ORBIT2_PROFILE_DIR`** / **`PROFILE_TARGET_EPOCH`** in the rank script.

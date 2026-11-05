@@ -1,0 +1,91 @@
+schema_version: "1"
+name: hydragnn-train-perf
+description: >
+  Two-stage campaign: instrumented HydraGNN 2-node training (task), then
+  read-only perf-report (reusable agent). Runs inside one SLURM allocation
+  via the LangGraph campaign runner. Modeled directly on
+  campaigns/orbit2-infer-perf/ and campaigns/orbit2-train-perf/. This is a
+  new, additional path into material_science/models/HydraGNN/recipes/perf-analysis/ —
+  the existing TraceLens-based multi-subagent workflow there is unchanged.
+
+inputs:
+  AI4S_SHARED_DIR:
+    type: path
+    required: true
+    env: AI4S_SHARED_DIR
+    description: Shared filesystem root for artifacts and optional registry.
+  PERF_TOOLS_DIR:
+    type: path
+    required: true
+    env: PERF_TOOLS_DIR
+    description: Omnistat / VictoriaMetrics tools root.
+  HG_REPO_DIR:
+    type: path
+    required: false
+    env: HG_REPO_DIR
+  HG_SIF:
+    type: path
+    required: false
+    env: HG_SIF
+  HG_OVERLAY:
+    type: path
+    required: false
+    env: HG_OVERLAY
+  HG_DATA_DIR:
+    type: path
+    required: false
+    env: HG_DATA_DIR
+  HG_DATASETS:
+    type: string
+    required: false
+    default: "ANI1x"
+    env: HG_DATASETS
+    description: Comma-separated dataset names. Default matches the proven smoke-test job (single dataset, fast).
+  HG_NUM_EPOCH:
+    type: string
+    required: false
+    default: "2"
+    env: HG_NUM_EPOCH
+  HYDRAGNN_MAX_NUM_BATCH:
+    type: string
+    required: false
+    default: "5"
+    env: HYDRAGNN_MAX_NUM_BATCH
+  HG_BATCH_SIZE:
+    type: string
+    required: false
+    default: "200"
+    env: HG_BATCH_SIZE
+  HG_PRECISION:
+    type: string
+    required: false
+    default: "fp64"
+    env: HG_PRECISION
+
+llm:
+  mode: auto
+  api_key_env: OPENAI_API_KEY
+  auth_style: auto
+  provider: openai
+  model: gpt-4o
+  # endpoint: set AI4S_LLM_ENDPOINT=https://llm-api.amd.com/OpenAI
+
+  local:
+    port: 8000
+    gpus: 1
+
+stages:
+  - id: hydragnn_train
+    kind: task
+    # model.yaml's `name:` field is the full "HydraGNN (Predictive GFM 2024)"
+    # string (not the directory slug "HydraGNN"); the registry key is built
+    # from that field (tools/ai4s/registry.py: discover_model_recipes), so
+    # the ref must match it exactly.
+    ref: "HydraGNN (Predictive GFM 2024):train-perf"
+    required_for_next:
+      - manifest
+      - foms
+  - id: perf_report
+    kind: agent
+    ref: perf-report
+    required_for_next: []

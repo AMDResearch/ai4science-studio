@@ -134,6 +134,26 @@ for ds in "${DATASET_ARRAY[@]}"; do
 done
 
 # ---------------------------------------------------------------------------
+# OpenMPI bind-mount (overlay adios2 links against host MPI at /opt/ompi)
+# ---------------------------------------------------------------------------
+if [[ -z "${HG_OMPI_DIR:-}" ]]; then
+  if [[ -x /opt/ompi/bin/mpicc ]]; then
+    HG_OMPI_DIR=/opt/ompi
+  else
+    if command -v module &>/dev/null; then
+      module load openmpi/5.0.10 2>/dev/null || module load openmpi 2>/dev/null || true
+    fi
+    if command -v mpicc &>/dev/null; then
+      HG_OMPI_DIR="$(cd "$(dirname "$(dirname "$(command -v mpicc)")")" && pwd)"
+    fi
+  fi
+fi
+if [[ -z "${HG_OMPI_DIR:-}" || ! -x "${HG_OMPI_DIR}/bin/mpicc" ]]; then
+  echo "ERROR: OpenMPI not found for ADIOS MPI. Set HG_OMPI_DIR or load openmpi module." >&2
+  exit 2
+fi
+
+# ---------------------------------------------------------------------------
 # Clone HydraGNN source if not present (mirrors sbatch_train_amd.sh)
 # ---------------------------------------------------------------------------
 HG_HYDRAGNN_SHA="${HG_HYDRAGNN_SHA:-2fb0bd0157e3c85a74f9841887155095bd163303}"
@@ -157,6 +177,10 @@ for ds in "${DATASET_ARRAY[@]}"; do
     ln -sfn "$source" "$target"
   fi
 done
+
+# shellcheck source=hg_dataset_binds.sh
+source "${SCRIPT_DIR}/hg_dataset_binds.sh"
+hg_setup_dataset_binds
 
 # ---------------------------------------------------------------------------
 # Render the per-job omnistat config from the template (substitute @JOB_DIR@)
@@ -266,7 +290,7 @@ if [[ "$HG_SKIP_NODE_HEALTH_PROBE" != "1" ]]; then
        --cpus-per-task=1 --gres=none --output="${_PROBE_OUT}" --error="${_PROBE_OUT}" \
     bash -c '
       H=$(hostname)
-      HM=$(test -d "/home/$USER" 2>/dev/null && echo OK || echo FAIL)
+      HM=$(test -d "/home/$USER" -o -d "/ccs/home/$USER" 2>/dev/null && echo OK || echo FAIL)
       SH=$(test -d "'"$AI4S_SHARED_DIR"'/$USER" 2>/dev/null || test -d "'"$AI4S_SHARED_DIR"'" 2>/dev/null && echo OK || echo FAIL)
       SIF_CHECK=$(test -f "'"$HG_SIF"'" 2>/dev/null && echo OK || echo FAIL)
       echo "NODE_HEALTH $H home=$HM shared=$SH sif=$SIF_CHECK"
@@ -393,8 +417,16 @@ else:
     cfg_arg = os.environ['HG_CONFIG_OVERRIDE']
 
 avg_nn = float(os.environ.get('HYDRAGNN_AVG_NUM_NEIGHBORS', '0'))
+import hydragnn.utils.datasets.adiosdataset as adm
+_orig_setkeys = adm.AdiosDataset.setkeys
+def _patched_setkeys(self, keys):
+    filtered = [k for k in keys if k in self.keys]
+    missing = [k for k in keys if k not in self.keys]
+    if missing and self.comm.Get_rank() == 0:
+        print('  ADIOS keys skipped (not in file):', missing, flush=True)
+    return _orig_setkeys(self, filtered)
+adm.AdiosDataset.setkeys = _patched_setkeys
 if avg_nn > 0:
-    import hydragnn.utils.datasets.adiosdataset as adm
     _orig_init = adm.AdiosMultiDataset.__init__
     def _patched_init(self, *a, **kw):
         _orig_init(self, *a, **kw)
@@ -469,9 +501,10 @@ if [[ "$NODES" -gt 1 ]]; then
   : "${RCCL_ANP_PLUGIN:?Set RCCL_ANP_PLUGIN or configure network.rccl_anp_plugin in .cluster-config.yaml}"
   : "${LIBIONIC_PATH:?Set LIBIONIC_PATH or configure network.libionic_path in .cluster-config.yaml}"
 
+  # Apptainer --env KEY=a,b truncates at the comma.
+  export APPTAINERENV_OMPI_MCA_btl="tcp,self"
   MPI_MULTINODE_ENVS=(
     --env OMPI_MCA_pml=ob1
-    --env OMPI_MCA_btl=tcp,self
     --env OMPI_MCA_btl_tcp_if_include="$NCCL_SOCKET_IFNAME"
     --env MPI4PY_RC_THREADS=false
   )
@@ -573,10 +606,11 @@ srun --mpi=pmix \
     apptainer exec \
     --rocm \
     --overlay "${HG_OVERLAY}:ro" \
-    --bind "/opt/ompi:/opt/ompi:ro" \
+    --bind "${HG_OMPI_DIR}:/opt/ompi:ro" \
     --bind "${SCRATCH_LOCAL:-/scratch}:${SCRATCH_LOCAL:-/scratch}" \
     --bind "${HG_REPO_DIR}:${HG_REPO_DIR}:ro" \
     --bind "${HG_DATA_DIR}:${HG_DATA_DIR}:ro" \
+    "${DATA_BINDS[@]}" \
     --bind "${HG_OUTPUT_DIR}:${HG_OUTPUT_DIR}" \
     "${KTRACE_BIND_ENVS[@]}" \
     --env PMIX_MCA_gds=hash \

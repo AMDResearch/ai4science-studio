@@ -8,7 +8,7 @@
 # Usage:
 #   export AI4S_SHARED_DIR=/path/to/shared
 #   export SBATCH_PARTITION=... SBATCH_ACCOUNT=...
-#   ./run_scaling_study.sh              # submit 1,2,4,8 nodes
+#   ./run_scaling_study.sh              # submit 1,2,4,8,16 nodes
 #   ./run_scaling_study.sh --warmup     # 1-node warm ckpt, then timed runs
 #   ./run_scaling_study.sh --nodes 1,2  # subset
 #
@@ -34,7 +34,7 @@ SBATCH_PARTITION="${SBATCH_PARTITION:-YOUR_GPU_PARTITION}"
 SBATCH_ACCOUNT="${SBATCH_ACCOUNT:-YOUR_ACCOUNT}"
 
 WARMUP=0
-NODES_LIST="1,2,4,8"
+NODES_LIST="1,2,4,8,16"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --warmup) WARMUP=1; shift ;;
@@ -56,6 +56,7 @@ submit() {
     --time="$t" \
     "${extra[@]}" \
     --job-name="hydragnn-scale-${n}N" \
+    -o "${LOG_DIR}/hydragnn-train-%j.out" \
     --export=ALL,TORCH_NCCL_HIGH_PRIORITY,GPU_MAX_HW_QUEUES,HYDRAGNN_VALTEST,HG_NUM_EPOCH,HYDRAGNN_MAX_NUM_BATCH,HG_BATCH_SIZE,HG_PRECISION,HYDRAGNN_TRACE_LEVEL,HG_OUTPUT_DIR,HG_STARTFROM,HG_WARM_CKPT,AI4S_SHARED_DIR \
     "$SCRIPT_DIR/sbatch_train_amd.sh"
 }
@@ -76,7 +77,9 @@ if [[ -n "${HG_WARM_CKPT:-}" && -n "${HG_STARTFROM:-}" ]]; then
 fi
 
 IFS=',' read -ra NODE_COUNTS <<< "$NODES_LIST"
-declare -A TIME_LIMIT=( [1]="01:00:00" [2]="01:30:00" [4]="02:30:00" [8]="03:00:00" )
+declare -A TIME_LIMIT=( [1]="00:30:00" [2]="00:30:00" [4]="00:30:00" [8]="00:30:00" [16]="00:30:00" )
+LOG_DIR="${AI4S_SHARED_DIR}/models/HydraGNN/logs"
+mkdir -p "$LOG_DIR"
 echo "=== HydraGNN scaling sweep ==="
 echo "  Output dir : $HG_OUTPUT_DIR"
 echo "  Epochs     : $HG_NUM_EPOCH (steady-state: epochs 2–5 via collate_scaling_study.py)"

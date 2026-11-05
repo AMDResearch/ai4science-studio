@@ -135,8 +135,15 @@ def make_climatology(variables: list[str], h: int, w: int, rng: np.random.Genera
     return clim
 
 
-def write_dataset(root: str, variables: list[str], out_variables: list[str],
-                  h: int, w: int, rng: np.random.Generator) -> None:
+def write_dataset(
+    root: str,
+    variables: list[str],
+    out_variables: list[str],
+    h: int,
+    w: int,
+    rng: np.random.Generator,
+    n_train_shards: int = 1,
+) -> None:
     """Write all files for one resolution directory (low_res or high_res)."""
     os.makedirs(root, exist_ok=True)
 
@@ -150,14 +157,20 @@ def write_dataset(root: str, variables: list[str], out_variables: list[str],
     np.savez(os.path.join(root, "normalize_mean.npz"), **means)
     np.savez(os.path.join(root, "normalize_std.npz"),  **stds)
 
-    # shards + climatology: train / val / test — one shard file per split.
+    # shards + climatology: train / val / test
     # get_climatology() is called for all three splits (loaders.py:116,141,178)
     # so climatology.npz must exist in every split directory.
-    for split, year in (("train", 2020), ("val", 2021), ("test", 2022)):
+    n_train = max(1, int(n_train_shards))
+    for split, year, n_shards in (
+        ("train", 2020, n_train),
+        ("val", 2021, 1),
+        ("test", 2022, 1),
+    ):
         split_dir = os.path.join(root, split)
         os.makedirs(split_dir, exist_ok=True)
-        shard = make_shard(variables, h, w, T_PER_SHARD, rng)
-        np.savez(os.path.join(split_dir, f"{year}_0.npz"), **shard)
+        for i in range(n_shards):
+            shard = make_shard(variables, h, w, T_PER_SHARD, rng)
+            np.savez(os.path.join(split_dir, f"{year}_{i}.npz"), **shard)
         clim = make_climatology(out_variables, h, w, rng)
         np.savez(os.path.join(split_dir, "climatology.npz"), **clim)
 
@@ -182,6 +195,12 @@ def main() -> None:
         default=0,
         help="RNG seed for reproducibility (default: 0)",
     )
+    parser.add_argument(
+        "--n-train-shards",
+        type=int,
+        default=1,
+        help="Number of train NPZ shards (default: 1; raise for multi-node scaling smokes)",
+    )
     args = parser.parse_args()
 
     rng = make_rng(args.seed)
@@ -189,6 +208,7 @@ def main() -> None:
     print(f"Writing synthetic ORBIT-2 dataset to: {out}")
     print(f"  low_res  grid: {LO_H}×{LO_W}  |  {T_PER_SHARD} timesteps/shard")
     print(f"  high_res grid: {HI_H}×{HI_W}  |  {T_PER_SHARD} timesteps/shard")
+    print(f"  train shards: {args.n_train_shards}")
     print(f"  in_vars:  {IN_VARS}")
     print(f"  out_vars: {OUT_VARS}")
     print()
@@ -199,6 +219,7 @@ def main() -> None:
         out_variables=OUT_VARS,
         h=LO_H, w=LO_W,
         rng=rng,
+        n_train_shards=args.n_train_shards,
     )
     write_dataset(
         root=os.path.join(out, "high_res"),
@@ -206,6 +227,7 @@ def main() -> None:
         out_variables=OUT_VARS,
         h=HI_H, w=HI_W,
         rng=rng,
+        n_train_shards=args.n_train_shards,
     )
 
     total = sum(

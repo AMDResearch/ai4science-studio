@@ -1,0 +1,81 @@
+schema_version: "1"
+name: orbit2-train-perf
+description: >
+  Two-stage campaign: instrumented ORBIT-2 2-node training (task), then
+  read-only perf-report (reusable agent). Runs inside one SLURM allocation
+  via the LangGraph campaign runner. Modeled directly on
+  campaigns/orbit2-infer-perf/.
+
+inputs:
+  AI4S_SHARED_DIR:
+    type: path
+    required: true
+    env: AI4S_SHARED_DIR
+    description: Shared filesystem root for artifacts and optional registry.
+  PERF_TOOLS_DIR:
+    type: path
+    required: true
+    env: PERF_TOOLS_DIR
+    description: Omnistat / VictoriaMetrics tools root.
+  ORBIT2_ROOT:
+    type: path
+    required: false
+    env: ORBIT2_ROOT
+    description: Path to ORBIT-2 (or Bayes-CAST) clone. Auto-detected under AI4S_SHARED_DIR if unset.
+  ORBIT2_SIF:
+    type: path
+    required: false
+    env: ORBIT2_SIF
+  ORBIT2_OVERLAY:
+    type: path
+    required: false
+    env: ORBIT2_OVERLAY
+  ORBIT2_DATA_ROOT:
+    type: path
+    required: false
+    env: ORBIT2_DATA_ROOT
+    description: Training data root. Default (set in sbatch_amd.sh) is the synthetic_scale smoke-test dataset.
+  ORBIT2_CONFIG_TEMPLATE:
+    type: string
+    required: false
+    env: ORBIT2_CONFIG_TEMPLATE
+  ORBIT2_MAX_EPOCH:
+    type: string
+    required: false
+    default: "4"
+    env: ORBIT2_MAX_EPOCH
+  ORBIT2_MAX_BATCHES:
+    type: string
+    required: false
+    default: "5"
+    env: ORBIT2_MAX_BATCHES
+  ORBIT2_BATCH_SIZE:
+    type: string
+    required: false
+    default: "2"
+    env: ORBIT2_BATCH_SIZE
+
+llm:
+  mode: auto
+  api_key_env: OPENAI_API_KEY
+  # auto → Ocp-Apim-Subscription-Key when endpoint host is llm-api.amd.com
+  auth_style: auto
+  provider: openai
+  model: gpt-4o
+  # endpoint: set AI4S_LLM_ENDPOINT=https://llm-api.amd.com/OpenAI
+
+  local:
+    port: 8000
+    gpus: 1
+
+stages:
+  - id: orbit_train
+    kind: task
+    ref: ORBIT-2:train-perf
+    required_for_next:
+      - manifest
+      - foms
+  - id: perf_report
+    kind: agent
+    ref: perf-report
+    required_for_next: []

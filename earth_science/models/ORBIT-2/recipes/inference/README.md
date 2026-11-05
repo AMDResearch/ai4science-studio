@@ -47,7 +47,64 @@ sbatch ../../examples/sbatch_infer_amd.sh
 
 Confirmed working: MI250X, MI300X, MI350X (rocm7.2.2 image). Covers 1-GPU and 8-GPU distributed runs via `srun --mpi=pmix`.
 
+### ORNL Lux (OLCF, MI355X)
+
+On **ORNL Lux**, use the same `sbatch_infer_amd.sh` flow with Lustre staging under `$AI4S_SHARED_DIR` (see `.cluster-config.yaml`). Differences from Vultr Lux:
+
+- **No `/opt/ompi`** — the script sources HydraGNN's `lux_mpi_env.sh`, which loads Lux's system `openmpi/5.0.10` module and forces ob1/TCP. It always launches with `srun --mpi=pmix`; do **not** bypass MPI for single-GPU jobs.
+- **Pre-stage on the login node** — SIF, overlay, ORBIT-2 clone, and HF checkpoint (`intermediate_8m.ckpt`) on Lustre; compute nodes have no egress.
+- **Bind-mount Lustre weights** — when `ORBIT2_CHECKPOINT` points at `$AI4S_SHARED_DIR/models/ORBIT-2/weights/...`, the sbatch script bind-mounts the ORBIT-2 tree so the container sees the same absolute path.
+- **Synthetic smoke** — `ORBIT2_USE_SYNTHETIC=1` with pre-downloaded checkpoint; expect low PSNR/SSIM on random data (pipeline validation only).
+
+```bash
+export AI4S_SHARED_DIR=/path/to/shared
+export ORBIT2_ROOT=$AI4S_SHARED_DIR/models/ORBIT-2/code/ORBIT-2
+export ORBIT2_SIF=$AI4S_SHARED_DIR/images/pytorch_rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0.sif
+export ORBIT2_OVERLAY=$AI4S_SHARED_DIR/models/ORBIT-2/overlays/orbit2-overlay.img
+export ORBIT2_CHECKPOINT=$AI4S_SHARED_DIR/models/ORBIT-2/weights/pretrain/intermediate_8m.ckpt
+export ORBIT2_USE_SYNTHETIC=1
+sbatch --partition=YOUR_PARTITION --account=YOUR_ACCOUNT --gres=gpu:1 --time=01:00:00 \
+  --output=$AI4S_SHARED_DIR/models/ORBIT-2/logs/orbit2-vis-%j.out \
+  earth_science/models/ORBIT-2/examples/sbatch_infer_amd.sh
+```
+
 Outputs typically include low-resolution inputs, high-resolution predictions, and comparison plots as described upstream.
+
+## Inference + Omnistat (perf)
+
+Allocation-neutral runner: [`../../examples/run_infer_perf_amd.sh`](../../examples/run_infer_perf_amd.sh)  
+Thin sbatch wrapper: [`../../examples/sbatch_infer_perf_amd.sh`](../../examples/sbatch_infer_perf_amd.sh)  
+FOM extractor: [`../../examples/run_infer_fom_extractor.py`](../../examples/run_infer_fom_extractor.py)
+
+```bash
+export AI4S_SHARED_DIR=/path/to/shared
+export PERF_TOOLS_DIR=/path/to/perf-tools
+export ORBIT2_ROOT=/path/to/ORBIT-2-clone
+export ORBIT2_USE_SYNTHETIC=1
+sbatch ../../examples/sbatch_infer_perf_amd.sh
+```
+
+Artifacts land under `$AI4S_SHARED_DIR/models/ORBIT-2/infer-perf-runs/<run-id>/`:
+
+- `manifest.json` — job metadata, timing, workload=`visualize`
+- `foms.json` — `inference_wall_seconds`, repeats; throughput left unset until sample/rank semantics are validated
+- `omnistat-db/`, `omnistat.config` — user-mode telemetry (started immediately before timed inference)
+
+Ordinary inference logic lives in [`../../examples/run_infer_amd.sh`](../../examples/run_infer_amd.sh); sbatch scripts are thin wrappers (no duplicated bodies).
+
+### Campaign (inference → perf-report)
+
+End-to-end LangGraph campaign (repo root):
+
+```bash
+export AI4S_SHARED_DIR=/path/to/shared
+export PERF_TOOLS_DIR=/path/to/perf-tools
+export ORBIT2_ROOT=/path/to/ORBIT-2-clone
+# optional: export AI4S_LLM_ENDPOINT=https://.../v1
+sbatch campaigns/orbit2-infer-perf/sbatch_amd.sh
+```
+
+See [`../../../../../campaigns/orbit2-infer-perf/campaign.yaml`](../../../../../campaigns/orbit2-infer-perf/campaign.yaml).
 
 ## Inference latency (expectations)
 

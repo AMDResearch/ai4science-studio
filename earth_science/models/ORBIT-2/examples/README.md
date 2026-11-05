@@ -16,6 +16,9 @@ fall into the groups below.
 |--------|---------|
 | [`preflight_orbit2.py`](preflight_orbit2.py) | Check your environment before submitting jobs |
 | [`run_visualize.py`](run_visualize.py) | Run upstream `visualize.py` with Studio env-var overrides |
+| [`run_infer_amd.sh`](run_infer_amd.sh) | Allocation-neutral inference body (used by sbatch + campaign) |
+| [`run_infer_perf_amd.sh`](run_infer_perf_amd.sh) | Inference + Omnistat + `manifest.json` / `foms.json` |
+| [`run_infer_fom_extractor.py`](run_infer_fom_extractor.py) | Inference FOM extractor (wall time / repeats; no training parser) |
 
 ### Container & launch drivers
 
@@ -25,7 +28,8 @@ fall into the groups below.
 | [`build_overlay_amd.sh`](build_overlay_amd.sh) | One-time overlay build (pre-bakes pip deps, skips ~15 min per job) |
 | [`sbatch_train_amd.sh`](sbatch_train_amd.sh) | Multi-node training (Apptainer + MPI); defaults PRISM 10.0_arcmin + `interm_8m_prism.yaml` |
 | [`sbatch_train_perf_amd.sh`](sbatch_train_perf_amd.sh) | 1-node × 8-GPU perf (Omnistat + profiler); defaults **ERA5 1.0°** + `edm_8m_era5_1x8.yaml`; multi-node: `sbatch --nodes=N …` |
-| [`sbatch_infer_amd.sh`](sbatch_infer_amd.sh) | SLURM driver for inference on AMD Instinct (MI250X/MI300X/MI350X) |
+| [`sbatch_infer_amd.sh`](sbatch_infer_amd.sh) | Thin SLURM wrapper → `run_infer_amd.sh` |
+| [`sbatch_infer_perf_amd.sh`](sbatch_infer_perf_amd.sh) | Thin SLURM wrapper → `run_infer_perf_amd.sh` |
 | [`sbatch_infer_docker.sh`](sbatch_infer_docker.sh) | SLURM inference driver using Docker instead of Apptainer |
 
 ### In-container launch glue

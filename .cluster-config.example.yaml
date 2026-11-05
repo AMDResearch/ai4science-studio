@@ -47,3 +47,9 @@ network:
 # omnistat + TraceLens), omnistat-src/, victoriametrics/victoria-metrics-prod.
 perf_tools:
   dir: ""                # e.g. "/shared/perf-tools"; leave blank if not using perf recipes
+
+# Reusable agent registry (cluster-local overlays/additions).
+# Repo ships reusable agents under agents/; campaign-specific artifacts do NOT
+# belong here. Expected location: ${AI4S_SHARED_DIR}/registry
+# Override with AI4S_REGISTRY_DIR if needed.
+registry_dir: ""         # e.g. "${AI4S_SHARED_DIR}/registry"

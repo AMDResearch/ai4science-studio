@@ -42,6 +42,7 @@ def _parse_job_header(log_path: Path) -> dict:
         "nodelist": r"^\s*Node\(s\)\s+:\s*(.+)",
         "rccl_priority": r"^\s*RCCL priority:\s*TORCH_NCCL_HIGH_PRIORITY=(\d+)",
         "hw_queues": r"^\s*HW queues\s+:\s*GPU_MAX_HW_QUEUES=(\d+)",
+        "output_dir": r"^\s*Output dir\s+:\s*(.+)",
     }
     job_id_m = re.search(r"hydragnn-train-(\d+)", log_path.name)
     if job_id_m:
@@ -71,6 +72,70 @@ def _parse_job_header(log_path: Path) -> dict:
     return meta
 
 
+def _companion_run_log(slurm_path: Path, meta: dict) -> Path | None:
+    """HydraGNN rank-0 run.log (timers, memory) when SLURM stdout loses tqdm."""
+    job_id = meta.get("job_id")
+    if not job_id:
+        return None
+    output_dir = meta.get("output_dir")
+    if not output_dir:
+        m = re.search(r"Logs:\s*(.+)", slurm_path.read_text(errors="replace"))
+        if m:
+            output_dir = m.group(1).strip().rstrip("/")
+    if not output_dir:
+        return None
+    base = Path(output_dir) / "logs"
+    nodes = meta.get("nodes")
+    if nodes:
+        candidate = base / f"hydragnn-train-{job_id}-N{nodes}" / "run.log"
+        if candidate.is_file():
+            return candidate
+    matches = sorted(base.glob(f"hydragnn-train-{job_id}-N*/run.log"))
+    return matches[0] if matches else None
+
+
+def _timing_log_paths(slurm_path: Path, meta: dict) -> list[Path]:
+    paths = [slurm_path]
+    run_log = _companion_run_log(slurm_path, meta)
+    if run_log and run_log not in paths:
+        paths.append(run_log)
+    return paths
+
+
+def _train_validate_test_timer(log_paths: list[Path]) -> float | None:
+    pat = re.compile(
+        r"^0:\s*Process 0 - Local timer:\s+train_validate_test\s*:\s*([\d.]+)"
+    )
+    for log_path in reversed(log_paths):
+        with log_path.open(errors="replace") as f:
+            for line in f:
+                m = pat.match(line.strip())
+                if m:
+                    return float(m.group(1))
+    return None
+
+
+def _timer_fallback_timing(
+    timer_s: float,
+    num_epochs: int | None,
+    max_batches: int | None,
+) -> dict:
+    """Job-average train timing from cumulative train_validate_test timer."""
+    if not num_epochs or not max_batches:
+        return {}
+    total_batches = num_epochs * max_batches
+    sec_per_batch = timer_s / float(total_batches)
+    epoch_time_s = timer_s / float(num_epochs)
+    return {
+        "sec_per_batch_train": sec_per_batch,
+        "epoch_time_train_s": epoch_time_s,
+        "batches_per_epoch": max_batches,
+        "batches_per_sec_train": 1.0 / sec_per_batch if sec_per_batch else None,
+        "timing_source": "train_validate_test_timer",
+        "train_validate_test_s": timer_s,
+    }
+
+
 def _all_train_epoch_rates(log_path: Path, num_epochs: int | None = None) -> list[float]:
     """Return per-epoch train s/it (instantaneous rate at Train 100%, not cumulative avg).
 
@@ -95,9 +160,24 @@ def _all_train_epoch_rates(log_path: Path, num_epochs: int | None = None) -> lis
     return rates
 
 
-def _train_tqdm_timing(log_path: Path, steady_start: int = 2, num_epochs: int | None = None) -> dict:
+def _all_train_epoch_rates_from_paths(
+    log_paths: list[Path], num_epochs: int | None = None,
+) -> list[float]:
+    rates: list[float] = []
+    for log_path in log_paths:
+        rates.extend(_all_train_epoch_rates(log_path, num_epochs=num_epochs))
+    if num_epochs and len(rates) > num_epochs:
+        rates = rates[-num_epochs:]
+    return rates
+
+
+def _train_tqdm_timing(
+    log_paths: list[Path],
+    steady_start: int = 2,
+    num_epochs: int | None = None,
+) -> dict:
     """Steady-state train timing from multi-epoch Train tqdm lines."""
-    rates = _all_train_epoch_rates(log_path, num_epochs=num_epochs)
+    rates = _all_train_epoch_rates_from_paths(log_paths, num_epochs=num_epochs)
     if not rates:
         return {}
 
@@ -113,11 +193,12 @@ def _train_tqdm_timing(log_path: Path, steady_start: int = 2, num_epochs: int | 
     pat_batches = re.compile(
         r"Train:\s*100%\|[^|]*\|\s*(\d+)/(\d+)\s*\[[^\]]*?,\s*([\d.]+)s/it\]"
     )
-    with log_path.open(errors="replace") as f:
-        for line in f:
-            m = pat_batches.search(line)
-            if m:
-                batches = int(m.group(1))
+    for log_path in log_paths:
+        with log_path.open(errors="replace") as f:
+            for line in f:
+                m = pat_batches.search(line)
+                if m:
+                    batches = int(m.group(1))
 
     epoch_time_s = sec_per_batch * batches if batches else None
     return {
@@ -129,7 +210,15 @@ def _train_tqdm_timing(log_path: Path, steady_start: int = 2, num_epochs: int | 
         "per_epoch_train_s_it": rates,
         "warmup_epochs_s_it": warmup,
         "steady_epochs_s_it": steady,
+        "timing_source": "tqdm_steady",
     }
+
+
+def _peak_gpu_mem_gb_from_paths(log_paths: list[Path]) -> float | None:
+    peak = None
+    for log_path in log_paths:
+        peak = max(peak or 0.0, _peak_gpu_mem_gb(log_path) or 0.0) or peak
+    return peak
 
 
 def _peak_gpu_mem_gb(log_path: Path) -> float | None:
@@ -148,7 +237,7 @@ def _peak_gpu_mem_gb(log_path: Path) -> float | None:
 def _epoch_timing(
     records: list[dict],
     max_batches: int | None,
-    log_path: Path,
+    log_paths: list[Path],
     steady_start: int = 2,
     num_epochs: int | None = None,
 ) -> dict:
@@ -189,14 +278,23 @@ def _epoch_timing(
             # Prefer tqdm for single-epoch strong-scaling runs.
             sec_per_batch = tqdm_sec_per_batch
 
-    train_only = _train_tqdm_timing(log_path, steady_start=steady_start, num_epochs=num_epochs)
+    train_only = _train_tqdm_timing(log_paths, steady_start=steady_start, num_epochs=num_epochs)
     if train_only.get("sec_per_batch_train"):
         sec_per_batch = train_only["sec_per_batch_train"]
         epoch_time_s = train_only.get("epoch_time_train_s", epoch_time_s)
         batches_per_epoch = train_only.get("batches_per_epoch", batches_per_epoch)
+    else:
+        timer_s = _train_validate_test_timer(log_paths)
+        if timer_s is not None:
+            timer_timing = _timer_fallback_timing(timer_s, num_epochs, max_batches)
+            if timer_timing.get("sec_per_batch_train"):
+                sec_per_batch = timer_timing["sec_per_batch_train"]
+                epoch_time_s = timer_timing.get("epoch_time_train_s", epoch_time_s)
+                batches_per_epoch = timer_timing.get("batches_per_epoch", batches_per_epoch)
+                train_only = timer_timing
 
     batches_per_sec = (1.0 / sec_per_batch) if sec_per_batch else None
-    peak_mem = _peak_gpu_mem_gb(log_path)
+    peak_mem = _peak_gpu_mem_gb_from_paths(log_paths)
 
     return {
         "epoch_time_s": epoch_time_s,
@@ -210,16 +308,21 @@ def _epoch_timing(
         "num_epochs_completed": foms.get("num_epochs_completed"),
         "steady_state_epoch_start": steady_start,
         "steady_epochs_s_it": train_only.get("steady_epochs_s_it"),
+        "timing_source": train_only.get("timing_source"),
+        "train_validate_test_s": train_only.get("train_validate_test_s"),
     }
 
 
 def analyze_log(log_path: Path, label: str | None = None, steady_start: int = 2) -> dict:
-    records = parse_slurm_log(str(log_path))
     meta = _parse_job_header(log_path)
+    log_paths = _timing_log_paths(log_path, meta)
+    records: list[dict] = []
+    for path in log_paths:
+        records.extend(parse_slurm_log(str(path)))
     timing = _epoch_timing(
         records,
         meta.get("max_batches") if isinstance(meta.get("max_batches"), int) else None,
-        log_path,
+        log_paths,
         steady_start,
         meta.get("num_epochs") if isinstance(meta.get("num_epochs"), int) else None,
     )
@@ -230,6 +333,9 @@ def analyze_log(log_path: Path, label: str | None = None, steady_start: int = 2)
     row["batch_size"] = meta.get("batch_size", 200)
     if row.get("batches_per_sec") and row.get("batch_size"):
         row["samples_per_sec"] = row["batches_per_sec"] * row["batch_size"]
+    run_log = _companion_run_log(log_path, meta)
+    if run_log:
+        row["run_log_path"] = str(run_log)
     return row
 
 
@@ -277,7 +383,7 @@ def write_outputs(rows: list[dict], stem: Path, steady_start: int = 2) -> None:
         "batches_per_sec", "samples_per_sec", "epoch_time_s", "peak_gpu_mem_gb",
         "final_train_loss", "final_val_loss",
         "strong_scaling_efficiency", "speedup_vs_1node", "nodelist",
-        "rccl_priority", "hw_queues", "log_path",
+        "rccl_priority", "hw_queues", "timing_source", "log_path", "run_log_path",
     ]
     with csv_path.open("w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
@@ -302,24 +408,40 @@ def write_outputs(rows: list[dict], stem: Path, steady_start: int = 2) -> None:
         "------------------:|-----------:|---------:|--------------------:|",
     ]
     for r in rows_sorted:
-        train_epoch = r.get("epoch_time_train_s") or r.get("epoch_time_s") or 0
+        train_epoch = r.get("epoch_time_train_s") or r.get("epoch_time_s")
         tl = r.get("final_train_loss")
         vl = r.get("final_val_loss")
         tl_s = f"{tl:.4f}" if tl is not None else "—"
         vl_s = f"{vl:.4f}" if vl is not None else "—"
-        mem = r.get("peak_gpu_mem_gb") or 0
+        spb = r.get("sec_per_batch")
+        spb_s = f"{spb:.2f}" if spb is not None else "—"
+        te_s = f"{train_epoch:.0f}" if train_epoch is not None else "—"
+        sps = r.get("samples_per_sec")
+        sps_s = f"{sps:.0f}" if sps is not None else "—"
+        mem = r.get("peak_gpu_mem_gb")
+        mem_s = f"{mem:.1f}" if mem is not None else "—"
+        eff = r.get("strong_scaling_efficiency")
+        eff_s = f"{eff:.2f}" if eff is not None else "—"
         lines.append(
             f"| {r.get('nodes', '?')} "
             f"| {r.get('total_ranks', '?')} "
             f"| {r.get('job_id', '?')} "
-            f"| {r.get('sec_per_batch', 0):.2f} "
-            f"| {train_epoch:.0f} "
-            f"| {r.get('samples_per_sec', 0):.0f} "
-            f"| {mem:.1f} "
+            f"| {spb_s} "
+            f"| {te_s} "
+            f"| {sps_s} "
+            f"| {mem_s} "
             f"| {tl_s} "
             f"| {vl_s} "
-            f"| {r.get('strong_scaling_efficiency', 0):.2f} |"
+            f"| {eff_s} |"
         )
+    timer_rows = [r for r in rows_sorted if r.get("timing_source") == "train_validate_test_timer"]
+    if timer_rows:
+        lines.extend([
+            "",
+            f"- **Timer fallback:** {len(timer_rows)} run(s) used rank-0 "
+            "`train_validate_test` from `run.log` (SLURM stdout lost tqdm on Lustre). "
+            "s/batch is job-average over all epochs, not steady-state epochs 2–5.",
+        ])
     lines.extend([
         "",
         "## Notes",

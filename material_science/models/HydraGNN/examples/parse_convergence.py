@@ -67,6 +67,7 @@ def parse_slurm_log(log_path: str) -> list[dict]:
     current_epoch = 0
     batch_count = 0
     last_tasks_epoch = None
+    job_timer_s: float | None = None
 
     with open(log_path) as f:
         for line in f:
@@ -134,12 +135,27 @@ def parse_slurm_log(log_path: str) -> list[dict]:
             if m:
                 timer_name = m.group(1)
                 timer_val = float(m.group(2))
-                if timer_name == "train_validate_test" and records:
-                    for rec in reversed(records):
-                        if rec.get("source") in ("epoch_summary", "tqdm_final"):
-                            rec["wall_time_s"] = timer_val
-                            break
+                if timer_name == "train_validate_test":
+                    job_timer_s = timer_val
+                    if records:
+                        for rec in reversed(records):
+                            if rec.get("source") in ("epoch_summary", "tqdm_final"):
+                                rec["wall_time_s"] = timer_val
+                                break
                 continue
+
+    if job_timer_s is not None:
+        records.append({
+            "epoch": None,
+            "batch": None,
+            "train_loss": None,
+            "val_loss": None,
+            "test_loss": None,
+            "tasks_train": None,
+            "tasks_val": None,
+            "wall_time_s": job_timer_s,
+            "source": "job_timer",
+        })
 
     # Add batch count metadata if available
     if batch_count > 0 and records:
@@ -284,6 +300,7 @@ def aggregate_foms_from_records(records: list[dict]) -> dict:
     """
     epoch_summary_records = [r for r in records if r.get("source") == "epoch_summary"]
     tqdm_records = [r for r in records if r.get("source") == "tqdm_final"]
+    job_timer_records = [r for r in records if r.get("source") == "job_timer"]
 
     # Prefer epoch_summary wall_time_s only when it provides per-epoch values
     # (>= 2 of them). HydraGNN's existing log format usually attaches the
@@ -303,6 +320,9 @@ def aggregate_foms_from_records(records: list[dict]) -> dict:
                 epoch_times.append(float(rate) * float(batch))
     elif summary_walls:
         epoch_times = summary_walls  # single epoch; better than nothing
+    elif job_timer_records:
+        # Cumulative train_validate_test wall (rank 0). Caller divides by epochs×batches.
+        epoch_times = [float(job_timer_records[-1]["wall_time_s"])]
 
     if epoch_times:
         if len(epoch_times) >= 2:

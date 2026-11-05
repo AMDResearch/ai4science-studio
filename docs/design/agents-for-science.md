@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| Status | Draft v0.4 |
+| Status | Draft v0.5 |
 | Target | AMD AI factories |
 | Last updated | 2026-10-13 |
 
@@ -17,19 +17,22 @@ This design describes how that middleware enables autonomous execution, energy e
 | Term | Meaning |
 |---|---|
 | AI factory | An HPC cluster with AMD Instinct GPUs, ROCm, SLURM, K8s, Apptainer and shared storage |
-| Registry | The catalog of tasks and agents. Each is a folder with `agent.yaml` |
-| Task | Runs one recipe and checks its outputs. No LLM |
-| Agent | An engine running a playbook against an LLM. It may call tasks and tools |
+| Registry | **Reusable agents only.** Repo catalog: `agents/<name>/agent.yaml`. Cluster overlay: `${AI4S_SHARED_DIR}/registry` (or `registry_dir` / `AI4S_REGISTRY_DIR`). Model tasks are **not** global registry entries; they are discovered from `*/models/*/model.yaml` as `Model:task` |
+| Task | Runs one model-local recipe and checks its outputs. No LLM |
+| Agent | Reusable reasoning component with a playbook/entry. May call tools; Phase 1 agents submit no jobs |
 | Recipe | A script in a model's `examples/` folder |
 | Tool | A command or an MCP tool an agent is allowed to call |
-| Engine | The harness that runs a playbook: OpenCode first, Claude Code later |
-| Run | One execution of a task or an agent |
+| Campaign coordinator | LangGraph (or equivalent) builds a state graph from `campaign.yaml` stages, enforces typed handoffs and failure gating. It is not the LLM |
+| Engine | Replaceable implementation behind a reusable agent interface (MVP: direct OpenAI-compatible call in `perf-report`; later OpenCode / Claude Code) |
+| Run | One execution of a task, agent, or campaign |
 | Approval | A budget on actions that spend cluster resources: usually submitting or cancelling a job. Not a review of the agent's reasoning |
-| Campaign | An ordered set of tasks and agents, with possible approval gates |
+| Campaign | An ordered set of tasks and agents declared in `campaign.yaml`, with possible approval gates |
 
 ## 3. Scope
 
-**Phase 1:** one AI factory; SLURM and Apptainer; models with a validated recipe (training or inference) on that AI factory; performance measurement and analysis; OpenCode as the only engine; no agent submits jobs.
+**Phase 1:** one AI factory; SLURM and Apptainer; models with a validated recipe (training or inference) on that AI factory; performance measurement and analysis; LangGraph campaign coordination with a thin agent interface (OpenCode later); no agent submits jobs.
+
+**MVP slice (implemented):** `campaigns/orbit2-infer-perf` — ORBIT-2 instrumented inference (task) → `perf-report` (reusable agent) inside one SLURM allocation. LLM mode is `external` | `local` | `auto` (no silent hosted fallback). Local LLM starts only after inference releases GPUs when auto/local requires it.
 
 **Later phases (section 10):** action budgets, provenance, model eval, model and hosted routing, Claude Code, and composable scientific campaigns.
 
@@ -94,16 +97,17 @@ The diagram shows Phase 1. Dashed boxes are Phase 2 or later.
 
 How a run executes:
 
-- **Task.** The runner submits the recipe job and a check job with an `afterany` dependency on it. The check job verifies the outputs and writes `result.json`. No process waits.
-- **Agent.** The runner starts the engine as a CPU job. In Phase 1 no agent submits jobs: `assist` recommends a task and its parameters, and the user runs it. From Phase 2, an agent that needs a model run calls `ai4s run <task>`; the runner submits it as a separate job sized to the task, under an action budget (section 8).
-- **Follow-on.** `--then` becomes an `afterany` dependency.
-- **Inside a campaign's allocation (Phase 3).** A run is an `srun` step when the allocation satisfies its resource requirements, and a separate job otherwise. A recipe never submits a nested `sbatch`.
+- **Campaign (MVP).** `python -m ai4s run campaigns/<name>/campaign.yaml` (or the campaign's `sbatch_amd.sh`) loads the YAML, builds a LangGraph from `stages[]`, and executes stages with failure gating. Each stage validates inputs and declared outputs. The next stage runs only on `pass`, or on `partial` when `required_for_next` artifacts validate. Catastrophic/`error` results skip remaining stages. The runner uses `srun` inside an existing allocation and never nests `sbatch`.
+- **Task.** Resolved from model-local `model.yaml` (`Model:task`). Writes `result.json` and artifacts under the stage directory. No LLM.
+- **Agent.** Resolved from the reusable agent catalog (+ optional cluster registry). MVP `perf-report` runs deterministic checks first, then an optional OpenAI-compatible synthesis call. In Phase 1 no agent submits jobs.
+- **Follow-on.** Campaign edges replace ad-hoc `--then` for multi-stage demos; SLURM `afterany` `--then` remains available for single-task chaining.
+- **Inside a campaign's allocation.** Science tasks and (when needed) a local LLM service share the allocation sequentially: inference first, then local LLM for reporting if no external endpoint is configured.
 
-Flow for the first product:
+Flow for the first product (MVP):
 
-1. `ai4s run ORBIT-2:perf-analysis --then perf-report` submits the training job with Omnistat on, and its check job.
-2. When the check job ends, the `perf-report` agent runs.
-3. Its engine runs the deterministic checks on the recorded telemetry and traces, uses the LLM to rank and explain the findings, and writes `perf_report.md` and `findings.json` into the run record.
+1. `sbatch campaigns/orbit2-infer-perf/sbatch_amd.sh` (or `python -m ai4s run ...`) runs the LangGraph campaign in one allocation.
+2. Stage `orbit_inference` runs `ORBIT-2:inference-perf` (Omnistat around visualize) and writes `manifest.json` / `foms.json`.
+3. Stage `perf_report` runs deterministic checks, optionally uses an LLM, and writes `perf_report.md` and `findings.json`.
 
 Hosted models (F12, Phase 2). LiteLLM can list a hosted deployment, such as a frontier model, behind the same alias as the on-prem model. The hosted route is used only when all of the following hold:
 - the site has enabled the provider;

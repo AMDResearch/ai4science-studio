@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai4science-studio.local/schemas/run.schema.json",
+  "title": "AI4Science Studio run.json",
+  "description": "Immutable run record written by the campaign runner (not by the LLM).",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema_version",
+    "run_id",
+    "name",
+    "kind",
+    "state",
+    "user",
+    "start_time"
+  ],
+  "properties": {
+    "schema_version": { "type": "string", "const": "1" },
+    "run_id": { "type": "string", "minLength": 1 },
+    "parent_run_id": { "type": ["string", "null"] },
+    "name": { "type": "string", "minLength": 1 },
+    "kind": { "type": "string", "enum": ["task", "agent", "campaign"] },
+    "version": { "type": "string" },
+    "state": {
+      "type": "string",
+      "enum": ["queued", "running", "succeeded", "failed", "cancelled", "partial"]
+    },
+    "user": { "type": "string" },
+    "slurm_job_ids": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "start_time": { "type": "string" },
+    "end_time": { "type": ["string", "null"] },
+    "git_commit": { "type": ["string", "null"] },
+    "resolved_inputs": { "type": "object" },
+    "nodes": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "llm": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Resolved LLM routing metadata; never includes secret values."
+    },
+    "error": {
+      "type": ["object", "null"],
+      "properties": {
+        "type": { "type": "string" },
+        "message": { "type": "string" },
+        "stage_id": { "type": "string" }
+      }
+    }
+  }
+}

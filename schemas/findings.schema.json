@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai4science-studio.local/schemas/findings.schema.json",
+  "title": "AI4Science Studio findings.json",
+  "description": "Evidence-cited performance findings from deterministic checks plus optional LLM ranking.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "run_id", "status", "findings"],
+  "properties": {
+    "schema_version": { "type": "string", "const": "1" },
+    "run_id": { "type": "string", "minLength": 1 },
+    "status": { "type": "string", "enum": ["pass", "partial", "fail", "error"] },
+    "synthesis": {
+      "type": "string",
+      "enum": ["deterministic_only", "llm", "failed", "skipped"]
+    },
+    "findings": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/finding" }
+    },
+    "summary": { "type": "string" }
+  },
+  "$defs": {
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "severity", "title", "evidence"],
+      "properties": {
+        "id": { "type": "string" },
+        "severity": { "type": "string", "enum": ["info", "low", "medium", "high"] },
+        "title": { "type": "string" },
+        "detail": { "type": "string" },
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path"],
+            "properties": {
+              "path": { "type": "string" },
+              "quote": { "type": "string" }
+            }
+          }
+        },
+        "source": {
+          "type": "string",
+          "enum": ["deterministic", "llm"],
+          "default": "deterministic"
+        }
+      }
+    }
+  }
+}
